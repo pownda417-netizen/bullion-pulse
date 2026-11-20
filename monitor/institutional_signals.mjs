@@ -341,6 +341,7 @@ export function computeBasisSignal({ spotGold, futGold, spotSilver, futSilver } 
       futures: +fut.toFixed(2),
       basisUsd,
       basisPct,
+      isBackwardation: basisUsd < 0,
       signal: +signal.toFixed(3),
       jumpBoost,
       state,

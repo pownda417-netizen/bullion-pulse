@@ -3,6 +3,7 @@ import {
   buildOutlook,
   classifyHeadline,
   classifyHeadlines,
+  computeMarketRegimeDecomposition,
   computeQuantSignals,
   recencyDecayWeight,
 } from './historical_patterns.mjs';
@@ -631,4 +632,144 @@ const btSkill = runWalkForwardBacktest({
 assert.ok(btSkill.gold && Number.isFinite(btSkill.gold.pinballSkillPct));
 assert.ok(btSkill.silver && Number.isFinite(btSkill.silver.pinballSkillPct));
 
-console.log('All 18 Bullion Pulse suites (CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');
+// 19. Short Squeeze vs. True Price Discovery Classifier (Discovery, Squeeze, Hybrid, Bias, Neutral & buildOutlook)
+const backwBasis = computeBasisSignal({ spotGold: 3600, futGold: 3622, spotSilver: 44.0, futSilver: 43.4 });
+assert.equal(backwBasis.gold.isBackwardation, false, 'Contango gold futures must set isBackwardation=false');
+assert.equal(backwBasis.silver.isBackwardation, true, 'Downward-sloping silver futures must set isBackwardation=true');
+
+// 19a. True Price Discovery (structural repricing without acute squeeze catalysts)
+const discRegime = computeMarketRegimeDecomposition({
+  drivers: {
+    rates_usd: { gold: 0.78, silver: 0.72 },
+    shanghai_sge: { gold: 0.82, silver: 0.76 },
+    central_banks: { gold: 0.85, silver: 0.7 },
+    inflation: { gold: 0.65, silver: 0.6 },
+    comex_paper: { gold: -0.05, silver: -0.05 },
+  },
+  quant: { goldTrend: 0.68, silverTrend: 0.62, macroSnapshot: { vix: 15.2 } },
+  comex: {
+    gold: { paperToRegisteredRatio: 2.1, registered30dPct: 2.4, oi4wPct: 0.5 },
+    silver: { paperToRegisteredRatio: 3.1, registered30dPct: 1.8, oi4wPct: 0.4 },
+  },
+  proSignals: {
+    miners: { goldSignal: 0.72, silverSignal: 0.68 },
+    cot: { gold: { percentile52w: 72 }, silver: { percentile52w: 68 } },
+  },
+  institutionalSignals: {
+    basis: {
+      gold: { basisUsd: 24.0, basisPct: 0.68, isBackwardation: false },
+      silver: { basisUsd: 0.35, basisPct: 0.82, isBackwardation: false },
+    },
+    impliedVol: { gvz: 15.4, ivMinusRv: -0.8 },
+  },
+});
+assert.equal(discRegime.gold.label, 'True Price Discovery', `Expected True Price Discovery for Gold, got ${discRegime.gold.label} (${discRegime.gold.discoveryScore}D/${discRegime.gold.squeezeScore}S)`);
+assert.equal(discRegime.silver.label, 'True Price Discovery', `Expected True Price Discovery for Silver, got ${discRegime.silver.label} (${discRegime.silver.discoveryScore}D/${discRegime.silver.squeezeScore}S)`);
+assert.ok(discRegime.gold.discoveryScore >= 70 && discRegime.gold.squeezeScore < 25);
+
+// 19b. Short Squeeze (COMEX leverage + backwardation + washed-out COT <= 35% + ^GVZ gamma, weak structural drivers)
+const sqzRegime = computeMarketRegimeDecomposition({
+  drivers: {
+    rates_usd: { gold: -0.45, silver: -0.5 },
+    shanghai_sge: { gold: -0.25, silver: -0.35 },
+    central_banks: { gold: -0.6, silver: -0.7 },
+    inflation: { gold: -0.2, silver: -0.25 },
+    comex_paper: { gold: 0.72, silver: 0.88 },
+  },
+  quant: { goldTrend: -0.35, silverTrend: -0.4, macroSnapshot: { vix: 31 } },
+  comex: {
+    gold: { paperToRegisteredRatio: 5.1, registered30dPct: -8.5, oi4wPct: 11.2 },
+    silver: { paperToRegisteredRatio: 7.4, registered30dPct: -9.2, oi4wPct: 14.0 },
+  },
+  proSignals: {
+    miners: { goldSignal: -0.45, silverSignal: -0.5 },
+    cot: { gold: { percentile52w: 14 }, silver: { percentile52w: 6 } },
+  },
+  institutionalSignals: {
+    basis: {
+      gold: { basisUsd: -14.0, basisPct: -0.4, isBackwardation: true },
+      silver: { basisUsd: -0.45, basisPct: -1.05, isBackwardation: true },
+    },
+    impliedVol: { gvz: 33.5, ivMinusRv: 14.2 },
+  },
+});
+assert.equal(sqzRegime.gold.label, 'Short Squeeze', `Expected Short Squeeze for Gold, got ${sqzRegime.gold.label} (${sqzRegime.gold.discoveryScore}D/${sqzRegime.gold.squeezeScore}S)`);
+assert.equal(sqzRegime.silver.label, 'Short Squeeze', `Expected Short Squeeze for Silver, got ${sqzRegime.silver.label} (${sqzRegime.silver.discoveryScore}D/${sqzRegime.silver.squeezeScore}S)`);
+assert.ok(sqzRegime.silver.squeezeScore >= 80 && sqzRegime.silver.discoveryScore < 40);
+assert.equal(sqzRegime.silver.isBackwardation, true);
+
+// 19c. Hybrid: Squeeze + Discovery (both structural repricing AND mechanical squeeze catalysts firing)
+const hybridRegime = computeMarketRegimeDecomposition({
+  drivers: {
+    rates_usd: { gold: 0.75, silver: 0.72 },
+    shanghai_sge: { gold: 0.85, silver: 0.8 },
+    central_banks: { gold: 0.78, silver: 0.68 },
+    inflation: { gold: 0.65, silver: 0.62 },
+    comex_paper: { gold: 0.75, silver: 0.85 },
+  },
+  quant: { goldTrend: 0.62, silverTrend: 0.58, macroSnapshot: { vix: 28 } },
+  comex: {
+    gold: { paperToRegisteredRatio: 4.9, registered30dPct: -7.5, oi4wPct: 9.0 },
+    silver: { paperToRegisteredRatio: 7.2, registered30dPct: -8.0, oi4wPct: 12.0 },
+  },
+  proSignals: {
+    miners: { goldSignal: 0.68, silverSignal: 0.64 },
+    cot: { gold: { percentile52w: 18 }, silver: { percentile52w: 10 } },
+  },
+  institutionalSignals: {
+    basis: {
+      gold: { basisUsd: -8.0, basisPct: -0.22, isBackwardation: true },
+      silver: { basisUsd: -0.35, basisPct: -0.85, isBackwardation: true },
+    },
+    impliedVol: { gvz: 30.0, ivMinusRv: 11.0 },
+  },
+});
+assert.equal(hybridRegime.gold.label, 'Hybrid: Squeeze + Discovery');
+assert.equal(hybridRegime.silver.label, 'Hybrid: Squeeze + Discovery');
+assert.ok(hybridRegime.gold.discoveryScore >= 58 && hybridRegime.gold.squeezeScore >= 58);
+
+// 19d. Consolidation / Neutral (balanced signals)
+const neutralRegime = computeMarketRegimeDecomposition({
+  drivers: {
+    rates_usd: { gold: 0, silver: 0 },
+    shanghai_sge: { gold: 0, silver: 0 },
+    central_banks: { gold: 0, silver: 0 },
+    inflation: { gold: 0, silver: 0 },
+    comex_paper: { gold: 0, silver: 0 },
+  },
+  quant: { goldTrend: 0, silverTrend: 0, macroSnapshot: { vix: 16.0 } },
+  comex: {
+    gold: { paperToRegisteredRatio: 2.1, registered30dPct: 0.5, oi4wPct: 0 },
+    silver: { paperToRegisteredRatio: 3.2, registered30dPct: 0.5, oi4wPct: 0 },
+  },
+  proSignals: {
+    miners: { goldSignal: 0, silverSignal: 0 },
+    cot: { gold: { percentile52w: 60 }, silver: { percentile52w: 60 } },
+  },
+  institutionalSignals: {
+    basis: {
+      gold: { basisUsd: 20.0, basisPct: 0.58, isBackwardation: false },
+      silver: { basisUsd: 0.25, basisPct: 0.60, isBackwardation: false },
+    },
+    impliedVol: { gvz: 16.0, ivMinusRv: 0 },
+  },
+});
+assert.equal(neutralRegime.gold.label, 'Consolidation / Neutral');
+assert.equal(neutralRegime.silver.label, 'Consolidation / Neutral');
+
+// 19e. buildOutlook & buildNarrative integration
+const regimeOutlook = buildOutlook({
+  spotGold: 3530,
+  spotSilver: 41.2,
+  comex: buildBaselineComexSnapshot(),
+  institutionalSignals: buildBaselineInstitutionalSignals(),
+  proSignals: {
+    cot: { gold: { percentile52w: 18, signal: 0.45 }, silver: { percentile52w: 8, signal: 0.6 } },
+    miners: { goldSignal: 0.2, silverSignal: 0.15, goldBreadthPct: 60, silverBreadthPct: 50 },
+  },
+});
+assert.ok(regimeOutlook.marketRegime?.gold && regimeOutlook.marketRegime?.silver, 'buildOutlook must attach marketRegime');
+assert.ok(regimeOutlook.gold.regime && regimeOutlook.silver.regime, 'buildOutlook must attach per-metal regime');
+assert.ok(regimeOutlook.narrative.includes('Regime decomposition:'), 'buildNarrative must include regime decomposition');
+
+console.log('All 19 Bullion Pulse suites (Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');

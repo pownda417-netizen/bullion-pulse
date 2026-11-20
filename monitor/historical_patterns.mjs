@@ -836,6 +836,180 @@ export function matchHistoricalAnalogs(driverScores, overallDir) {
   return scored.slice(0, 3);
 }
 
+/* ---------- Short Squeeze vs. True Price Discovery Classifier ---------- */
+
+function classifyMarketRegimeLabel(discoveryScore, squeezeScore) {
+  if (discoveryScore >= 58 && squeezeScore >= 58) {
+    return { label: 'Hybrid: Squeeze + Discovery', key: 'hybrid' };
+  }
+  if (discoveryScore >= 58 && discoveryScore >= squeezeScore) {
+    return { label: 'True Price Discovery', key: 'discovery' };
+  }
+  if (squeezeScore >= 58 && squeezeScore > discoveryScore) {
+    return { label: 'Short Squeeze', key: 'squeeze' };
+  }
+  if (discoveryScore >= 45 && discoveryScore >= squeezeScore + 8) {
+    return { label: 'Discovery Bias', key: 'discovery' };
+  }
+  if (squeezeScore >= 45 && squeezeScore >= discoveryScore + 8) {
+    return { label: 'Squeeze Bias', key: 'squeeze' };
+  }
+  return { label: 'Consolidation / Neutral', key: 'neutral' };
+}
+
+export function computeMarketRegimeDecomposition({
+  drivers = {},
+  quant = {},
+  comex = null,
+  shanghai = null,
+  proSignals = null,
+  institutionalSignals = null,
+} = {}) {
+  const driverMap = Array.isArray(drivers)
+    ? Object.fromEntries(drivers.map((d) => [d.id, d]))
+    : drivers || {};
+
+  const dVal = (id, metal) => {
+    const v = driverMap?.[id]?.[metal];
+    return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+  };
+
+  const normDiscoveryPillar = (v) => clamp(0.42 + v * 0.54, 0.06, 1.0);
+
+  const scoreMetal = (metal) => {
+    const isSilver = metal === 'silver';
+
+    // 1. True Price Discovery (0-100): structural repricing pillars
+    //    - 10Y TIPS real yields & DXY (rates_usd)
+    //    - Shanghai physical SGE premiums (shanghai_sge)
+    //    - Sovereign reserve & ETF flows (central_banks / inflation)
+    //    - Producer confirmation (miners)
+    //    - Steady multi-week trend
+    const ratesSig = dVal('rates_usd', metal);
+
+    let sgeSig = dVal('shanghai_sge', metal);
+    if (sgeSig === 0 && shanghai?.[metal]) {
+      const prem = isSilver ? shanghai.silver.exVatPremiumUsdOz : shanghai.gold.premiumUsdOz;
+      if (typeof prem === 'number' && Number.isFinite(prem)) {
+        sgeSig = isSilver ? clamp(prem / 3.5, -0.85, 0.9) : clamp((prem - 5) / 42, -0.85, 0.9);
+      }
+    }
+
+    const cbSig = dVal('central_banks', metal);
+    const inflSig = dVal('inflation', metal);
+    const cbInflSig = cbSig * 0.62 + inflSig * 0.38;
+
+    const minersRaw = isSilver ? proSignals?.miners?.silverSignal : proSignals?.miners?.goldSignal;
+    const minersSig =
+      typeof minersRaw === 'number' && Number.isFinite(minersRaw)
+        ? minersRaw
+        : dVal('positioning_miners', metal) * 0.5;
+
+    const trendRaw = isSilver ? quant?.silverTrend : quant?.goldTrend;
+    const trendSig = typeof trendRaw === 'number' && Number.isFinite(trendRaw) ? trendRaw : 0;
+
+    const discWeighted =
+      normDiscoveryPillar(ratesSig) * 0.26 +
+      normDiscoveryPillar(sgeSig) * 0.22 +
+      normDiscoveryPillar(cbInflSig) * 0.20 +
+      normDiscoveryPillar(minersSig) * 0.16 +
+      normDiscoveryPillar(trendSig) * 0.16;
+
+    const discoveryScore = Math.round(clamp(discWeighted * 100, 0, 100));
+
+    // 2. Short Squeeze (0-100): acute mechanical & delivery squeeze catalysts
+    //    - COMEX paper-to-registered vault leverage (comex_paper + ratio + vault drain)
+    //    - Spot-to-Futures downward-sloping backwardation (isBackwardation)
+    //    - Washed-out CFTC Managed Money positioning (<= 35% 52w percentile)
+    //    - ^GVZ volatility / gamma pressure
+    const comexMetal = comex?.[metal] || null;
+    const comexDriver = dVal('comex_paper', metal);
+    const ratio = comexMetal?.paperToRegisteredRatio;
+    const reg30d = comexMetal?.registered30dPct ?? 0;
+    const oi4w = comexMetal?.oi4wPct ?? 0;
+
+    const ratioNorm =
+      typeof ratio === 'number' && Number.isFinite(ratio)
+        ? isSilver
+          ? clamp((ratio - 3.0) / 3.8, 0, 1)
+          : clamp((ratio - 2.0) / 3.4, 0, 1)
+        : 0;
+    const drainNorm = reg30d < 0 ? clamp(-reg30d / 12, 0, 0.35) : 0;
+    const oiBuildNorm = oi4w > 2 ? clamp((oi4w - 2) / 14, 0, 0.22) : 0;
+    const comexDriverNorm = clamp((comexDriver + 0.05) / 0.95, 0, 1);
+
+    const comexCombined =
+      typeof ratio === 'number' && Number.isFinite(ratio)
+        ? clamp(ratioNorm * 0.55 + drainNorm * 0.2 + oiBuildNorm + comexDriverNorm * 0.25, 0, 1)
+        : comexDriverNorm;
+    const comexPts = comexCombined * 34;
+
+    const basisMetal = institutionalSignals?.basis?.[metal] || null;
+    const isBackwardation =
+      basisMetal?.isBackwardation === true ||
+      (typeof basisMetal?.basisUsd === 'number' && Number.isFinite(basisMetal.basisUsd) && basisMetal.basisUsd < 0);
+    const basisPct = typeof basisMetal?.basisPct === 'number' && Number.isFinite(basisMetal.basisPct) ? basisMetal.basisPct : null;
+    let basisPts = 0;
+    if (isBackwardation) {
+      basisPts = 20 + clamp(Math.abs(basisPct ?? 0.2) / 0.8, 0, 1) * 4;
+    } else if (basisMetal && basisPct != null && basisPct < (isSilver ? 0.22 : 0.18)) {
+      basisPts = isSilver ? 7.5 : 6.0;
+    } else if (basisMetal && basisPct != null && basisPct < 0.45) {
+      basisPts = 1.5;
+    }
+
+    const cotPct = proSignals?.cot?.[metal]?.percentile52w;
+    let cotPts = 0;
+    if (typeof cotPct === 'number' && Number.isFinite(cotPct)) {
+      if (cotPct <= 35) {
+        cotPts = (0.35 + ((35 - cotPct) / 35) * 0.65) * 24;
+      } else if (cotPct <= 55) {
+        cotPts = ((55 - cotPct) / 20) * 4.5;
+      }
+    }
+
+    const gvz = institutionalSignals?.impliedVol?.gvz;
+    const ivMinusRv = institutionalSignals?.impliedVol?.ivMinusRv ?? 0;
+    let volPts = 0;
+    if (typeof gvz === 'number' && Number.isFinite(gvz)) {
+      const gvzNorm = clamp((gvz - 15) / 18, 0, 1);
+      const spreadNorm = clamp(ivMinusRv / 14, 0, 1);
+      const volScale = isSilver ? 1.0 : 0.85;
+      volPts = clamp(gvzNorm * 0.72 + spreadNorm * 0.28, 0, 1) * 18 * volScale;
+    } else if (typeof quant?.macroSnapshot?.vix === 'number') {
+      volPts = clamp((quant.macroSnapshot.vix - 16) / 18, 0, 1) * 14;
+    }
+
+    const squeezeScore = Math.round(clamp(comexPts + basisPts + cotPts + volPts, 0, 100));
+    const cls = classifyMarketRegimeLabel(discoveryScore, squeezeScore);
+
+    return {
+      metal,
+      discoveryScore,
+      squeezeScore,
+      label: cls.label,
+      key: cls.key,
+      isBackwardation,
+      components: {
+        ratesUsd: +ratesSig.toFixed(3),
+        shanghaiSge: +sgeSig.toFixed(3),
+        centralBanksInflation: +cbInflSig.toFixed(3),
+        miners: +minersSig.toFixed(3),
+        trend: +trendSig.toFixed(3),
+        comexPts: +comexPts.toFixed(1),
+        basisPts: +basisPts.toFixed(1),
+        cotPts: +cotPts.toFixed(1),
+        volPts: +volPts.toFixed(1),
+      },
+    };
+  };
+
+  return {
+    gold: scoreMetal('gold'),
+    silver: scoreMetal('silver'),
+  };
+}
+
 export function buildOutlook({
   spotGold,
   spotSilver,
@@ -1058,6 +1232,15 @@ export function buildOutlook({
     .sort((a, b) => Math.abs(b.gold) + Math.abs(b.silver) - (Math.abs(a.gold) + Math.abs(a.silver)))
     .slice(0, 2);
 
+  const marketRegime = computeMarketRegimeDecomposition({
+    drivers,
+    quant,
+    comex,
+    shanghai,
+    proSignals,
+    institutionalSignals: inst,
+  });
+
   const narrative = buildNarrative({
     goldScore,
     silverScore,
@@ -1067,6 +1250,7 @@ export function buildOutlook({
     proSignals,
     comex,
     institutionalSignals: inst,
+    marketRegime,
   });
 
   // Run Merton Jump-Diffusion Monte Carlo simulations (with COMEX + Event Calendar + GVZ + Basis + Carry + self-calibrated tail multipliers)
@@ -1173,6 +1357,7 @@ export function buildOutlook({
       spot: +spotGold.toFixed(2),
       score: goldScore,
       signal: signalLabelFromScore(goldScore),
+      regime: marketRegime.gold,
       horizon7d: projectHorizon(spotGold, effectiveGoldDailyVol, goldUnit, 5, effectiveConeMult),
       horizon30d: projectHorizon(spotGold, effectiveGoldDailyVol, goldUnit, 21, effectiveConeMult),
       jumpParams: goldJumpParams,
@@ -1183,12 +1368,14 @@ export function buildOutlook({
       spot: +spotSilver.toFixed(2),
       score: silverScore,
       signal: signalLabelFromScore(silverScore),
+      regime: marketRegime.silver,
       horizon7d: projectHorizon(spotSilver, effectiveSilverDailyVol, silverUnit, 5, effectiveConeMult),
       horizon30d: projectHorizon(spotSilver, effectiveSilverDailyVol, silverUnit, 21, effectiveConeMult),
       jumpParams: silverJumpParams,
       jumpDiffusion7d: silverMc7d,
       jumpDiffusion30d: silverMc30d,
     },
+    marketRegime,
     drivers: Object.values(drivers),
     macroSnapshot: quant.macroSnapshot,
     goldSilverRatio: quant.ratio,
@@ -1203,7 +1390,7 @@ export function buildOutlook({
   };
 }
 
-function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCount, proSignals, comex, institutionalSignals }) {
+function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCount, proSignals, comex, institutionalSignals, marketRegime }) {
   const gLabel = signalLabelFromScore(goldScore).toLowerCase();
   const sLabel = signalLabelFromScore(silverScore).toLowerCase();
   const lead = topDrivers
@@ -1216,6 +1403,11 @@ function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCou
     : 'Macro and news drivers are balanced without a single dominant catalyst.';
 
   const extras = [];
+  if (marketRegime?.gold && marketRegime?.silver) {
+    extras.push(
+      `Regime decomposition: Gold ${marketRegime.gold.label} (${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver ${marketRegime.silver.label} (${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S).`
+    );
+  }
   if (comex?.gold?.paperToRegisteredRatio && comex?.silver?.paperToRegisteredRatio) {
     extras.push(
       `COMEX paper claims stand at ${comex.gold.paperToRegisteredRatio}:1 for Gold (${comex.gold.openInterestContracts.toLocaleString('en-US')} GC) and ${comex.silver.paperToRegisteredRatio}:1 for Silver (${comex.silver.openInterestContracts.toLocaleString('en-US')} SI) vs. registered vaults.`

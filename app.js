@@ -63,6 +63,8 @@ const DEFAULT_SETTINGS = {
   chartMode: 'gold', // 'gold' | 'silver' | 'ratio'
   confirmMoves: false,
   showForecast: true,
+  showDiscovery: true,
+  showSqueeze: true,
   showFib: false,
   showSma: false,
   showRsi: false,
@@ -1170,6 +1172,79 @@ function drawRsiPane(rsiData, candleAreaW, padLeft, stepX) {
   ctx.restore();
 }
 
+function computePriceDiscoverySeries(bars, regimeObj, metalUnit = 0) {
+  if (!Array.isArray(bars) || !bars.length) return [];
+  const n = bars.length;
+  const period = Math.min(26, Math.max(8, Math.round(n * 0.28)));
+  const alpha = 2 / (period + 1);
+  const discScore = Number.isFinite(regimeObj?.discoveryScore) ? regimeObj.discoveryScore : 42;
+  const discTilt = clampNum((discScore - 45) / 100, -0.4, 0.55);
+  const unitTilt = clampNum(metalUnit || 0, -1, 1);
+
+  const out = new Array(n);
+  let ema = bars[0].c;
+  let cumTyp = (bars[0].h + bars[0].l + bars[0].c) / 3;
+  let smoothRangePct = Math.max(0.001, (bars[0].h - bars[0].l) / Math.max(0.01, bars[0].c));
+
+  for (let i = 0; i < n; i++) {
+    const b = bars[i];
+    const tp = (b.h + b.l + b.c) / 3;
+    const prevC = i > 0 ? bars[i - 1].c : b.o;
+    const tr = Math.max(b.h - b.l, Math.abs(b.h - prevC), Math.abs(b.l - prevC));
+    const trPct = tr / Math.max(0.01, prevC);
+
+    if (i > 0) {
+      ema = alpha * b.c + (1 - alpha) * ema;
+      // Causal expanding anchor with gentle recency decay so it never repaints past candles
+      const anchorAlpha = Math.max(1 / (i + 1), 0.045);
+      cumTyp = anchorAlpha * tp + (1 - anchorAlpha) * cumTyp;
+      smoothRangePct = 0.14 * trPct + 0.86 * smoothRangePct;
+    }
+
+    const baseFair = ema * 0.68 + cumTyp * 0.32;
+    const structuralNudge = baseFair * smoothRangePct * (discTilt * 0.9 + unitTilt * 0.35);
+    out[i] = Math.max(0.01, baseFair + structuralNudge);
+  }
+  return out;
+}
+
+function computeShortSqueezeSeries(bars, regimeObj) {
+  if (!Array.isArray(bars) || !bars.length) return [];
+  const n = bars.length;
+  const sqzScore = Number.isFinite(regimeObj?.squeezeScore) ? regimeObj.squeezeScore : 30;
+  const sqzIntensity = clampNum(sqzScore / 100, 0.1, 1.0);
+  const backwBoost = regimeObj?.isBackwardation ? 0.22 : 0;
+
+  const fastPeriod = Math.min(12, Math.max(5, Math.round(n * 0.14)));
+  const fastAlpha = 2 / (fastPeriod + 1);
+  const out = new Array(n);
+
+  let fastEma = bars[0].c;
+  let atrPct = Math.max(0.0015, (bars[0].h - bars[0].l) / Math.max(0.01, bars[0].c));
+  let velocity = 0;
+
+  for (let i = 0; i < n; i++) {
+    const b = bars[i];
+    const prevC = i > 0 ? bars[i - 1].c : b.o;
+    const tr = Math.max(b.h - b.l, Math.abs(b.h - prevC), Math.abs(b.l - prevC));
+    const trPct = tr / Math.max(0.01, prevC);
+
+    if (i > 0) {
+      fastEma = fastAlpha * b.c + (1 - fastAlpha) * fastEma;
+      atrPct = 0.18 * trPct + 0.82 * atrPct;
+      const barVel = Math.max(0, (b.c - fastEma) / Math.max(0.01, fastEma));
+      velocity = 0.35 * barVel + 0.65 * velocity;
+    }
+
+    // Dynamic short-covering / breakout envelope scaled by realized range vol, upside velocity & squeeze intensity
+    const baseAnchor = Math.max(fastEma, b.c * 0.5 + fastEma * 0.5);
+    const volSpread = atrPct * (0.65 + sqzIntensity * 1.45 + backwBoost);
+    const stretch = velocity * (0.45 + sqzIntensity * 0.85);
+    out[i] = Math.max(0.01, baseAnchor * (1 + clampNum(volSpread + stretch, 0.0015, 0.18)));
+  }
+  return out;
+}
+
 function renderChart() {
   const canvas = document.getElementById('intraday-chart');
   if (!canvas) return;
@@ -1206,6 +1281,20 @@ function renderChart() {
     fcBtn.disabled = isRatio;
     fcBtn.style.opacity = isRatio ? '0.45' : '1';
   }
+  const discBtn = document.getElementById('btn-toggle-discovery');
+  if (discBtn) {
+    discBtn.classList.toggle('active', !!state.settings.showDiscovery);
+    discBtn.setAttribute('aria-pressed', String(!!state.settings.showDiscovery));
+    discBtn.disabled = isRatio;
+    discBtn.style.opacity = isRatio ? '0.45' : '1';
+  }
+  const sqzBtn = document.getElementById('btn-toggle-squeeze');
+  if (sqzBtn) {
+    sqzBtn.classList.toggle('active', !!state.settings.showSqueeze);
+    sqzBtn.setAttribute('aria-pressed', String(!!state.settings.showSqueeze));
+    sqzBtn.disabled = isRatio;
+    sqzBtn.style.opacity = isRatio ? '0.45' : '1';
+  }
   const fibBtn = document.getElementById('btn-toggle-fib');
   if (fibBtn) {
     fibBtn.classList.toggle('active', !!state.settings.showFib);
@@ -1221,6 +1310,10 @@ function renderChart() {
     rsiBtn.classList.toggle('active', !!state.settings.showRsi);
     rsiBtn.setAttribute('aria-pressed', String(!!state.settings.showRsi));
   }
+  const discLegend = document.getElementById('legend-discovery');
+  if (discLegend) discLegend.hidden = !state.settings.showDiscovery || isRatio;
+  const sqzLegend = document.getElementById('legend-squeeze');
+  if (sqzLegend) sqzLegend.hidden = !state.settings.showSqueeze || isRatio;
   const fibLegend = document.getElementById('legend-fib');
   if (fibLegend) fibLegend.hidden = !state.settings.showFib;
   const smaLegend = document.getElementById('legend-sma');
@@ -1279,14 +1372,38 @@ function renderChart() {
 
   // Compute Jump-Diffusion fat-tail forecast cone scaled proportionally to the active timeframe
   const showFc = !!state.settings.showForecast && !isRatio;
+  const showDiscovery = !!state.settings.showDiscovery && !isRatio;
+  const showSqueeze = !!state.settings.showSqueeze && !isRatio;
   const showFib = !!state.settings.showFib;
   const showSma = !!state.settings.showSma;
   const fibCol = styles.getPropertyValue('--fib').trim() || '#A78BFA';
+  const discCol = '#10B981';
+  const sqzCol = '#F43F5E';
   const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
   const fibData = showFib ? computeFibonacciLevels(converted) : null;
   const sma20 = showSma ? computeSmaSeries(converted, 20) : null;
   const sma50 = showSma ? computeSmaSeries(converted, 50) : null;
   const outlookRes = computeInteractiveOutlook();
+  const activeRegime = outlookRes.marketRegime?.[sel] || outlookRes[sel]?.regime || null;
+
+  // Live metal regime badge on chart panel
+  const chartRegimePill = document.getElementById('chart-regime-pill');
+  if (chartRegimePill) {
+    if (isRatio || !activeRegime) {
+      chartRegimePill.hidden = true;
+    } else {
+      const metalTag = sel === 'gold' ? 'Gold' : 'Silver';
+      chartRegimePill.hidden = false;
+      chartRegimePill.textContent = `${metalTag} ${activeRegime.label} (${activeRegime.discoveryScore}D/${activeRegime.squeezeScore}S)`;
+      chartRegimePill.className = `regime-pill ${activeRegime.key || 'neutral'}`;
+    }
+  }
+
+  const discoverySeries = showDiscovery
+    ? computePriceDiscoverySeries(converted, activeRegime, outlookRes[sel]?.unit ?? 0)
+    : null;
+  const squeezeSeries = showSqueeze ? computeShortSqueezeSeries(converted, activeRegime) : null;
+
   const fcHorizon = tf === '1d' ? (outlookState.horizon === '30d' ? '1m' : '7d') : meta.fcHorizon;
   const fcLabel = tf === '1d' ? (outlookState.horizon === '30d' ? '+30d' : '+7d') : meta.fcLabel;
   const jdChart = showFc ? getChartJumpDiffusion(sel, outlookRes, fcHorizon) : null;
@@ -1297,11 +1414,41 @@ function renderChart() {
   const p25Target = convertUnit(jdChart ? jdChart.p25 : (horizonRange.bear + horizonRange.base) / 2);
   const p10Target = convertUnit(jdChart ? jdChart.p10 : horizonRange.bear);
 
+  // Structural Price Discovery & Concave Gamma Short Squeeze forecast endpoints
+  const lastDisc = discoverySeries?.length ? discoverySeries[discoverySeries.length - 1] : lastClose;
+  const lastSqz = squeezeSeries?.length ? squeezeSeries[squeezeSeries.length - 1] : lastClose;
+  const discScoreNorm = clampNum((activeRegime?.discoveryScore ?? 45) / 100, 0.1, 1.0);
+  const sqzScoreNorm = clampNum((activeRegime?.squeezeScore ?? 35) / 100, 0.1, 1.0);
+  const discFcTarget =
+    lastDisc +
+    (p50Target - lastClose) * (0.55 + discScoreNorm * 0.45) +
+    (p75Target - p50Target) * Math.max(0, discScoreNorm - 0.5) * 0.45;
+  const sqzGammaAnchor = Math.max(lastSqz, lastClose);
+  const upperSpread = Math.max(Math.abs(p90Target - lastClose), Math.abs(p75Target - lastClose), lastClose * 0.012);
+  const sqzFcTarget =
+    sqzGammaAnchor +
+    upperSpread * (0.45 + sqzScoreNorm * 0.82 + (activeRegime?.isBackwardation ? 0.18 : 0));
+
   let min = Math.min(...converted.map((b) => b.l), refLineVal);
   let max = Math.max(...converted.map((b) => b.h), refLineVal);
+  if (discoverySeries?.length) {
+    min = Math.min(min, ...discoverySeries);
+    max = Math.max(max, ...discoverySeries);
+  }
+  if (squeezeSeries?.length) {
+    min = Math.min(min, ...squeezeSeries);
+    max = Math.max(max, ...squeezeSeries);
+  }
   if (showFc) {
     min = Math.min(min, p10Target, p50Target);
     max = Math.max(max, p90Target, p50Target);
+    if (showDiscovery) {
+      min = Math.min(min, discFcTarget);
+      max = Math.max(max, discFcTarget);
+    }
+    if (showSqueeze) {
+      max = Math.max(max, sqzFcTarget);
+    }
   }
   const span = max - min || max * 0.008 || 1;
   min = Math.max(0, min - span * 0.09);
@@ -1427,6 +1574,38 @@ function renderChart() {
     };
     if (sma20) drawSmaLine(sma20, '#38BDF8');
     if (sma50) drawSmaLine(sma50, '#F59E0B');
+  }
+
+  // Price Discovery (solid emerald #10B981) & Short Squeeze (dashed crimson #F43F5E) across historical candles
+  const drawRegimeSeries = (arr, color, dash, width) => {
+    if (!Array.isArray(arr) || !arr.length) return;
+    ctx.save();
+    if (dash) ctx.setLineDash(dash);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i] == null || !Number.isFinite(arr[i])) continue;
+      const x = xCandle(i);
+      const y = yAt(arr[i]);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  };
+  if (showDiscovery && discoverySeries) {
+    drawRegimeSeries(discoverySeries, discCol, null, desktopCanvas ? 2.1 : 1.75);
+  }
+  if (showSqueeze && squeezeSeries) {
+    drawRegimeSeries(squeezeSeries, sqzCol, [6, 4], desktopCanvas ? 2.1 : 1.75);
   }
 
   // Fibonacci level pills drawn after candles with priority collision avoidance
@@ -1556,6 +1735,38 @@ function renderChart() {
     drawCurve(p10Pts, downCol, [4, 3], 1.5);
     drawCurve(p50Pts, baseCol, [6, 2], 2.0);
 
+    // Continue Price Discovery steadily into Forecast zone (Now -> Horizon)
+    if (showDiscovery) {
+      const steps = 10;
+      const discPts = [];
+      for (let s = 0; s <= steps; s++) {
+        const u = s / steps;
+        const val = lastDisc + (discFcTarget - lastDisc) * Math.pow(u, 0.96);
+        discPts.push({
+          x: startX + u * (endX - startX),
+          y: yAt(val),
+        });
+      }
+      drawCurve(discPts, discCol, null, desktopCanvas ? 2.1 : 1.8);
+    }
+
+    // Project Short Squeeze along steeper concave gamma trajectory into Forecast zone
+    if (showSqueeze) {
+      const steps = 12;
+      const sqzPts = [];
+      for (let s = 0; s <= steps; s++) {
+        const u = s / steps;
+        // Concave gamma trajectory: rapid front-loaded short-covering breakout curve
+        const gammaShape = Math.pow(u, 0.62);
+        const val = sqzGammaAnchor + (sqzFcTarget - sqzGammaAnchor) * gammaShape;
+        sqzPts.push({
+          x: startX + u * (endX - startX),
+          y: yAt(val),
+        });
+      }
+      drawCurve(sqzPts, sqzCol, [6, 4], desktopCanvas ? 2.1 : 1.8);
+    }
+
     // Current price anchor dot
     ctx.beginPath();
     ctx.arc(startX, nowY, 3, 0, Math.PI * 2);
@@ -1592,6 +1803,8 @@ function renderChart() {
     converted,
     sma20,
     sma50,
+    discoverySeries,
+    squeezeSeries,
     rsiValues: rsiData?.values || null,
     xCandle,
     yAt,
@@ -1660,6 +1873,16 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
       tipEl.hidden = true;
       return;
     }
+    const regimeParts = [];
+    const discVal = g.discoverySeries?.[activeIdx];
+    const sqzVal = g.squeezeSeries?.[activeIdx];
+    if (discVal != null) {
+      regimeParts.push(`<span class="tt-disc">Disc ${escapeHtml(g.fmtChartVal(discVal, dec))}</span>`);
+    }
+    if (sqzVal != null) {
+      regimeParts.push(`<span class="tt-sqz">Sqz ${escapeHtml(g.fmtChartVal(sqzVal, dec))}</span>`);
+    }
+
     const subParts = [];
     const s20 = g.sma20?.[activeIdx];
     const s50 = g.sma50?.[activeIdx];
@@ -1671,6 +1894,7 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
     tipEl.innerHTML =
       `<div>${escapeHtml(tLabel)} · <strong>${escapeHtml(g.fmtChartVal(bar.c, dec))}</strong></div>` +
       `<div class="tt-sub">O ${escapeHtml(g.fmtChartVal(bar.o, dec))} H ${escapeHtml(g.fmtChartVal(bar.h, dec))} L ${escapeHtml(g.fmtChartVal(bar.l, dec))}</div>` +
+      (regimeParts.length ? `<div class="tt-sub">${regimeParts.join(' · ')}</div>` : '') +
       (subParts.length ? `<div class="tt-sub">${escapeHtml(subParts.join(' · '))}</div>` : '');
     const cx = g.xCandle(activeIdx);
     const onRightHalf = cx > g.w * 0.55;
@@ -2224,6 +2448,156 @@ function signalFromScore(score) {
   return { label: 'Neutral', cls: '' };
 }
 
+function classifyRegimeClientLabel(discoveryScore, squeezeScore) {
+  if (discoveryScore >= 58 && squeezeScore >= 58) {
+    return { label: 'Hybrid: Squeeze + Discovery', key: 'hybrid' };
+  }
+  if (discoveryScore >= 58 && discoveryScore >= squeezeScore) {
+    return { label: 'True Price Discovery', key: 'discovery' };
+  }
+  if (squeezeScore >= 58 && squeezeScore > discoveryScore) {
+    return { label: 'Short Squeeze', key: 'squeeze' };
+  }
+  if (discoveryScore >= 45 && discoveryScore >= squeezeScore + 8) {
+    return { label: 'Discovery Bias', key: 'discovery' };
+  }
+  if (squeezeScore >= 45 && squeezeScore >= discoveryScore + 8) {
+    return { label: 'Squeeze Bias', key: 'squeeze' };
+  }
+  return { label: 'Consolidation / Neutral', key: 'neutral' };
+}
+
+function computeMarketRegimeClient({
+  base,
+  drivers,
+  liveComex,
+  gUnit = 0,
+  sUnit = 0,
+  hasInteractiveOverrides = false,
+}) {
+  if (!hasInteractiveOverrides && base?.marketRegime?.gold && base?.marketRegime?.silver) {
+    return base.marketRegime;
+  }
+
+  const dMap = {};
+  for (const d of drivers || []) dMap[d.id] = d;
+  const dVal = (id, metal) => {
+    const v = dMap[id]?.[metal];
+    return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+  };
+  const normDisc = (v) => clampNum(0.42 + v * 0.54, 0.06, 1.0);
+
+  const scoreMetal = (metal) => {
+    const isSilver = metal === 'silver';
+    const ratesSig = dVal('rates_usd', metal);
+
+    let sgeSig = dVal('shanghai_sge', metal);
+    if (sgeSig === 0 && base?.shanghai?.[metal]) {
+      const prem = isSilver ? base.shanghai.silver.exVatPremiumUsdOz : base.shanghai.gold.premiumUsdOz;
+      if (typeof prem === 'number' && Number.isFinite(prem)) {
+        sgeSig = isSilver ? clampNum(prem / 3.5, -0.85, 0.9) : clampNum((prem - 5) / 42, -0.85, 0.9);
+      }
+    }
+
+    const cbInflSig = dVal('central_banks', metal) * 0.62 + dVal('inflation', metal) * 0.38;
+    const minersRaw = isSilver ? base?.proSignals?.miners?.silverSignal : base?.proSignals?.miners?.goldSignal;
+    const minersSig =
+      typeof minersRaw === 'number' && Number.isFinite(minersRaw)
+        ? minersRaw
+        : dVal('positioning_miners', metal) * 0.5;
+    const trendRaw = base?.marketRegime?.[metal]?.components?.trend;
+    const trendSig =
+      typeof trendRaw === 'number' && Number.isFinite(trendRaw)
+        ? trendRaw
+        : isSilver
+          ? sUnit * 0.55
+          : gUnit * 0.55;
+
+    const discWeighted =
+      normDisc(ratesSig) * 0.26 +
+      normDisc(sgeSig) * 0.22 +
+      normDisc(cbInflSig) * 0.20 +
+      normDisc(minersSig) * 0.16 +
+      normDisc(trendSig) * 0.16;
+    const discoveryScore = Math.round(clampNum(discWeighted * 100, 0, 100));
+
+    const comexMetal = liveComex?.[metal] || null;
+    const comexDriver = dVal('comex_paper', metal);
+    const ratio = comexMetal?.paperToRegisteredRatio;
+    const reg30d = comexMetal?.registered30dPct ?? 0;
+    const oi4w = comexMetal?.oi4wPct ?? 0;
+
+    const ratioNorm =
+      typeof ratio === 'number' && Number.isFinite(ratio)
+        ? isSilver
+          ? clampNum((ratio - 3.0) / 3.8, 0, 1)
+          : clampNum((ratio - 2.0) / 3.4, 0, 1)
+        : 0;
+    const drainNorm = reg30d < 0 ? clampNum(-reg30d / 12, 0, 0.35) : 0;
+    const oiBuildNorm = oi4w > 2 ? clampNum((oi4w - 2) / 14, 0, 0.22) : 0;
+    const comexDriverNorm = clampNum((comexDriver + 0.05) / 0.95, 0, 1);
+
+    const comexCombined =
+      typeof ratio === 'number' && Number.isFinite(ratio)
+        ? clampNum(ratioNorm * 0.55 + drainNorm * 0.2 + oiBuildNorm + comexDriverNorm * 0.25, 0, 1)
+        : comexDriverNorm;
+    const comexPts = comexCombined * 34;
+
+    const basisMetal = base?.institutionalSignals?.basis?.[metal] || null;
+    const isBackwardation =
+      basisMetal?.isBackwardation === true ||
+      (typeof basisMetal?.basisUsd === 'number' && Number.isFinite(basisMetal.basisUsd) && basisMetal.basisUsd < 0);
+    const basisPct = typeof basisMetal?.basisPct === 'number' && Number.isFinite(basisMetal.basisPct) ? basisMetal.basisPct : null;
+    let basisPts = 0;
+    if (isBackwardation) {
+      basisPts = 20 + clampNum(Math.abs(basisPct ?? 0.2) / 0.8, 0, 1) * 4;
+    } else if (basisMetal && basisPct != null && basisPct < (isSilver ? 0.22 : 0.18)) {
+      basisPts = isSilver ? 7.5 : 6.0;
+    } else if (basisMetal && basisPct != null && basisPct < 0.45) {
+      basisPts = 1.5;
+    }
+
+    const cotPct = base?.proSignals?.cot?.[metal]?.percentile52w;
+    let cotPts = 0;
+    if (typeof cotPct === 'number' && Number.isFinite(cotPct)) {
+      if (cotPct <= 35) {
+        cotPts = (0.35 + ((35 - cotPct) / 35) * 0.65) * 24;
+      } else if (cotPct <= 55) {
+        cotPts = ((55 - cotPct) / 20) * 4.5;
+      }
+    }
+
+    const gvz = base?.institutionalSignals?.impliedVol?.gvz;
+    const ivMinusRv = base?.institutionalSignals?.impliedVol?.ivMinusRv ?? 0;
+    let volPts = 0;
+    if (typeof gvz === 'number' && Number.isFinite(gvz)) {
+      const gvzNorm = clampNum((gvz - 15) / 18, 0, 1);
+      const spreadNorm = clampNum(ivMinusRv / 14, 0, 1);
+      const volScale = isSilver ? 1.0 : 0.85;
+      volPts = clampNum(gvzNorm * 0.72 + spreadNorm * 0.28, 0, 1) * 18 * volScale;
+    } else if (typeof base?.macroSnapshot?.vix === 'number') {
+      volPts = clampNum((base.macroSnapshot.vix - 16) / 18, 0, 1) * 14;
+    }
+
+    const squeezeScore = Math.round(clampNum(comexPts + basisPts + cotPts + volPts, 0, 100));
+    const cls = classifyRegimeClientLabel(discoveryScore, squeezeScore);
+
+    return {
+      metal,
+      discoveryScore,
+      squeezeScore,
+      label: cls.label,
+      key: cls.key,
+      isBackwardation,
+    };
+  };
+
+  return {
+    gold: scoreMetal('gold'),
+    silver: scoreMetal('silver'),
+  };
+}
+
 function computeInteractiveOutlook() {
   const base = outlookState.data || FALLBACK_OUTLOOK;
   const spotGold = state.quotes.gold.price || base.gold?.spot || 3542.81;
@@ -2322,8 +2696,18 @@ function computeInteractiveOutlook() {
     .map((id) => OUTLOOK_SCENARIOS.find((s) => s.id === id)?.label)
     .filter(Boolean);
 
+  const marketRegime = computeMarketRegimeClient({
+    base,
+    drivers,
+    liveComex,
+    gUnit,
+    sUnit,
+    hasInteractiveOverrides:
+      outlookState.activeScenarios.size > 0 || !!(comexState.data && comexState.data !== base?.comex),
+  });
+
   const narrative = activeNames.length
-    ? `Simulated shock active (${activeNames.join(' + ')}): historical cross-market weights shift Gold to ${signalFromScore(gScore).label.toLowerCase()} (${gScore >= 0 ? '+' : ''}${gScore}) and Silver to ${signalFromScore(sScore).label.toLowerCase()} (${sScore >= 0 ? '+' : ''}${sScore}) over the ${outlookState.horizon} window.`
+    ? `Simulated shock active (${activeNames.join(' + ')}): historical cross-market weights shift Gold to ${signalFromScore(gScore).label.toLowerCase()} (${gScore >= 0 ? '+' : ''}${gScore}, ${marketRegime.gold.label} ${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver to ${signalFromScore(sScore).label.toLowerCase()} (${sScore >= 0 ? '+' : ''}${sScore}, ${marketRegime.silver.label} ${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S) over the ${outlookState.horizon} window.`
     : base.narrative;
 
   return {
@@ -2332,12 +2716,14 @@ function computeInteractiveOutlook() {
     analogs,
     narrative,
     days,
+    marketRegime,
     gold: {
       spot: spotGold,
       dailyVol: gDailyVol,
       unit: gUnit,
       score: gScore,
       signal: signalFromScore(gScore),
+      regime: marketRegime.gold,
       range: project(spotGold, gDailyVol, gUnit),
     },
     silver: {
@@ -2346,6 +2732,7 @@ function computeInteractiveOutlook() {
       unit: sUnit,
       score: sScore,
       signal: signalFromScore(sScore),
+      regime: marketRegime.silver,
       range: project(spotSilver, sDailyVol, sUnit),
     },
   };
@@ -2382,6 +2769,22 @@ function renderOutlook() {
 
   document.getElementById('outlook-confidence').textContent = `Confidence ${res.base.confidence || 62}%`;
   document.getElementById('outlook-narrative').textContent = res.narrative;
+
+  const outlookRegimePill = document.getElementById('outlook-regime-pill');
+  if (outlookRegimePill && res.marketRegime?.gold && res.marketRegime?.silver) {
+    const gR = res.marketRegime.gold;
+    const sR = res.marketRegime.silver;
+    const dominantKey =
+      gR.key === 'hybrid' || sR.key === 'hybrid'
+        ? 'hybrid'
+        : gR.key === 'squeeze' || sR.key === 'squeeze'
+          ? 'squeeze'
+          : gR.key === 'discovery' || sR.key === 'discovery'
+            ? 'discovery'
+            : 'neutral';
+    outlookRegimePill.textContent = `Au ${gR.label} (${gR.discoveryScore}D/${gR.squeezeScore}S) · Ag ${sR.label} (${sR.discoveryScore}D/${sR.squeezeScore}S)`;
+    outlookRegimePill.className = `regime-pill ${dominantKey}`;
+  }
 
   // Scenario chips
   const chipsEl = document.getElementById('scenario-chips');
@@ -4007,9 +4410,21 @@ function wireEvents() {
     renderChart();
   });
 
-  // Forecast & Fibonacci overlay toggles on candlestick chart
+  // Forecast, Price Discovery, Short Squeeze & Fibonacci overlay toggles on candlestick chart
   document.getElementById('btn-toggle-forecast')?.addEventListener('click', () => {
     state.settings.showForecast = !state.settings.showForecast;
+    renderChart();
+    savePersistedState();
+  });
+
+  document.getElementById('btn-toggle-discovery')?.addEventListener('click', () => {
+    state.settings.showDiscovery = !state.settings.showDiscovery;
+    renderChart();
+    savePersistedState();
+  });
+
+  document.getElementById('btn-toggle-squeeze')?.addEventListener('click', () => {
+    state.settings.showSqueeze = !state.settings.showSqueeze;
     renderChart();
     savePersistedState();
   });

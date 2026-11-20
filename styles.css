@@ -585,10 +585,24 @@ body {
   flex-wrap: wrap;
 }
 
+.chart-title-block {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chart-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
 .chart-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 5px;
+  max-width: 100%;
 }
 
 .chip-toggle {
@@ -709,6 +723,10 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.chart-legend span[hidden] {
+  display: none;
 }
 
 .chart-legend i {
@@ -2089,6 +2107,102 @@ input[type="range"].silver-range::-webkit-slider-thumb {
 
 .macro-d.up { color: var(--up); }
 .macro-d.down { color: var(--down); }
+
+/* Price Discovery & Short Squeeze Overlays + Regime Pills */
+.chip-toggle.chip-discovery.active {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: #10B981;
+  color: #10B981;
+}
+
+.chip-toggle.chip-squeeze.active {
+  background: rgba(244, 63, 94, 0.14);
+  border-color: #F43F5E;
+  color: #F43F5E;
+}
+
+.line-discovery {
+  width: 13px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: #10B981;
+}
+
+.line-squeeze {
+  width: 14px;
+  height: 0;
+  border-top: 2.5px dashed #F43F5E;
+}
+
+.regime-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.regime-pill.discovery {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #10B981;
+}
+
+.regime-pill.squeeze {
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(244, 63, 94, 0.45);
+  color: #F43F5E;
+}
+
+.regime-pill.hybrid {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.48);
+  color: #F59E0B;
+}
+
+.regime-pill.neutral {
+  background: var(--surface-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+.regime-pill[hidden] {
+  display: none;
+}
+
+.outlook-summary-head {
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.outlook-summary-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  max-width: 100%;
+}
+
+.chart-tooltip .tt-disc {
+  color: #10B981;
+  font-weight: 600;
+}
+
+.chart-tooltip .tt-sqz {
+  color: #F43F5E;
+  font-weight: 600;
+}
 
 /* SMA / RSI Chart Overlays */
 .chip-toggle.chip-sma.active {

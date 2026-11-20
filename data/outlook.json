@@ -3,7 +3,7 @@
   "disclaimer": "Anonymous probabilistic scenario model combining global news (recency-weighted), FRED 10Y TIPS real yields, COMEX paper vs. registered vault contracts, CBOE ^GVZ implied volatility, GLD/SLV/PSLV flows, Copper/USD-JPY cross-markets, COMEX EFP basis, Event-Risk calendar, Shanghai SGE premiums, daily 5:10 PM ET self-learning weight calibration, and Merton Jump-Diffusion Monte Carlo simulations. Educational — not financial advice.",
   "confidence": 75,
   "coneMultiplier": 0.96,
-  "narrative": "Anonymous model signals a bearish tilt for Gold and bearish tilt for Silver across 25 deduplicated news clusters. Primary active drivers: Central Banks & ETFs and Shanghai Physical (SGE). COMEX paper claims stand at 2.86:1 for Gold (404,725 GC) and 5.72:1 for Silver (115,652 SI) vs. registered vaults. Next high-vol catalyst: COMEX Silver First Notice Day in 10d (2026-11-30). Options ^GVZ implied vol is 34.01% (High Options Fear). 10Y TIPS real yield sits at 2.88% (+10 bps 5d). Producer breadth tracks 0% positive among Gold majors (NEM/AEM/B/WPM/FNV) and 0% among Silver peers (PAAS/HL/AG/CDE). Gold/Silver ratio (86.0:1) sits elevated, historically favoring Silver catch-up.",
+  "narrative": "Anonymous model signals a bearish tilt for Gold and bearish tilt for Silver across 25 deduplicated news clusters. Primary active drivers: Central Banks & ETFs and Shanghai Physical (SGE). COMEX paper claims stand at 2.86:1 for Gold (404,725 GC) and 5.72:1 for Silver (115,652 SI) vs. registered vaults. Next high-vol catalyst: COMEX Silver First Notice Day in 10d (2026-11-30). Options ^GVZ implied vol is 34.01% (High Options Fear). 10Y TIPS real yield sits at 2.88% (+10 bps 5d). Producer breadth tracks 0% positive among Gold majors (NEM/AEM/B/WPM/FNV) and 0% among Silver peers (PAAS/HL/AG/CDE). Gold/Silver ratio (86.0:1) sits elevated, historically favoring Silver catch-up. Regime decomposition: Gold Squeeze Bias (32D/49S) and Silver Short Squeeze (20D/73S).",
   "gold": {
     "spot": 3528.8,
     "score": -27,
@@ -771,6 +771,25 @@
           3972.92
         ]
       ]
+    },
+    "regime": {
+      "metal": "gold",
+      "discoveryScore": 32,
+      "squeezeScore": 49,
+      "label": "Squeeze Bias",
+      "key": "squeeze",
+      "isBackwardation": false,
+      "components": {
+        "ratesUsd": -0.486,
+        "shanghaiSge": 0.9,
+        "centralBanksInflation": -0.695,
+        "miners": -0.71,
+        "trend": -0.135,
+        "comexPts": 9.1,
+        "basisPts": 6,
+        "cotPts": 18.2,
+        "volPts": 15.3
+      }
     }
   },
   "silver": {
@@ -1540,6 +1559,25 @@
           32.6
         ]
       ]
+    },
+    "regime": {
+      "metal": "silver",
+      "discoveryScore": 20,
+      "squeezeScore": 73,
+      "label": "Short Squeeze",
+      "key": "squeeze",
+      "isBackwardation": false,
+      "components": {
+        "ratesUsd": -0.481,
+        "shanghaiSge": -0.382,
+        "centralBanksInflation": -0.731,
+        "miners": -0.306,
+        "trend": -0.14,
+        "comexPts": 24,
+        "basisPts": 7.5,
+        "cotPts": 24,
+        "volPts": 18
+      }
     }
   },
   "drivers": [
@@ -2076,7 +2114,8 @@
         "basisPct": 0,
         "signal": 0.28,
         "jumpBoost": 0.08,
-        "state": "Compressed EFP"
+        "state": "Compressed EFP",
+        "isBackwardation": false
       },
       "silver": {
         "spot": 41.03,
@@ -2085,7 +2124,8 @@
         "basisPct": 0,
         "signal": 0.28,
         "jumpBoost": 0.08,
-        "state": "Compressed EFP"
+        "state": "Compressed EFP",
+        "isBackwardation": false
       }
     }
   },
@@ -2612,5 +2652,45 @@
       "weight": 0.256,
       "clusterCount": 1
     }
-  ]
+  ],
+  "marketRegime": {
+    "gold": {
+      "metal": "gold",
+      "discoveryScore": 32,
+      "squeezeScore": 49,
+      "label": "Squeeze Bias",
+      "key": "squeeze",
+      "isBackwardation": false,
+      "components": {
+        "ratesUsd": -0.486,
+        "shanghaiSge": 0.9,
+        "centralBanksInflation": -0.695,
+        "miners": -0.71,
+        "trend": -0.135,
+        "comexPts": 9.1,
+        "basisPts": 6,
+        "cotPts": 18.2,
+        "volPts": 15.3
+      }
+    },
+    "silver": {
+      "metal": "silver",
+      "discoveryScore": 20,
+      "squeezeScore": 73,
+      "label": "Short Squeeze",
+      "key": "squeeze",
+      "isBackwardation": false,
+      "components": {
+        "ratesUsd": -0.481,
+        "shanghaiSge": -0.382,
+        "centralBanksInflation": -0.731,
+        "miners": -0.306,
+        "trend": -0.14,
+        "comexPts": 24,
+        "basisPts": 7.5,
+        "cotPts": 24,
+        "volPts": 18
+      }
+    }
+  }
 }

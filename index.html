@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=17" />
+  <link rel="stylesheet" href="./styles.css?v=21" />
 </head>
 <body>
   <div class="app-shell">
@@ -188,12 +188,17 @@
         <!-- Multi-Timeframe OHLC Candlestick & Prediction Fan Chart -->
         <section class="panel" id="panel-chart" aria-label="OHLC candlestick chart with prediction lines and timeframe selector">
           <div class="panel-header">
-            <div>
-              <h2 class="panel-title" id="chart-title">Gold (XAU/USD) · 1D (5m)</h2>
+            <div class="chart-title-block">
+              <div class="chart-title-row">
+                <h2 class="panel-title" id="chart-title">Gold (XAU/USD) · 1D (5m)</h2>
+                <span class="regime-pill neutral" id="chart-regime-pill">Gold Consolidation / Neutral</span>
+              </div>
               <div class="panel-subtitle" id="chart-subtitle">5m OHLC candles · Next refresh in 05:00</div>
             </div>
             <div class="chart-controls">
               <button type="button" id="btn-toggle-forecast" class="chip-toggle active" aria-pressed="true">Forecast</button>
+              <button type="button" id="btn-toggle-discovery" class="chip-toggle chip-discovery active" aria-pressed="true" title="Toggle structural Price Discovery fair-value curve">Price Discovery</button>
+              <button type="button" id="btn-toggle-squeeze" class="chip-toggle chip-squeeze active" aria-pressed="true" title="Toggle Short Squeeze breakout / gamma trajectory">Short Squeeze</button>
               <button type="button" id="btn-toggle-fib" class="chip-toggle chip-fib" aria-pressed="false" title="Toggle Fibonacci retracement levels">Fib</button>
               <button type="button" id="btn-toggle-sma" class="chip-toggle chip-sma" aria-pressed="false" title="Toggle 20/50 Simple Moving Averages">SMA</button>
               <button type="button" id="btn-toggle-rsi" class="chip-toggle chip-rsi" aria-pressed="false" title="Toggle RSI(14) momentum oscillator">RSI</button>
@@ -238,6 +243,8 @@
             <span><i class="line-bull"></i> P90 Bull</span>
             <span><i class="line-base"></i> P50 Base</span>
             <span><i class="line-bear"></i> P10 Bear</span>
+            <span id="legend-discovery"><i class="line-discovery"></i> Price Discovery</span>
+            <span id="legend-squeeze"><i class="line-squeeze"></i> Short Squeeze</span>
             <span id="legend-fib" hidden><i class="line-fib"></i> Fib</span>
             <span id="legend-sma" hidden><i class="line-sma20"></i> SMA 20 · <i class="line-sma50"></i> SMA 50</span>
           </div>
@@ -408,9 +415,12 @@
 
         <!-- Narrative Synthesis -->
         <section class="panel">
-          <div class="panel-header">
+          <div class="panel-header outlook-summary-head">
             <h2 class="panel-title">Pattern Summary</h2>
-            <span class="panel-subtitle" id="outlook-confidence">Confidence —%</span>
+            <div class="outlook-summary-badges">
+              <span class="regime-pill neutral" id="outlook-regime-pill">Consolidation / Neutral</span>
+              <span class="panel-subtitle" id="outlook-confidence">Confidence —%</span>
+            </div>
           </div>
           <p class="outlook-summary" id="outlook-narrative">Loading macro and news synthesis…</p>
         </section>
@@ -894,6 +904,6 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=17" defer></script>
+  <script src="./app.js?v=21" defer></script>
 </body>
 </html>
