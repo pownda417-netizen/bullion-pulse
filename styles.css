@@ -2001,7 +2001,7 @@ input[type="range"].silver-range::-webkit-slider-thumb {
   height: 21px;
 }
 
-@media (min-width: 520px) {
+@media (min-width: 520px) and (max-width: 839px) {
   body {
     padding: 16px 0;
   }
@@ -2019,5 +2019,440 @@ input[type="range"].silver-range::-webkit-slider-thumb {
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
+  }
+}
+
+/* Desktop / PC Browser & Installed Computer App Dashboard */
+@media (min-width: 840px) {
+  body {
+    padding: 20px 24px;
+    font-size: 16px;
+  }
+
+  .app-shell {
+    max-width: 1240px;
+    width: 100%;
+    min-height: calc(100dvh - 40px);
+    padding-bottom: 24px;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    overflow: clip;
+    background: var(--bg);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  }
+
+  .top-bar {
+    order: 0;
+    padding: 18px 28px 16px;
+  }
+
+  .brand {
+    gap: 13px;
+  }
+
+  .brand-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+  }
+
+  .brand-title {
+    font-size: 20px;
+  }
+
+  .status-line {
+    font-size: 13px;
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+  }
+
+  /* Move tab navigation from phone bottom dock into a crisp desktop top tab strip */
+  .bottom-nav {
+    order: 1;
+    position: static;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    padding: 6px 28px 0;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--surface) 65%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-btn {
+    flex-direction: row;
+    gap: 8px;
+    padding: 11px 18px 12px;
+    font-size: 14px;
+    border-bottom: 2px solid transparent;
+    border-radius: 10px 10px 0 0;
+    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .nav-btn:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--gold-soft) 45%, transparent);
+  }
+
+  .nav-btn.active {
+    border-bottom-color: var(--gold);
+    background: color-mix(in srgb, var(--gold-soft) 55%, transparent);
+  }
+
+  .nav-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .main-content {
+    order: 2;
+    padding: 24px 28px 34px;
+    gap: 20px;
+  }
+
+  .section-label {
+    font-size: 13px;
+  }
+
+  .segmented button {
+    padding: 7px 14px;
+    font-size: 13.5px;
+  }
+
+  .panel {
+    padding: 22px 24px;
+    border-radius: 20px;
+  }
+
+  .panel-header {
+    margin-bottom: 16px;
+    gap: 14px;
+  }
+
+  .panel-title {
+    font-size: 18px;
+  }
+
+  .panel-subtitle {
+    font-size: 13.5px;
+  }
+
+  /* Multi-column responsive grids per tab */
+  #view-markets.active,
+  #view-outlook.active,
+  #view-alerts.active,
+  #view-setup.active {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    align-items: start;
+  }
+
+  #view-markets > .toolbar-row,
+  #view-markets > #panel-chart,
+  #view-markets > .stats-grid,
+  #view-markets > #panel-shanghai {
+    grid-column: 1 / -1;
+  }
+
+  #view-outlook > * {
+    grid-column: 1 / -1;
+  }
+
+  #view-outlook > #panel-drivers,
+  #view-outlook > #panel-analogs {
+    grid-column: auto;
+  }
+
+  #view-alerts > .toolbar-row,
+  #view-alerts > .panel:last-child,
+  #view-setup > .toolbar-row {
+    grid-column: 1 / -1;
+  }
+
+  #view-setup > .panel {
+    height: 100%;
+  }
+
+  /* Larger, readable Spot Cards & Key Metrics */
+  .metal-card {
+    padding: 22px 24px;
+    border-radius: 20px;
+  }
+
+  .metal-badge {
+    width: 40px;
+    height: 40px;
+    font-size: 13.5px;
+  }
+
+  .metal-name {
+    font-size: 18px;
+  }
+
+  .metal-sub {
+    font-size: 13px;
+  }
+
+  .change-pill {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
+
+  .metal-price {
+    font-size: 40px;
+  }
+
+  .metal-delta-usd {
+    font-size: 15.5px;
+  }
+
+  .threshold-meta {
+    font-size: 13px;
+  }
+
+  /* Bigger Candlestick & Forecast Chart on Desktop */
+  .chart-controls {
+    gap: 8px;
+  }
+
+  .chip-toggle {
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 10px;
+  }
+
+  .tf-btn {
+    font-size: 12.5px;
+    padding: 7px 0;
+  }
+
+  .ohlc-bar {
+    font-size: 13px;
+  }
+
+  .tf-return-pill {
+    font-size: 12.5px;
+    padding: 4px 10px;
+  }
+
+  .chart-wrap-tall {
+    height: 370px;
+  }
+
+  .chart-legend {
+    font-size: 12.5px;
+    gap: 16px;
+    margin-top: 10px;
+  }
+
+  .stat-item {
+    padding: 16px 18px;
+  }
+
+  .stat-label {
+    font-size: 12.5px;
+  }
+
+  .stat-value {
+    font-size: 18.5px;
+  }
+
+  /* Bigger Shanghai SGE Panel */
+  .sge-grid {
+    gap: 16px;
+  }
+
+  .sge-card {
+    padding: 18px 20px;
+  }
+
+  .sge-contract {
+    font-size: 14px;
+  }
+
+  .sge-pct {
+    font-size: 13.5px;
+  }
+
+  .sge-cny {
+    font-size: 22px;
+  }
+
+  .sge-usd {
+    font-size: 14px;
+  }
+
+  .sge-spread,
+  .sge-bench-row {
+    font-size: 13px;
+  }
+
+  /* Bigger Outlook Forecast Cards, Quant Grids & Sector Bellwethers */
+  .disclaimer-note {
+    font-size: 13.5px;
+    padding: 14px 18px;
+  }
+
+  .forecast-grid {
+    gap: 18px;
+  }
+
+  .forecast-card {
+    padding: 22px 24px;
+  }
+
+  .forecast-base {
+    font-size: 28px;
+  }
+
+  .forecast-drift,
+  .range-labels {
+    font-size: 13.5px;
+  }
+
+  .outlook-summary {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .pro-grid,
+  .inst-grid,
+  .sl-meta-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .pro-card,
+  .inst-card,
+  .sl-chip {
+    padding: 14px 16px;
+  }
+
+  .pro-label,
+  .inst-label {
+    font-size: 12px;
+  }
+
+  .pro-value,
+  .inst-val {
+    font-size: 17px;
+  }
+
+  .pro-sub,
+  .inst-sub {
+    font-size: 12px;
+  }
+
+  .sector-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .sector-chip {
+    padding: 13px 16px;
+    gap: 4px;
+  }
+
+  .sector-sym {
+    font-size: 14px;
+  }
+
+  .sector-pct {
+    font-size: 13.5px;
+  }
+
+  .sector-name {
+    font-size: 12.5px;
+  }
+
+  .sector-last {
+    font-size: 13px;
+  }
+
+  .comex-grid {
+    gap: 16px;
+  }
+
+  .comex-card {
+    padding: 18px 20px;
+  }
+
+  .comex-code {
+    font-size: 13.5px;
+  }
+
+  .comex-ratio {
+    font-size: 14px;
+  }
+
+  .comex-contracts {
+    font-size: 18px;
+  }
+
+  .comex-oz,
+  .comex-foot {
+    font-size: 13px;
+  }
+
+  /* Bigger Jump-Diffusion Monte Carlo Chart & Target Hit Cards */
+  .mc-canvas-wrap {
+    height: 300px;
+  }
+
+  .mc-prob-card {
+    padding: 14px 16px;
+  }
+
+  .mc-prob-top {
+    font-size: 13.5px;
+  }
+
+  .mc-prob-top strong {
+    font-size: 18px;
+  }
+
+  .mc-prob-hint {
+    font-size: 12px;
+  }
+
+  .chip-btn,
+  .mc-preset-btn {
+    font-size: 13px;
+    padding: 7px 12px;
+  }
+
+  .driver-name,
+  .analog-title,
+  .news-title {
+    font-size: 14.5px;
+  }
+
+  .analog-note,
+  .news-meta {
+    font-size: 13px;
+  }
+
+  .news-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  #accuracy-breakdown {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
 }

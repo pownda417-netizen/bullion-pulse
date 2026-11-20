@@ -971,7 +971,8 @@ function renderChart() {
   const yAt = (v) => padTop + (1 - (v - min) / (max - min)) * plotH;
 
   // Subtle horizontal gridlines + price axis labels
-  ctx.font = '500 10.5px "JetBrains Mono", monospace';
+  const desktopCanvas = w >= 720;
+  ctx.font = `500 ${desktopCanvas ? 11.5 : 10.5}px "JetBrains Mono", monospace`;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   for (let g = 0; g <= 3; g++) {
@@ -1067,32 +1068,34 @@ function renderChart() {
   if (fibData) {
     const priorityOrder = [0.618, 0.5, 0.382, 0.236, 0.786, 1, 0];
     const placedYs = [];
+    const minGap = desktopCanvas ? 17 : 14;
+    const pillH = desktopCanvas ? 15 : 13;
     ctx.save();
-    ctx.font = '600 9px "JetBrains Mono", monospace';
+    ctx.font = `600 ${desktopCanvas ? 10.5 : 9}px "JetBrains Mono", monospace`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     for (const ratio of priorityOrder) {
       const lv = fibData.levels.find((item) => item.ratio === ratio);
       if (!lv) continue;
       const y = yAt(lv.price);
-      if (y < padTop + 7 || y > padTop + plotH - 7) continue;
-      if (placedYs.some((py) => Math.abs(py - y) < 14)) continue;
+      if (y < padTop + 8 || y > padTop + plotH - 8) continue;
+      if (placedYs.some((py) => Math.abs(py - y) < minGap)) continue;
       placedYs.push(y);
       const decimals = lv.price >= 500 ? 0 : 2;
       const txt = `${lv.label} ${formatMoney(lv.price, decimals)}`;
       const tw = ctx.measureText(txt).width;
       ctx.fillStyle = isLightTheme ? 'rgba(255, 255, 255, 0.85)' : 'rgba(13, 14, 17, 0.78)';
-      ctx.fillRect(padLeft + 2, y - 6.5, tw + 7, 13);
+      ctx.fillRect(padLeft + 2, y - pillH / 2, tw + 8, pillH);
       ctx.fillStyle = fibCol;
       ctx.globalAlpha = lv.isPocketBound ? 1 : 0.85;
-      ctx.fillText(txt, padLeft + 5.5, y + 0.3);
+      ctx.fillText(txt, padLeft + 6, y + 0.3);
       ctx.globalAlpha = 1;
     }
     ctx.restore();
   }
 
   // Bottom X-axis date labels across historical candlestick zone
-  ctx.font = '500 9.5px "JetBrains Mono", monospace';
+  ctx.font = `500 ${desktopCanvas ? 11 : 9.5}px "JetBrains Mono", monospace`;
   ctx.fillStyle = mutedCol;
   ctx.textBaseline = 'bottom';
   ctx.textAlign = 'left';
