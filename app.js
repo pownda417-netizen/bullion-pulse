@@ -3213,6 +3213,7 @@ function wireEvents() {
 
   // Refresh & Theme
   document.getElementById('btn-refresh')?.addEventListener('click', () => {
+    navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {});
     fetchSpotQuotes();
     fetchOutlookData();
     fetchShanghaiData();
@@ -3437,9 +3438,20 @@ function startPolling() {
 }
 
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  }
+  if (!('serviceWorker' in navigator) || !window.location.protocol.startsWith('http')) return;
+  const hadController = !!navigator.serviceWorker.controller;
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
+  });
+  navigator.serviceWorker
+    .register('./sw.js', { updateViaCache: 'none' })
+    .then((reg) => {
+      reg.update().catch(() => {});
+    })
+    .catch(() => {});
 }
 
 /* ---------- Boot ---------- */

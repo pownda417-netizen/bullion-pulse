@@ -1,9 +1,9 @@
-const CACHE_NAME = 'bullion-pulse-v12';
+const CACHE_NAME = 'bullion-pulse-v13';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css',
-  './app.js',
+  './styles.css?v=13',
+  './app.js?v=13',
   './mc_worker.js',
   './manifest.json',
   './icons/icon-192.png',
@@ -26,9 +26,8 @@ self.addEventListener('activate', (event) => {
           .filter((key) => key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -36,24 +35,27 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // Always hit network for live price feeds and ntfy requests
+  // Always hit network directly for cross-origin live price feeds and ntfy requests
   if (url.origin !== self.location.origin) {
     return;
   }
 
-  // Network-first for HTML and dynamic data/*.json feeds
-  if (
+  // Network-first (bypassing HTTP disk cache) for HTML, CSS, JS, and data/*.json feeds
+  // so installed phone PWAs never pair new HTML with stale cached app.js/styles.css
+  const p = url.pathname;
+  const isCoreOrData =
     request.mode === 'navigate' ||
-    url.pathname.endsWith('/data/outlook.json') ||
-    url.pathname.endsWith('/data/shanghai.json') ||
-    url.pathname.endsWith('/data/candles.json') ||
-    url.pathname.endsWith('/data/candles_1d.json') ||
-    url.pathname.endsWith('/data/candles_hist.json') ||
-    url.pathname.endsWith('/data/comex.json') ||
-    url.pathname.endsWith('/data/learned_weights.json')
-  ) {
+    p.endsWith('/') ||
+    p.endsWith('/index.html') ||
+    p.endsWith('/app.js') ||
+    p.endsWith('/styles.css') ||
+    p.endsWith('/mc_worker.js') ||
+    p.endsWith('/manifest.json') ||
+    p.includes('/data/');
+
+  if (isCoreOrData) {
     event.respondWith(
-      fetch(request)
+      fetch(new Request(request, { cache: 'no-store' }))
         .then((response) => {
           if (response.ok) {
             const clone = response.clone();
@@ -61,21 +63,22 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(request))
+        .catch(() => caches.open(CACHE_NAME).then((c) => c.match(request)))
     );
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      });
-    })
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            cache.put(request, response.clone());
+          }
+          return response;
+        });
+      })
+    )
   );
 });
