@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-20T05:33:04.005Z",
+  "updatedAt": "2026-11-20T07:40:10.241Z",
   "liveFetched": false,
   "source": "CME COMEX & CFTC (Verified Nov 2026 Snapshot)",
   "gold": {
@@ -21,7 +21,7 @@
     "registered30dPct": -4.3,
     "paperToRegisteredRatio": 3.49,
     "paperToTotalRatio": 2.14,
-    "signal": 0.433,
+    "signal": 0.195,
     "jumpBoost": 0.194,
     "regime": "Elevated Paper Claims",
     "date": "2026-11-19",
@@ -46,7 +46,7 @@
     "registered30dPct": -1.9,
     "paperToRegisteredRatio": 6.74,
     "paperToTotalRatio": 2.06,
-    "signal": 0.5,
+    "signal": 0.164,
     "jumpBoost": 0.149,
     "regime": "Physical Squeeze Stress",
     "date": "2026-11-19",

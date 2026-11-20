@@ -62,6 +62,14 @@ const RSS_FEEDS = [
     name: 'Stock Markets',
     url: 'https://news.google.com/rss/search?q=(stock+market+selloff+OR+S%26P+500+OR+recession+fears+OR+VIX+volatility)+when:3d&hl=en-US&gl=US&ceid=US:en',
   },
+  {
+    name: 'Gold Sector Companies (NEM/AEM/B/WPM)',
+    url: 'https://news.google.com/rss/search?q=(Newmont+OR+"Barrick"+OR+"Agnico+Eagle"+OR+"Wheaton+Precious"+OR+"Franco-Nevada")+gold+AISC+production+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'Silver Sector Companies (PAAS/HL/AG/CDE)',
+    url: 'https://news.google.com/rss/search?q=("Pan+American+Silver"+OR+"First+Majestic"+OR+"Hecla+Mining"+OR+"Coeur+Mining"+OR+Fresnillo)+silver+production+strike+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
 ];
 
 const YAHOO_SYMBOLS = {
@@ -79,6 +87,15 @@ const YAHOO_SYMBOLS = {
   pslv: 'PSLV',
   copper: 'HG=F',
   usdjpy: 'JPY=X',
+  nem: 'NEM',
+  aem: 'AEM',
+  b: 'B',
+  wpm: 'WPM',
+  fnv: 'FNV',
+  paas: 'PAAS',
+  hl: 'HL',
+  ag: 'AG',
+  cde: 'CDE',
 };
 
 /* ---------- Lightweight Zero-Dependency XML RSS Parser ---------- */

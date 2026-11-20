@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-20T04:54:27.760Z",
+  "updatedAt": "2026-11-20T07:40:00.000Z",
   "scorecard": {
     "live7d": {
       "count": 0,
@@ -19,52 +19,52 @@
   "predictions": [
     {
       "id": "2026-11-20-gold",
-      "createdAt": "2026-11-20T04:54:27.760Z",
+      "createdAt": "2026-11-20T07:40:00.000Z",
       "metal": "gold",
-      "spotAtForecast": 3742.5,
-      "score": 41,
-      "signal": "Bullish",
+      "spotAtForecast": 3542.81,
+      "score": -4,
+      "signal": "Neutral",
       "horizon7d": {
-        "bear": 3703.07,
-        "base": 3756,
-        "bull": 3808.93,
-        "bearPct": -1.05,
-        "expectedPct": 0.36,
-        "bullPct": 1.78
+        "bear": 3434.09,
+        "base": 3539.83,
+        "bull": 3645.57,
+        "bearPct": -3.07,
+        "expectedPct": -0.08,
+        "bullPct": 2.9
       },
       "horizon30d": {
-        "bear": 3661.69,
-        "base": 3770.17,
-        "bull": 3878.64,
-        "bearPct": -2.16,
-        "expectedPct": 0.74,
-        "bullPct": 3.64
+        "bear": 3320.01,
+        "base": 3536.71,
+        "bull": 3753.4,
+        "bearPct": -6.29,
+        "expectedPct": -0.17,
+        "bullPct": 5.94
       },
       "graded7d": null,
       "graded30d": null
     },
     {
       "id": "2026-11-20-silver",
-      "createdAt": "2026-11-20T04:54:27.760Z",
+      "createdAt": "2026-11-20T07:40:00.000Z",
       "metal": "silver",
-      "spotAtForecast": 45.28,
-      "score": 56,
-      "signal": "Strong Bullish",
+      "spotAtForecast": 42.22,
+      "score": 13,
+      "signal": "Neutral",
       "horizon7d": {
-        "bear": 44.52,
-        "base": 45.69,
-        "bull": 46.85,
-        "bearPct": -1.67,
-        "expectedPct": 0.9,
-        "bullPct": 3.47
+        "bear": 40.96,
+        "base": 42.34,
+        "bull": 43.71,
+        "bearPct": -2.98,
+        "expectedPct": 0.28,
+        "bullPct": 3.54
       },
       "horizon30d": {
-        "bear": 43.73,
-        "base": 46.11,
-        "bull": 48.5,
-        "bearPct": -3.43,
-        "expectedPct": 1.84,
-        "bullPct": 7.11
+        "bear": 39.64,
+        "base": 42.46,
+        "bull": 45.28,
+        "bearPct": -6.1,
+        "expectedPct": 0.57,
+        "bullPct": 7.25
       },
       "graded7d": null,
       "graded30d": null

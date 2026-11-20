@@ -14,6 +14,7 @@ import {
   parseSgeHomepageHtml,
 } from './shanghai.mjs';
 import {
+  SECTOR_COMPANIES,
   computeCotSignal,
   computeMinersConfirmation,
   computeRealYieldSignal,
@@ -253,24 +254,24 @@ const accResult = updateAccuracyLog({
         id: '2026-11-11-gold',
         createdAt: oldCreated,
         metal: 'gold',
-        spotAtForecast: 3680,
-        score: 48,
-        signal: 'Strong Bullish',
-        horizon7d: { bear: 3610, base: 3725, bull: 3820, expectedPct: 1.22 },
-        horizon30d: { bear: 3520, base: 3780, bull: 4010, expectedPct: 2.72 },
+        spotAtForecast: 3625,
+        score: -42,
+        signal: 'Bearish Tilt',
+        horizon7d: { bear: 3480, base: 3560, bull: 3650, expectedPct: -1.79 },
+        horizon30d: { bear: 3410, base: 3590, bull: 3810, expectedPct: -0.97 },
         graded7d: null,
         graded30d: null,
       },
     ],
   },
   outlook: buildOutlook({
-    spotGold: 3742.5,
-    spotSilver: 45.28,
+    spotGold: 3542.81,
+    spotSilver: 42.22,
     proSignals: { realYields: rySig, cot: { gold: cotSilver, silver: cotSilver }, miners: minersSig },
     generatedAt: new Date(nowMs).toISOString(),
   }),
-  spotGold: 3742.5,
-  spotSilver: 45.28,
+  spotGold: 3542.81,
+  spotSilver: 42.22,
   now: new Date(nowMs),
 });
 assert.equal(accResult.scorecard.live7d.count, 1);
@@ -283,8 +284,8 @@ assert.ok(bt.gold && bt.gold.samples >= 10 && bt.gold.inConePct >= 50);
 
 // 12. Merton Jump-Diffusion Monte Carlo fat-tail quantiles & touch >= finish probability
 const jdOutlook = buildOutlook({
-  spotGold: 3742.5,
-  spotSilver: 45.28,
+  spotGold: 3542.81,
+  spotSilver: 42.22,
   proSignals: { realYields: rySig, cot: { gold: cotSilver, silver: cotSilver }, miners: minersSig },
   generatedAt: new Date(nowMs).toISOString(),
 });
@@ -321,8 +322,8 @@ assert.ok(squeezeComex.gold.paperToRegisteredRatio > 3.0);
 assert.ok(squeezeComex.silver.signal > 0 && squeezeComex.gold.signal > 0);
 
 const comexOutlook = buildOutlook({
-  spotGold: 3742.5,
-  spotSilver: 45.28,
+  spotGold: 3542.81,
+  spotSilver: 42.22,
   comex: squeezeComex,
   generatedAt: new Date(nowMs).toISOString(),
 });
@@ -364,17 +365,17 @@ const crossSig = computeCrossMarketSignal({
 assert.ok(crossSig.cu5dPct > 0 && crossSig.jpy5dPct < 0 && crossSig.silverSignal > 0.2 && crossSig.goldSignal > 0.2);
 
 const basisSig = computeBasisSignal({
-  spotGold: 3742.5,
-  futGold: 3748.2,
-  spotSilver: 45.28,
-  futSilver: 45.19,
+  spotGold: 3542.81,
+  futGold: 3548.50,
+  spotSilver: 42.22,
+  futSilver: 42.13,
 });
 assert.equal(basisSig.silver.state, 'Backwardation (Tight!)');
 assert.ok(basisSig.silver.signal >= 0.45 && basisSig.silver.jumpBoost >= 0.2);
 
 const instOutlook = buildOutlook({
-  spotGold: 3742.5,
-  spotSilver: 45.28,
+  spotGold: 3542.81,
+  spotSilver: 42.22,
   comex: squeezeComex,
   institutionalSignals: buildBaselineInstitutionalSignals(new Date('2026-11-19T12:00:00Z')),
   generatedAt: '2026-11-19T12:00:00Z',
@@ -452,8 +453,8 @@ const seededLearn = buildSeededLearnedState();
 assert.equal(seededLearn.totalCycles, 5);
 assert.equal(seededLearn.history.length, 5);
 const slOutlook = buildOutlook({
-  spotGold: 3742.5,
-  spotSilver: 45.28,
+  spotGold: 3542.81,
+  spotSilver: 42.22,
   comex: squeezeComex,
   institutionalSignals: buildBaselineInstitutionalSignals(new Date('2026-11-19T12:00:00Z')),
   learnedWeights: seededLearn,
@@ -473,9 +474,9 @@ assert.equal(isPostCloseLearningWindow(new Date('2026-11-26T22:10:00Z')), false,
 // Stale-close guard skips zero-change frozen feed
 const staleRes = runDailyLearningStep({
   learnedState: seededLearn,
-  prevSnapshot: { dayKey: '2026-11-19', goldClose: 3742.5, silverClose: 45.28, pred1dGoldPct: 0.4, pred1dSilverPct: 0.7, halfCone1dGoldPct: 1.0, halfCone1dSilverPct: 2.0, drivers: [] },
-  actualGoldClose: 3742.5,
-  actualSilverClose: 45.28,
+  prevSnapshot: { dayKey: '2026-11-19', goldClose: 3542.81, silverClose: 42.22, pred1dGoldPct: 0.4, pred1dSilverPct: 0.7, halfCone1dGoldPct: 1.0, halfCone1dSilverPct: 2.0, drivers: [] },
+  actualGoldClose: 3542.81,
+  actualSilverClose: 42.22,
   nowDate: new Date('2026-11-20T22:10:00Z'),
 });
 assert.equal(staleRes.updated, false);
@@ -540,4 +541,34 @@ const scaledJp = estimateJumpParams({ metal: 'silver', dailyVol: 0.02, unitScore
 assert.ok(scaledJp.lambda > baseJp.lambda && scaledJp.jumpSigma > baseJp.jumpSigma);
 assert.ok(slOutlook.selfLearning.jumpCalibration && slOutlook.selfLearning.championChallenger);
 
-console.log('All 16 Bullion Pulse suites (Self-Learning v2 Multi-Horizon/Regimes/Auto-Rollback/Tail-Calib, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');
+// 17. Sector Bellwethers (9 Gold & Silver Miners) & Company Catalyst Headline Classification
+assert.equal(SECTOR_COMPANIES.length, 9, 'Must track 9 Gold/Silver sector bellwether companies');
+const sectorMinersSig = computeMinersConfirmation({
+  gold: [3710, 3695, 3680, 3665, 3650, 3640, 3630, 3626, 3605, 3580, 3542.81],
+  silver: [44.8, 44.5, 44.2, 43.9, 43.6, 43.4, 43.1, 42.84, 42.6, 42.4, 42.22],
+  gdx: [78.0, 77.2, 76.5, 75.8, 74.9, 74.0, 73.2, 72.1, 71.0, 69.8, 68.5],
+  sil: [56.0, 55.4, 54.8, 54.0, 53.3, 52.6, 51.8, 50.9, 50.1, 49.0, 47.9],
+  nem: [86.0, 85.4, 84.8, 84.1, 83.6, 82.9, 82.2, 81.4, 80.5, 79.6, 78.6],
+  aem: [172.0, 170.5, 169.0, 167.8, 166.2, 164.8, 163.5, 161.9, 160.5, 159.4, 158.24],
+  b: [36.2, 35.9, 35.6, 35.4, 35.1, 34.8, 34.5, 34.1, 33.8, 33.4, 33.1],
+  wpm: [128.0, 127.1, 126.2, 125.4, 124.5, 123.6, 122.9, 122.0, 120.8, 119.8, 118.9],
+  fnv: [258.0, 256.2, 254.5, 253.0, 251.4, 249.8, 248.2, 247.4, 244.1, 240.8, 237.37],
+  paas: [35.4, 35.1, 34.8, 34.5, 34.2, 33.9, 33.6, 33.7, 33.2, 32.8, 32.39],
+  hl: [19.4, 19.2, 19.0, 18.8, 18.7, 18.6, 18.5, 18.5, 18.3, 18.25, 18.19],
+  ag: [13.2, 13.0, 12.8, 12.6, 12.5, 12.3, 12.2, 12.0, 11.8, 11.6, 11.32],
+  cde: [21.1, 20.9, 20.7, 20.5, 20.3, 20.1, 19.9, 19.8, 19.6, 19.4, 19.22],
+});
+assert.equal(sectorMinersSig.sectorLeaders.length, 9);
+assert.equal(sectorMinersSig.goldBreadthPct, 0);
+assert.equal(sectorMinersSig.silverBreadthPct, 0);
+assert.ok(sectorMinersSig.goldSignal < -0.15 && sectorMinersSig.silverSignal < -0.15);
+assert.equal(sectorMinersSig.regime, 'Miners Lagging (Pressure)');
+
+const strikeCls = classifyHeadline({ title: 'First Majestic Silver Q3 output drops 41% on San Dimas labor strike' });
+assert.ok(strikeCls && strikeCls.driver === 'mining_supply' && strikeCls.silverImpact > 0);
+const aiscCls = classifyHeadline({ title: 'Newmont co-product AISC rises 25% YoY to $1,963/oz while free cash flow hits $1.9B' });
+assert.ok(aiscCls && aiscCls.driver === 'mining_supply' && aiscCls.goldImpact > 0);
+const rampCls = classifyHeadline({ title: 'Barrick Mining Loulo-Gounkoto ramps up 16% QoQ ahead of American Barrick IPO' });
+assert.ok(rampCls && rampCls.driver === 'mining_supply' && rampCls.goldImpact < 0);
+
+console.log('All 17 Bullion Pulse suites (Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');

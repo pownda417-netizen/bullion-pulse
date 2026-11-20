@@ -1195,6 +1195,64 @@ input[type="range"].silver-range::-webkit-slider-thumb {
   color: var(--down);
 }
 
+/* 9-Company Sector Bellwethers */
+.sector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sector-chip {
+  padding: 8px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sector-chip-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.sector-sym {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.sector-sym.gold { color: var(--gold-bright); }
+.sector-sym.silver { color: var(--silver); }
+
+.sector-pct {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sector-pct.up { color: var(--up); }
+.sector-pct.down { color: var(--down); }
+
+.sector-name {
+  font-size: 10px;
+  color: var(--text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sector-last {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* COMEX Paper vs Physical Cards */
 .comex-grid {
   display: grid;

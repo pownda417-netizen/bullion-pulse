@@ -310,7 +310,7 @@ const DRIVER_RULES = [
   {
     driver: 'geopolitics',
     bullish: [
-      /\b(war|airstrike|missile|invasion|escalat|conflict|hostilit|strike|retaliat)\b/i,
+      /\b(war|airstrike|missile|invasion|escalat|conflict|hostilit|(?<!labor\s)(?<!mine\s)(?<!union\s)(?<!workers\s)strike|retaliat)\b/i,
       /\b(middle east|ukraine|gaza|iran|taiwan|red sea)\b.*\b(tension|attack|crisis|clash|warning|fear)/i,
       /\b(sanction|tariff|trade war|embargo|geopolitical)\b/i,
       /\bsafe[- ]haven\b/i,
@@ -349,14 +349,14 @@ const DRIVER_RULES = [
   {
     driver: 'mining_supply',
     bullish: [
-      /\b(mine|mining|miner|smelter)\b.*\b(strike|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output)/i,
+      /\b(mine|mining|miner|smelter|san dimas|newmont|barrick|first majestic|pan american|hecla|agnico|wheaton)\b.*\b(strike|labor dispute|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output|aisc.*rise|aisc.*jump|cost.*rise)/i,
       /\b(silver|gold)\b.*\b(deficit|shortage|tight supply|vault drain|inventory drop|record demand|squeeze|sixth straight)/i,
       /\b(solar|photovoltaic|ev|electrification|charging|electronics|ai data center)\b.*\b(silver|demand|grow|surge|boom|rise)/i,
       /\bexport (ban|curb|restriction|licensing|control)\b.*\b(silver|gold|metal|mineral)/i,
       /\b(comex|lbma|shfe)\b.*\b(inventory|stock|vault)\b.*\b(drop|decline|drain|low|plummet)/i,
     ],
     bearish: [
-      /\b(mine|mining)\b.*\b(record output|production surge|supply glut|oversupply|reopen|restart)/i,
+      /\b(mine|mining|newmont|barrick|first majestic|pan american|hecla|loulo)\b.*\b(record output|production surge|ramps?[- ]?up|supply glut|oversupply|reopen|restart|lower.*cost|cut.*cost)/i,
       /\b(silver|gold)\b.*\b(surplus|oversupply|weak industrial demand|thrifting|substitution|narrow)/i,
     ],
   },
@@ -1125,6 +1125,11 @@ function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCou
   }
   if (proSignals?.realYields?.realYield10yPct != null) {
     extras.push(`10Y TIPS real yield sits at ${proSignals.realYields.realYield10yPct}% (${proSignals.realYields.realDelta5dBps >= 0 ? '+' : ''}${proSignals.realYields.realDelta5dBps} bps 5d).`);
+  }
+  if (proSignals?.miners?.goldBreadthPct != null && proSignals?.miners?.silverBreadthPct != null) {
+    extras.push(
+      `Producer breadth tracks ${proSignals.miners.goldBreadthPct}% positive among Gold majors (NEM/AEM/B/WPM/FNV) and ${proSignals.miners.silverBreadthPct}% among Silver peers (PAAS/HL/AG/CDE).`
+    );
   }
   if (ratio >= 86) {
     extras.push(`Gold/Silver ratio (${ratio.toFixed(1)}:1) sits elevated, historically favoring Silver catch-up.`);

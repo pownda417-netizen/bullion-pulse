@@ -744,11 +744,11 @@ export function buildSeededLearnedState() {
   ];
 
   const sampleDays = [
-    { from: '2026-11-12', to: '2026-11-13', regime: 'calm',   gBase: 3658.0,  gClose: 3679.2,  sBase: 43.90, sClose: 44.32, gPred: 0.35, sPred: 0.55 },
-    { from: '2026-11-13', to: '2026-11-16', regime: 'calm',   gBase: 3679.2,  gClose: 3694.5,  sBase: 44.32, sClose: 44.58, gPred: 0.40, sPred: 0.62 },
-    { from: '2026-11-16', to: '2026-11-17', regime: 'stress', gBase: 3694.5,  gClose: 3682.1,  sBase: 44.58, sClose: 44.21, gPred: 0.28, sPred: 0.45 },
-    { from: '2026-11-17', to: '2026-11-18', regime: 'stress', gBase: 3682.1,  gClose: 3715.75, sBase: 44.21, sClose: 44.68, gPred: 0.42, sPred: 0.68 },
-    { from: '2026-11-18', to: '2026-11-19', regime: 'stress', gBase: 3715.75, gClose: 3742.5,  sBase: 44.68, sClose: 45.28, gPred: 0.46, sPred: 0.78 },
+    { from: '2026-11-12', to: '2026-11-13', regime: 'calm',   gBase: 3765.40, gClose: 3738.20, sBase: 45.10, sClose: 44.62, gPred: -0.45, sPred: -0.68 },
+    { from: '2026-11-13', to: '2026-11-16', regime: 'calm',   gBase: 3738.20, gClose: 3704.60, sBase: 44.62, sClose: 44.08, gPred: -0.52, sPred: -0.74 },
+    { from: '2026-11-16', to: '2026-11-17', regime: 'stress', gBase: 3704.60, gClose: 3719.80, sBase: 44.08, sClose: 44.29, gPred: -0.30, sPred: -0.45 },
+    { from: '2026-11-17', to: '2026-11-18', regime: 'stress', gBase: 3719.80, gClose: 3626.21, sBase: 44.29, sClose: 42.84, gPred: -0.65, sPred: -0.95 },
+    { from: '2026-11-18', to: '2026-11-19', regime: 'stress', gBase: 3626.21, gClose: 3542.81, sBase: 42.84, sClose: 42.22, gPred: -0.78, sPred: -1.12 },
   ];
 
   for (const d of sampleDays) {
@@ -777,8 +777,8 @@ export function buildSeededLearnedState() {
     dayKey: '2026-11-19',
     recordedAt: '2026-11-19T22:10:00.000Z',
     regime: 'stress',
-    goldClose: 3742.5,
-    silverClose: 45.28,
+    goldClose: 3542.81,
+    silverClose: 42.22,
     pred1dGoldPct: 0.42,
     pred1dSilverPct: 0.72,
     halfCone1dGoldPct: 1.05,

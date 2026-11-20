@@ -199,10 +199,10 @@ async function fetchFromGoldApiCom() {
 
 function buildFallbackDemoQuotes() {
   // Used only when offline or blocked by network/firewall
-  const baseGold = state.quotes.gold.price ?? 3742.5;
-  const baseSilver = state.quotes.silver.price ?? 45.28;
-  const prevGold = state.quotes.gold.prevClose ?? 3715.75;
-  const prevSilver = state.quotes.silver.prevClose ?? 44.68;
+  const baseGold = state.quotes.gold.price ?? 3542.81;
+  const baseSilver = state.quotes.silver.price ?? 42.22;
+  const prevGold = state.quotes.gold.prevClose ?? 3626.21;
+  const prevSilver = state.quotes.silver.prevClose ?? 42.84;
 
   const goldPrice = +(baseGold + (Math.random() - 0.48) * 3.0).toFixed(2);
   const silverPrice = +(baseSilver + (Math.random() - 0.48) * 0.12).toFixed(2);
@@ -490,24 +490,40 @@ const CHART_TF_META = {
   '7d':  { label: '7D',  interval: '1h',  subtitle: 'Hourly OHLC · 7-Day range', fcHorizon: '7d',  fcLabel: '+7d',  maxBars: 36 },
   '1m':  { label: '1M',  interval: '1d',  subtitle: 'Daily OHLC · 1-Month',      fcHorizon: '1m',  fcLabel: '+1M',  maxBars: 28 },
   '6m':  { label: '6M',  interval: '3d',  subtitle: '3-Day OHLC · 6-Month',      fcHorizon: '6m',  fcLabel: '+6M',  maxBars: 36 },
-  '1y':  { label: '1Y',  interval: '1wk', subtitle: 'Weekly OHLC · 1-Year',      fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 40 },
-  '5y':  { label: '5Y',  interval: '1mo', subtitle: 'Monthly OHLC · 5-Year',     fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 44 },
-  '10y': { label: '10Y', interval: '2mo', subtitle: '2-Month OHLC · 10-Year',    fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 46 },
+  '1y':  { label: '1Y',  interval: '1wk', subtitle: 'Weekly OHLC · 1-Year',      fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 52 },
+  '5y':  { label: '5Y',  interval: '1mo', subtitle: 'Monthly OHLC · 5-Year',     fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 60 },
+  '10y': { label: '10Y', interval: '2mo', subtitle: '2-Month OHLC · 10-Year',    fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 48 },
   all:   { label: 'ALL', interval: '1yr', subtitle: 'Annual OHLC · 1975–2026',   fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 52 },
 };
 
 const CLIENT_HISTORICAL_ANCHORS = {
   gold: [
-    [1975, 161], [1980, 615], [1985, 317], [1990, 383], [1995, 384],
-    [2000, 279], [2005, 445], [2008, 872], [2011, 1572], [2015, 1160],
-    [2018, 1269], [2020, 1770], [2021, 1799], [2022, 1800], [2023, 1941],
-    [2024, 2386], [2025, 3180], [2026, 3742.5],
+    [1975, 161], [1980, 615, 850, 481], [1985, 317], [1990, 383], [1995, 384],
+    [2000, 279], [2005, 445], [2008, 872], [2011, 1572, 1921, 1319], [2015, 1160],
+    [2018, 1269], [2020, 1770, 2075, 1451], [2021, 1799], [2022, 1800], [2023, 1941],
+    [2024, 2624, 2790, 1984], [2025, 4289.5, 4381, 2620], [2026, 3542.81, 5589.38, 3518.73],
   ],
   silver: [
-    [1975, 4.42], [1980, 20.98], [1985, 6.14], [1990, 4.82], [1995, 5.19],
-    [2000, 4.95], [2005, 7.31], [2008, 14.99], [2011, 35.12], [2015, 15.68],
+    [1975, 4.42], [1980, 20.98, 49.45, 10.80], [1985, 6.14], [1990, 4.82], [1995, 5.19],
+    [2000, 4.95], [2005, 7.31], [2008, 14.99], [2011, 35.12, 49.51, 26.15], [2015, 15.68],
     [2018, 15.71], [2020, 20.55], [2021, 25.14], [2022, 21.73], [2023, 23.35],
-    [2024, 28.27], [2025, 36.80], [2026, 45.28],
+    [2024, 28.90, 34.86, 22.05], [2025, 64.73, 66.20, 28.80], [2026, 42.22, 121.62, 41.40],
+  ],
+};
+
+const CLIENT_MONTHLY_2526 = {
+  gold: [
+    [2025.00, 2624.0], [2025.25, 3120.0], [2025.50, 3380.0], [2025.75, 3665.2],
+    [2025.88, 4078.0], [2025.99, 4289.5], [2026.08, 5589.38], [2026.15, 4865.4],
+    [2026.25, 5278.3], [2026.55, 4005.9], [2026.70, 4452.3], [2026.78, 4156.0],
+    [2026.85, 3862.0], [2026.89, 3542.81],
+  ],
+  silver: [
+    [2025.00, 28.90], [2025.26, 29.58], [2025.50, 36.80], [2025.75, 44.50],
+    [2025.88, 51.36], [2025.92, 57.03], [2025.99, 64.73], [2026.04, 91.21],
+    [2026.08, 121.62], [2026.10, 113.95], [2026.16, 82.55], [2026.24, 67.00],
+    [2026.55, 58.41], [2026.62, 71.15], [2026.70, 66.61], [2026.78, 60.39],
+    [2026.85, 53.31], [2026.89, 42.22],
   ],
 };
 
@@ -515,8 +531,8 @@ function bucket5m(ts = Date.now()) {
   return Math.floor(ts / CANDLE_INTERVAL_MS) * CANDLE_INTERVAL_MS;
 }
 
-function seed5mCandlesIfEmpty(metal, spotPrice, prevClose) {
-  if (state.candles[metal].length >= 8) return;
+function seed5mCandlesIfEmpty(metal, spotPrice, prevClose, force = false) {
+  if (!force && state.candles[metal].length >= 8) return;
   const nowBucket = bucket5m(Date.now());
   const count = 28;
   const startPrice = prevClose || spotPrice;
@@ -547,17 +563,46 @@ function buildFallbackTimeframeBars(metal, tf, spot, prevClose) {
     return state.candles[metal];
   }
   const anchors = CLIENT_HISTORICAL_ANCHORS[metal];
+  const monthly = CLIENT_MONTHLY_2526[metal].map(([yf, val], idx, arr) => [
+    yf,
+    idx === arr.length - 1 ? spot : val,
+  ]);
+  const knots = [
+    ...anchors.filter(([yr]) => yr < 2025).map(([yr, cl]) => [yr, cl]),
+    ...monthly,
+  ];
   const isSilver = metal === 'silver';
   const nowMs = Date.now();
   const dayMs = 86400000;
+
+  if (tf === 'all') {
+    const bars = [];
+    for (let i = 0; i < anchors.length; i++) {
+      const [yr, rawC, expH, expL] = anchors[i];
+      const c = i === anchors.length - 1 ? spot : rawC;
+      const o = i === 0 ? +(c * 0.95).toFixed(2) : anchors[i - 1][1];
+      const wick = Math.max(Math.abs(c - o) * 0.35, c * (isSilver ? 0.13 : 0.075));
+      const h = +(expH ?? (Math.max(o, c) + wick));
+      const l = +Math.max(0.5, expL ?? (Math.min(o, c) - wick * 0.8));
+      bars.push({
+        t: i === anchors.length - 1 ? nowMs : Date.UTC(yr, 11, 15),
+        o: +o.toFixed(2),
+        h: +Math.max(o, c, h).toFixed(2),
+        l: +Math.max(0.5, Math.min(o, c, l)).toFixed(2),
+        c: +c.toFixed(2),
+      });
+    }
+    return bars;
+  }
+
+  const maxY = knots[knots.length - 1][0];
   const interp = (yr) => {
-    if (yr <= anchors[0][0]) return anchors[0][1];
-    if (yr >= anchors[anchors.length - 1][0]) return spot;
-    for (let i = 0; i < anchors.length - 1; i++) {
-      if (yr >= anchors[i][0] && yr <= anchors[i + 1][0]) {
-        const frac = (yr - anchors[i][0]) / (anchors[i + 1][0] - anchors[i][0]);
-        const v1 = i + 1 === anchors.length - 1 ? spot : anchors[i + 1][1];
-        return anchors[i][1] + (v1 - anchors[i][1]) * frac;
+    if (yr <= knots[0][0]) return knots[0][1];
+    if (yr >= maxY) return spot;
+    for (let i = 0; i < knots.length - 1; i++) {
+      if (yr >= knots[i][0] && yr <= knots[i + 1][0]) {
+        const span = knots[i + 1][0] - knots[i][0] || 1;
+        return knots[i][1] + (knots[i + 1][1] - knots[i][1]) * ((yr - knots[i][0]) / span);
       }
     }
     return spot;
@@ -566,25 +611,34 @@ function buildFallbackTimeframeBars(metal, tf, spot, prevClose) {
     '7d':  { count: 36, stepMs: 4 * 3600000, spanY: 7 / 365, vol: isSilver ? 0.011 : 0.0055 },
     '1m':  { count: 24, stepMs: 1.25 * dayMs, spanY: 30 / 365, vol: isSilver ? 0.02 : 0.011 },
     '6m':  { count: 36, stepMs: 5 * dayMs, spanY: 0.5, vol: isSilver ? 0.036 : 0.019 },
-    '1y':  { count: 40, stepMs: 9 * dayMs, spanY: 1, vol: isSilver ? 0.045 : 0.024 },
-    '5y':  { count: 44, stepMs: 41 * dayMs, spanY: 5, vol: isSilver ? 0.068 : 0.038 },
-    '10y': { count: 46, stepMs: 79 * dayMs, spanY: 10, vol: isSilver ? 0.085 : 0.048 },
-    all:   { count: 52, stepMs: 365 * dayMs, spanY: 51, vol: isSilver ? 0.12 : 0.07 },
+    '1y':  { count: 52, stepMs: 7 * dayMs, spanY: 1, vol: isSilver ? 0.042 : 0.022 },
+    '5y':  { count: 60, stepMs: 30.4 * dayMs, spanY: 5, vol: isSilver ? 0.062 : 0.034 },
+    '10y': { count: 48, stepMs: 76 * dayMs, spanY: 10, vol: isSilver ? 0.08 : 0.045 },
   };
   const cfg = cfgs[tf] || cfgs['1m'];
-  const nowY = 2026.0;
   const bars = [];
-  let cursor = interp(nowY - cfg.spanY);
+  let cursor = interp(maxY - cfg.spanY);
   for (let i = cfg.count - 1; i >= 0; i--) {
     const t = Math.round(nowMs - i * cfg.stepMs);
+    const fracPrev = (cfg.count - 2 - i) / Math.max(1, cfg.count - 1);
     const frac = (cfg.count - 1 - i) / Math.max(1, cfg.count - 1);
-    const target = interp(nowY - cfg.spanY * (1 - frac));
+    const yPrev = maxY - cfg.spanY * (1 - Math.max(0, fracPrev));
+    const yCurr = maxY - cfg.spanY * (1 - frac);
+    const target = interp(yCurr);
     const o = cursor;
-    const step = (target - o) * 0.55 + Math.sin(i * 1.2 + (isSilver ? 2 : 0)) * target * cfg.vol * 0.65;
+    const step = (target - o) * 0.68 + Math.sin(i * 1.2 + (isSilver ? 2 : 0)) * target * cfg.vol * 0.65;
     const c = i === 0 ? spot : Math.max(1, +(o + step).toFixed(2));
-    const wUp = Math.abs(Math.cos(i * 1.6)) * target * cfg.vol * 0.7;
-    const wDn = Math.abs(Math.sin(i * 2.0)) * target * cfg.vol * 0.7;
-    bars.push({ t, o: +o.toFixed(2), h: +(Math.max(o, c) + wUp).toFixed(2), l: +Math.max(0.5, Math.min(o, c) - wDn).toFixed(2), c });
+    const wUp = Math.abs(Math.cos(i * 1.6)) * target * cfg.vol * 0.65;
+    const wDn = Math.abs(Math.sin(i * 2.0)) * target * cfg.vol * 0.65;
+    let h = +(Math.max(o, c) + wUp).toFixed(2);
+    let l = +Math.max(0.5, Math.min(o, c) - wDn).toFixed(2);
+    for (const [ky, kv] of knots) {
+      if (ky >= Math.min(yPrev, yCurr) && ky <= Math.max(yPrev, yCurr)) {
+        if (kv > h) h = +kv.toFixed(2);
+        if (kv < l) l = +Math.max(0.5, kv).toFixed(2);
+      }
+    }
+    bars.push({ t, o: +o.toFixed(2), h, l, c });
     cursor = c;
   }
   return bars;
@@ -592,12 +646,21 @@ function buildFallbackTimeframeBars(metal, tf, spot, prevClose) {
 
 function getCandlesForTimeframe(metal, tf) {
   const quote = state.quotes[metal];
-  const spot = quote.price ?? (metal === 'gold' ? 3742.5 : 45.28);
-  const prevClose = quote.prevClose ?? (metal === 'gold' ? 3715.75 : 44.68);
+  const spot = quote.price ?? (metal === 'gold' ? 3542.81 : 42.22);
+  const prevClose = quote.prevClose ?? (metal === 'gold' ? 3626.21 : 42.84);
   const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
 
   if (tf === '1d') {
-    seed5mCandlesIfEmpty(metal, spot, prevClose);
+    const bars = state.candles[metal];
+    if (
+      bars.length >= 4 &&
+      quote.price != null &&
+      Math.abs(bars[bars.length - 1].c - quote.price) / quote.price > 0.03
+    ) {
+      seed5mCandlesIfEmpty(metal, spot, prevClose, true);
+    } else {
+      seed5mCandlesIfEmpty(metal, spot, prevClose);
+    }
     return state.candles[metal].slice(-meta.maxBars);
   }
   const loaded = state.timeframes?.[tf]?.[metal];
@@ -1238,51 +1301,71 @@ const FALLBACK_OUTLOOK = {
   generatedAt: new Date().toISOString(),
   confidence: 68,
   narrative:
-    'Anonymous pattern model blends global silver supply deficits, Shanghai SGE physical premiums, central bank accumulation, and macro indicators across 7 drivers.',
+    'Anonymous pattern model weighs December Fed rate-hike pressure and Q3 AISC mining cost inflation (Newmont \$1,963/oz, Barrick \$1,911/oz) against central bank buying, First Majestic San Dimas strike disruption, and tight COMEX/Shanghai physical availability.',
   macroSnapshot: { goldVolAnnPct: 22.6, silverVolAnnPct: 36.3 },
+  proSignals: {
+    miners: {
+      gdxVsGold10dPct: -1.8,
+      silVsSilver10dPct: -2.4,
+      goldBreadthPct: 20,
+      silverBreadthPct: 25,
+      regime: 'Miners Lagging (Pressure)',
+      sectorLeaders: [
+        { symbol: 'NEM', name: 'Newmont', metal: 'gold', last: 41.8, pct5d: -3.2 },
+        { symbol: 'AEM', name: 'Agnico Eagle', metal: 'gold', last: 158.24, pct5d: -2.2 },
+        { symbol: 'B', name: 'Barrick Mining', metal: 'gold', last: 18.9, pct5d: 0.6 },
+        { symbol: 'WPM', name: 'Wheaton Precious', metal: 'gold', last: 118.4, pct5d: -3.1 },
+        { symbol: 'FNV', name: 'Franco-Nevada', metal: 'gold', last: 237.37, pct5d: -4.0 },
+        { symbol: 'PAAS', name: 'Pan American', metal: 'silver', last: 32.39, pct5d: -3.8 },
+        { symbol: 'HL', name: 'Hecla Mining', metal: 'silver', last: 18.19, pct5d: -2.6 },
+        { symbol: 'AG', name: 'First Majestic', metal: 'silver', last: 11.32, pct5d: -5.0 },
+        { symbol: 'CDE', name: 'Coeur Mining', metal: 'silver', last: 19.22, pct5d: -2.1 },
+      ],
+    },
+  },
   drivers: [
-    { id: 'inflation', label: 'Inflation & Currency', shortLabel: 'Inflation', gold: 0.42, silver: 0.42, headlineCount: 1 },
-    { id: 'geopolitics', label: 'Wars & Geopolitics', shortLabel: 'Geopolitics', gold: 0.48, silver: 0.30, headlineCount: 1 },
-    { id: 'rates_usd', label: 'Fed Rates & US Dollar', shortLabel: 'Rates / USD', gold: 0.14, silver: 0.14, headlineCount: 1 },
-    { id: 'equities', label: 'Stock Markets & Risk', shortLabel: 'Equities', gold: 0.16, silver: -0.05, headlineCount: 0 },
-    { id: 'mining_supply', label: 'Mining & Industrial', shortLabel: 'Mining / Supply', gold: 0.25, silver: 0.64, headlineCount: 2 },
-    { id: 'central_banks', label: 'Central Banks & ETFs', shortLabel: 'Central Banks', gold: 0.54, silver: 0.32, headlineCount: 1 },
+    { id: 'inflation', label: 'Inflation & Currency', shortLabel: 'Inflation', gold: 0.38, silver: 0.36, headlineCount: 1 },
+    { id: 'geopolitics', label: 'Wars & Geopolitics', shortLabel: 'Geopolitics', gold: 0.42, silver: 0.25, headlineCount: 1 },
+    { id: 'rates_usd', label: 'Fed Rates & US Dollar', shortLabel: 'Rates / USD', gold: -0.34, silver: -0.36, headlineCount: 2 },
+    { id: 'equities', label: 'Stock Markets & Risk', shortLabel: 'Equities', gold: 0.12, silver: -0.08, headlineCount: 0 },
+    { id: 'mining_supply', label: 'Mining & Industrial', shortLabel: 'Mining / Supply', gold: 0.34, silver: 0.62, headlineCount: 3 },
+    { id: 'central_banks', label: 'Central Banks & ETFs', shortLabel: 'Central Banks', gold: 0.56, silver: 0.28, headlineCount: 1 },
     { id: 'shanghai_sge', label: 'Shanghai Physical (SGE)', shortLabel: 'Shanghai SGE', gold: 0.46, silver: 0.52, headlineCount: 1 },
-    { id: 'positioning_miners', label: 'COT Crowding & Miners', shortLabel: 'COT / Miners', gold: 0.24, silver: 0.42, headlineCount: 0 },
+    { id: 'positioning_miners', label: 'COT Crowding & Miners', shortLabel: 'COT / Miners', gold: -0.14, silver: -0.18, headlineCount: 1 },
     { id: 'comex_paper', label: 'COMEX Paper vs. Physical', shortLabel: 'COMEX Paper', gold: 0.42, silver: 0.48, headlineCount: 0 },
   ],
   headlines: [
     {
-      title: 'Silver Institute forecasts sixth straight annual global silver supply deficit (35 Moz in 2026)',
-      source: 'Silver Institute',
-      driverLabel: 'Mining / Supply',
-      sentiment: 'bullish',
-      url: '',
-    },
-    {
-      title: 'China refined silver export licensing & SHFE vault drawdowns keep Shanghai Ag(T+D) premiums elevated',
-      source: 'Asia Metals Desk',
-      driverLabel: 'Shanghai SGE',
-      sentiment: 'bullish',
-      url: '',
-    },
-    {
-      title: 'Non-solar EV & charging network silver demand grows 4.5% as global mine output dips 0.5%',
-      source: 'Mining Weekly',
-      driverLabel: 'Mining / Supply',
-      sentiment: 'bullish',
-      url: '',
-    },
-    {
-      title: 'World Bank flags solar copper-substitution risk during volatile silver pullback',
-      source: 'Commodity Desk',
-      driverLabel: 'Mining / Supply',
+      title: 'Gold slides near 14-month low as hawkish FOMC minutes push December Fed rate-hike odds to ~75–95%',
+      source: 'Google Finance / Markets',
+      driverLabel: 'Rates / USD',
       sentiment: 'bearish',
       url: '',
     },
     {
-      title: 'Central bank gold reserve buying stays near record pace across emerging markets',
-      source: 'Metals Wire',
+      title: 'First Majestic Q3 silver production falls to 3.4M oz after 12-day San Dimas Mexico labor strike; buyback renewed',
+      source: 'First Majestic Release',
+      driverLabel: 'Mining / Supply',
+      sentiment: 'bullish',
+      url: '',
+    },
+    {
+      title: 'Newmont (AISC \$1,963/oz) & Barrick (AISC \$1,911/oz) flag +24% YoY cost inflation; Barrick prepares American Barrick IPO',
+      source: 'Mining Sector / Google Finance',
+      driverLabel: 'Mining / Supply',
+      sentiment: 'bullish',
+      url: '',
+    },
+    {
+      title: 'Pan American Silver returns \$300M to shareholders as Hecla cuts AISC guidance; streamers WPM & FNV slip on delivery timing',
+      source: 'Yahoo Finance / Sector',
+      driverLabel: 'COT / Miners',
+      sentiment: 'neutral',
+      url: '',
+    },
+    {
+      title: 'Central banks accelerate gold accumulation while China silver export controls keep Shanghai Ag(T+D) physical premiums firm',
+      source: 'Goldman / Silver Institute',
       driverLabel: 'Central Banks',
       sentiment: 'bullish',
       url: '',
@@ -1526,8 +1609,8 @@ function signalFromScore(score) {
 
 function computeInteractiveOutlook() {
   const base = outlookState.data || FALLBACK_OUTLOOK;
-  const spotGold = state.quotes.gold.price || base.gold?.spot || 3742.5;
-  const spotSilver = state.quotes.silver.price || base.silver?.spot || 45.28;
+  const spotGold = state.quotes.gold.price || base.gold?.spot || 3542.81;
+  const spotSilver = state.quotes.silver.price || base.silver?.spot || 42.22;
 
   const drivers = (base.drivers || []).map((d) => ({ ...d }));
   const liveComex = comexState.data || base.comex || FALLBACK_COMEX;
@@ -1784,8 +1867,8 @@ function renderOutlook() {
       minEl.textContent = `${gRel >= 0 ? '+' : ''}${gRel ?? '—'}% / ${sRel >= 0 ? '+' : ''}${sRel ?? '—'}%`;
       minSub.textContent = mn.regime || '10d relative vs spot';
     } else {
-      minEl.textContent = '+2.4% / +3.8%';
-      minSub.textContent = 'Miners Leading (Confirmed)';
+      minEl.textContent = '-1.8% / -2.4%';
+      minSub.textContent = 'Miners Lagging (Pressure)';
     }
   }
 
@@ -1929,9 +2012,55 @@ function renderOutlook() {
       : '<li class="empty-state">No scored headlines yet — run the GitHub Actions Outlook workflow to populate live feeds.</li>';
   }
 
+  renderSectorLeaders(res);
   renderComexPanel();
   renderInstitutionalPulse(res);
   renderJumpDiffusion(res);
+}
+
+function renderSectorLeaders(outlookRes) {
+  const gridEl = document.getElementById('sector-leaders-grid');
+  if (!gridEl) return;
+  const miners = outlookRes?.base?.proSignals?.miners || FALLBACK_OUTLOOK.proSignals.miners;
+  const leaders =
+    Array.isArray(miners?.sectorLeaders) && miners.sectorLeaders.length
+      ? miners.sectorLeaders
+      : FALLBACK_OUTLOOK.proSignals.miners.sectorLeaders;
+
+  const badgeEl = document.getElementById('sector-regime-badge');
+  if (badgeEl) {
+    const reg = miners?.regime || 'In Line';
+    badgeEl.textContent = reg.includes('Leading') ? 'Leading' : reg.includes('Lag') ? 'Lagging' : 'In Line';
+    badgeEl.className = `signal-pill ${reg.includes('Leading') ? 'bullish' : reg.includes('Lag') ? 'bearish' : ''}`;
+  }
+
+  const subEl = document.getElementById('sector-subtitle');
+  if (subEl) {
+    const gBr = miners?.goldBreadthPct;
+    const sBr = miners?.silverBreadthPct;
+    subEl.textContent =
+      gBr != null && sBr != null
+        ? `5d breadth: Gold miners ${gBr}% up · Silver miners ${sBr}% up`
+        : '9 producers & streamers · Feeds miner confirmation';
+  }
+
+  gridEl.innerHTML = leaders
+    .map((c) => {
+      const p5 = Number(c.pct5d ?? c.pct1d ?? 0);
+      const cls = p5 > 0.05 ? 'up' : p5 < -0.05 ? 'down' : '';
+      const pctStr = `${p5 >= 0 ? '+' : '−'}${Math.abs(p5).toFixed(1)}%`;
+      const lastStr = Number.isFinite(c.last) ? `$${Number(c.last).toFixed(c.last >= 100 ? 0 : 2)}` : '$—';
+      return `
+        <article class="sector-chip">
+          <div class="sector-chip-top">
+            <span class="sector-sym ${c.metal}">${escapeHtml(c.symbol)}</span>
+            <span class="sector-pct ${cls}">${pctStr}</span>
+          </div>
+          <div class="sector-name">${escapeHtml(c.name)}</div>
+          <div class="sector-last">${lastStr} (5d)</div>
+        </article>`;
+    })
+    .join('');
 }
 
 /* ---------- Institutional Pulse (Event Calendar, ^GVZ, ETF Flows, Copper/JPY, Basis) ---------- */
@@ -2118,7 +2247,7 @@ const mcState = {
   metal: 'gold',
   horizon: '7d',
   seed: 20261119,
-  targetByMetal: { gold: 4000, silver: 50 },
+  targetByMetal: { gold: 3800, silver: 50 },
   cacheKey: '',
   lastSim: null,
   chartCache: {},

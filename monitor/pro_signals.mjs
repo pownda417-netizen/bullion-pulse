@@ -166,7 +166,28 @@ export async function fetchCftcCot() {
   return { gold, silver };
 }
 
-/* ---------- 3. Mining Equities Relative Strength (GDX & SIL) ---------- */
+/* ---------- 3. Mining Equities & 9-Company Sector Bellwether Basket ---------- */
+
+export const SECTOR_COMPANIES = [
+  { key: 'nem', symbol: 'NEM', name: 'Newmont', metal: 'gold' },
+  { key: 'aem', symbol: 'AEM', name: 'Agnico Eagle', metal: 'gold' },
+  { key: 'b', symbol: 'B', name: 'Barrick Mining', metal: 'gold' },
+  { key: 'wpm', symbol: 'WPM', name: 'Wheaton Precious', metal: 'gold' },
+  { key: 'fnv', symbol: 'FNV', name: 'Franco-Nevada', metal: 'gold' },
+  { key: 'paas', symbol: 'PAAS', name: 'Pan American', metal: 'silver' },
+  { key: 'hl', symbol: 'HL', name: 'Hecla Mining', metal: 'silver' },
+  { key: 'ag', symbol: 'AG', name: 'First Majestic', metal: 'silver' },
+  { key: 'cde', symbol: 'CDE', name: 'Coeur Mining', metal: 'silver' },
+];
+
+function pctReturnOver(closes = [], lookback = 5) {
+  if (!Array.isArray(closes) || closes.length < 2) return null;
+  const idx = Math.max(0, closes.length - 1 - lookback);
+  const start = closes[idx];
+  const end = closes[closes.length - 1];
+  if (!start || !end) return null;
+  return +(((end - start) / start) * 100).toFixed(2);
+}
 
 function relativeReturnPct(minerCloses = [], metalCloses = [], lookback = 10) {
   const n = Math.min(minerCloses.length, metalCloses.length);
@@ -187,26 +208,83 @@ function relativeReturnPct(minerCloses = [], metalCloses = [], lookback = 10) {
   };
 }
 
-export function computeMinersConfirmation({ gold = [], silver = [], gdx = [], sil = [] }) {
+export function computeMinersConfirmation(series = {}) {
+  const { gold = [], silver = [], gdx = [], sil = [] } = series;
   const gdxRel = relativeReturnPct(gdx, gold, 10);
   const silRel = relativeReturnPct(sil, silver, 10);
-  if (!gdxRel && !silRel) return null;
 
-  const goldSignal = gdxRel ? clamp(gdxRel.relStrengthPct / 8.5, -0.7, 0.7) : 0;
-  const silverSignal = silRel ? clamp(silRel.relStrengthPct / 10.5, -0.7, 0.7) : 0;
+  const sectorLeaders = [];
+  for (const co of SECTOR_COMPANIES) {
+    const arr = series[co.key];
+    if (!Array.isArray(arr) || arr.length < 2) continue;
+    const pct1d = pctReturnOver(arr, 1);
+    const pct5d = pctReturnOver(arr, 5);
+    sectorLeaders.push({
+      symbol: co.symbol,
+      name: co.name,
+      metal: co.metal,
+      last: +arr[arr.length - 1].toFixed(2),
+      pct1d: pct1d ?? 0,
+      pct5d: pct5d ?? 0,
+    });
+  }
+
+  if (!gdxRel && !silRel && sectorLeaders.length === 0) return null;
+
+  const metalGold5d = pctReturnOver(gold, 5) ?? 0;
+  const metalSilver5d = pctReturnOver(silver, 5) ?? 0;
+
+  const goldPeers = sectorLeaders.filter((c) => c.metal === 'gold');
+  const silverPeers = sectorLeaders.filter((c) => c.metal === 'silver');
+
+  const avg5d = (list) =>
+    list.length ? +(list.reduce((a, b) => a + b.pct5d, 0) / list.length).toFixed(2) : null;
+  const breadth = (list) =>
+    list.length ? Math.round((list.filter((c) => c.pct5d > 0).length / list.length) * 100) : null;
+
+  const goldPeers5d = avg5d(goldPeers);
+  const silverPeers5d = avg5d(silverPeers);
+  const goldBreadthPct = breadth(goldPeers);
+  const silverBreadthPct = breadth(silverPeers);
+
+  const gdxSig = gdxRel ? clamp(gdxRel.relStrengthPct / 8.5, -0.75, 0.75) : null;
+  const silSig = silRel ? clamp(silRel.relStrengthPct / 10.5, -0.75, 0.75) : null;
+
+  const goldPeerSig =
+    goldPeers5d != null
+      ? clamp((goldPeers5d - metalGold5d) / 9 + ((goldBreadthPct - 50) / 100) * 0.25, -0.7, 0.7)
+      : null;
+  const silverPeerSig =
+    silverPeers5d != null
+      ? clamp((silverPeers5d - metalSilver5d) / 11 + ((silverBreadthPct - 50) / 100) * 0.25, -0.7, 0.7)
+      : null;
+
+  const goldSignal =
+    gdxSig != null && goldPeerSig != null
+      ? gdxSig * 0.68 + goldPeerSig * 0.32
+      : gdxSig ?? goldPeerSig ?? 0;
+  const silverSignal =
+    silSig != null && silverPeerSig != null
+      ? silSig * 0.68 + silverPeerSig * 0.32
+      : silSig ?? silverPeerSig ?? 0;
 
   return {
     gdxLast: gdx.length ? +gdx[gdx.length - 1].toFixed(2) : null,
     silLast: sil.length ? +sil[sil.length - 1].toFixed(2) : null,
     gdxVsGold10dPct: gdxRel?.relStrengthPct ?? null,
     silVsSilver10dPct: silRel?.relStrengthPct ?? null,
-    goldSignal: +goldSignal.toFixed(3),
-    silverSignal: +silverSignal.toFixed(3),
+    goldPeers5dPct: goldPeers5d,
+    silverPeers5dPct: silverPeers5d,
+    goldBreadthPct,
+    silverBreadthPct,
+    sectorLeaders,
+    goldSignal: +clamp(goldSignal, -0.8, 0.8).toFixed(3),
+    silverSignal: +clamp(silverSignal, -0.8, 0.8).toFixed(3),
     regime:
       goldSignal > 0.15 || silverSignal > 0.15
         ? 'Miners Leading (Confirmed)'
         : goldSignal < -0.15 || silverSignal < -0.15
-          ? 'Miners Lagging (Divergence)'
+          ? 'Miners Lagging (Pressure)'
           : 'In Line with Spot',
   };
 }

@@ -210,19 +210,25 @@ assert.equal(agg[1].l, 8);
 assert.equal(agg[1].c, 9);
 
 const seededAll = buildSeededMultiTimeframeCandles({
-  goldSpot: 3742.5,
-  goldPrevClose: 3715.75,
-  silverSpot: 45.28,
-  silverPrevClose: 44.68,
+  goldSpot: 3542.81,
+  goldPrevClose: 3626.21,
+  silverSpot: 42.22,
+  silverPrevClose: 42.84,
 });
 for (const tf of ['1d', '7d', '1m', '6m', '1y', '5y', '10y', 'all']) {
   assert.ok(seededAll.timeframes[tf], `missing timeframe ${tf}`);
   assert.ok(seededAll.timeframes[tf].gold.length >= 20, `gold ${tf} too short`);
   assert.ok(seededAll.timeframes[tf].silver.length >= 20, `silver ${tf} too short`);
-  assert.equal(seededAll.timeframes[tf].gold.at(-1).c, 3742.5);
-  assert.equal(seededAll.timeframes[tf].silver.at(-1).c, 45.28);
+  assert.equal(seededAll.timeframes[tf].gold.at(-1).c, 3542.81);
+  assert.equal(seededAll.timeframes[tf].silver.at(-1).c, 42.22);
 }
 assert.ok(seededAll.timeframes.all.gold[0].c < 200, 'ALL gold should start in 1975 around $161');
+for (const tf of ['1y', '5y', '10y', 'all']) {
+  const sPeak = Math.max(...seededAll.timeframes[tf].silver.map((b) => b.h));
+  const gPeak = Math.max(...seededAll.timeframes[tf].gold.map((b) => b.h));
+  assert.ok(sPeak >= 120, `Silver ${tf} peak (${sPeak}) must preserve Jan 2026 $120+ spike`);
+  assert.ok(gPeak >= 5500, `Gold ${tf} peak (${gPeak}) must preserve Jan 2026 $5,500+ spike`);
+}
 
 // 13. Split candle payloads (lightweight 1D 5m refresh vs lazy-loaded 7D-ALL history)
 const { intraday1d, historical } = splitCandlePayloads(seededAll);

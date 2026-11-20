@@ -363,10 +363,10 @@ export function buildBaselineInstitutionalSignals(nowDate = new Date()) {
       regime: 'Copper Rally (Silver Tailwind)',
     },
     basis: computeBasisSignal({
-      spotGold: 3742.5,
-      futGold: 3748.2,
-      spotSilver: 45.28,
-      futSilver: 45.21,
+      spotGold: 3542.81,
+      futGold: 3548.50,
+      spotSilver: 42.22,
+      futSilver: 42.16,
     }),
   };
 }
