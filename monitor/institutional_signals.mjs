@@ -321,19 +321,26 @@ export function computeBasisSignal({ spotGold, futGold, spotSilver, futSilver } 
     // Normal ~0.25%-0.75% contango is neutral; wide contango (>1.1%) is slightly bearish/ample supply
     let signal = 0;
     let jumpBoost = 0;
+    let priceDiscoveryBoost = 0;
     let state = 'Normal Contango';
+    let curveSlope = 'Upward-Sloping (Contango)';
 
     if (basisUsd < 0) {
       signal = clamp(0.45 + Math.abs(basisPct) * 0.9, 0.45, 0.9);
       jumpBoost = 0.22;
+      priceDiscoveryBoost = clamp(0.08 + Math.abs(basisPct) * 0.22, 0.08, 0.28);
       state = 'Backwardation (Tight!)';
+      curveSlope = 'Downward-Sloping (Backwardation)';
     } else if (basisPct < (isSilver ? 0.22 : 0.18)) {
       signal = 0.28;
       jumpBoost = 0.08;
+      priceDiscoveryBoost = 0.025;
       state = 'Compressed EFP';
+      curveSlope = 'Flat / Compressed EFP';
     } else if (basisPct > 1.15) {
       signal = -0.22;
       state = 'Wide Contango';
+      curveSlope = 'Steep Contango';
     }
 
     return {
@@ -342,6 +349,8 @@ export function computeBasisSignal({ spotGold, futGold, spotSilver, futSilver } 
       basisUsd,
       basisPct,
       isBackwardation: basisUsd < 0,
+      curveSlope,
+      priceDiscoveryBoost: +priceDiscoveryBoost.toFixed(3),
       signal: +signal.toFixed(3),
       jumpBoost,
       state,

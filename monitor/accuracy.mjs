@@ -200,7 +200,9 @@ export function runWalkForwardBacktest({
       let macro = 0;
       if (dxy.length === n && i >= 5 && dxy[i - 5] > 0) {
         const dxy5d = ((dxy[i] - dxy[i - 5]) / dxy[i - 5]) * 100;
-        macro += clamp(-dxy5d / 2.2, -1, 1) * 0.65;
+        const dxy20d = i >= 20 && dxy[i - 20] > 0 ? ((dxy[i] - dxy[i - 20]) / dxy[i - 20]) * 100 : dxy5d;
+        const dxyBlend = clamp(-dxy5d / 2.2, -1, 1) * 0.58 + clamp(-dxy20d / 4.5, -1, 1) * 0.42;
+        macro += dxyBlend * 0.65;
       }
       if (tnx.length === n && i >= 5 && tnx[i - 5] > 0) {
         const tnx5d = ((tnx[i] - tnx[i - 5]) / tnx[i - 5]) * 100;

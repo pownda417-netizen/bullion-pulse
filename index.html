@@ -49,6 +49,14 @@
           </svg>
           <span>Outlook</span>
         </a>
+        <a href="#stack" class="nav-btn" data-view="stack" id="top-nav-stack">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2" />
+            <polyline points="2 17 12 22 22 17" />
+            <polyline points="2 12 12 17 22 12" />
+          </svg>
+          <span>Stack</span>
+        </a>
         <a href="#alerts" class="nav-btn" data-view="alerts" id="top-nav-alerts">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -66,6 +74,10 @@
       </nav>
 
       <div class="header-actions">
+        <button type="button" class="header-melt-btn" id="btn-header-melt" aria-label="Open My Bullion Stack" title="Total Stack Melt Value — click to open Stack">
+          <span class="header-melt-k">Melt</span>
+          <strong class="header-melt-v" id="header-melt-val">$0.00</strong>
+        </button>
         <button type="button" class="icon-btn" id="btn-refresh" aria-label="Refresh spot prices" title="Refresh spot prices">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
@@ -95,30 +107,6 @@
 
       <!-- VIEW 1: MARKETS -->
       <section class="view-panel active" id="view-markets" aria-label="Spot metal markets">
-        <!-- Cross-Market Live Macro Ticker Strip -->
-        <section class="macro-strip" id="macro-ticker-strip" aria-label="Live macro drivers">
-          <div class="macro-tile">
-            <span class="macro-k">DXY Dollar</span>
-            <strong class="macro-v" id="macro-dxy">—</strong>
-            <span class="macro-d" id="macro-dxy-chg">—</span>
-          </div>
-          <div class="macro-tile">
-            <span class="macro-k">10Y Yield</span>
-            <strong class="macro-v" id="macro-tnx">—</strong>
-            <span class="macro-d" id="macro-tnx-chg">—</span>
-          </div>
-          <div class="macro-tile">
-            <span class="macro-k">Copper (HG)</span>
-            <strong class="macro-v" id="macro-copper">—</strong>
-            <span class="macro-d" id="macro-copper-chg">—</span>
-          </div>
-          <div class="macro-tile">
-            <span class="macro-k">Platinum (XPT)</span>
-            <strong class="macro-v" id="macro-platinum">—</strong>
-            <span class="macro-d" id="macro-platinum-chg">—</span>
-          </div>
-        </section>
-
         <div class="toolbar-row">
           <span class="section-label">Spot USD Markets</span>
           <div class="segmented" role="group" aria-label="Weight unit">
@@ -184,6 +172,42 @@
             </div>
           </div>
         </article>
+
+        <!-- COMEX Gold & Silver Futures + Spot-to-Futures Backwardation Panel -->
+        <section class="panel" id="panel-futures" aria-label="COMEX Gold and Silver Futures and backwardation curve structure">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">COMEX Futures &amp; Curve Structure</h2>
+              <div class="panel-subtitle" id="futures-subtitle">GC=F &amp; SI=F vs. Spot · Backwardation lifts price discovery</div>
+            </div>
+            <span class="signal-pill" id="futures-status-badge">Curve Check</span>
+          </div>
+          <div class="futures-grid">
+            <article class="futures-card" id="futures-card-gold">
+              <div class="futures-top">
+                <span class="futures-sym gold">Gold Futures · GC=F</span>
+                <span class="futures-curve-pill" id="fut-gold-curve">Contango</span>
+              </div>
+              <div class="futures-price-row">
+                <strong class="futures-price" id="fut-gold-price">$—</strong>
+                <span class="futures-basis" id="fut-gold-basis">Basis —</span>
+              </div>
+              <div class="futures-foot" id="fut-gold-boost">Normal upward-sloping contango curve</div>
+            </article>
+
+            <article class="futures-card" id="futures-card-silver">
+              <div class="futures-top">
+                <span class="futures-sym silver">Silver Futures · SI=F</span>
+                <span class="futures-curve-pill" id="fut-silver-curve">Contango</span>
+              </div>
+              <div class="futures-price-row">
+                <strong class="futures-price" id="fut-silver-price">$—</strong>
+                <span class="futures-basis" id="fut-silver-basis">Basis —</span>
+              </div>
+              <div class="futures-foot" id="fut-silver-boost">Normal upward-sloping contango curve</div>
+            </article>
+          </div>
+        </section>
 
         <!-- Multi-Timeframe OHLC Candlestick & Prediction Fan Chart -->
         <section class="panel" id="panel-chart" aria-label="OHLC candlestick chart with prediction lines and timeframe selector">
@@ -303,58 +327,28 @@
           </div>
         </section>
 
-        <!-- 100% Private Local Physical Bullion Stack Tracker -->
-        <section class="panel" id="panel-stack" aria-label="Private physical gold and silver stack tracker">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">My Bullion Stack</h2>
-              <div class="panel-subtitle">Private valuation &amp; daily P&amp;L (oz · cost basis)</div>
-            </div>
-            <div class="stack-actions">
-              <button type="button" class="chip-toggle" id="btn-export-backup" title="Export Stack & Settings Backup JSON">Export</button>
-              <button type="button" class="chip-toggle" id="btn-import-backup" title="Import Stack & Settings Backup JSON">Import</button>
-              <input type="file" id="input-import-backup" accept="application/json" hidden />
-              <span class="signal-pill bullish">Stored Locally</span>
-            </div>
+        <!-- Cross-Market Live Macro Ticker Strip (Relocated Below Shanghai SGE) -->
+        <section class="macro-strip" id="macro-ticker-strip" aria-label="Live macro drivers">
+          <div class="macro-tile">
+            <span class="macro-k">DXY Dollar</span>
+            <strong class="macro-v" id="macro-dxy">—</strong>
+            <span class="macro-d" id="macro-dxy-chg">—</span>
           </div>
-
-          <div class="stack-inputs-grid">
-            <label class="stack-field">
-              <span>Gold Owned (troy oz)</span>
-              <input type="number" id="input-stack-gold-oz" class="text-input stack-input" min="0" step="0.01" placeholder="e.g. 2.5" />
-            </label>
-            <label class="stack-field">
-              <span>Gold Avg Cost ($/oz)</span>
-              <input type="number" id="input-stack-gold-cost" class="text-input stack-input" min="0" step="1" placeholder="e.g. 2450" />
-            </label>
-            <label class="stack-field">
-              <span>Silver Owned (troy oz)</span>
-              <input type="number" id="input-stack-silver-oz" class="text-input stack-input" min="0" step="0.1" placeholder="e.g. 150" />
-            </label>
-            <label class="stack-field">
-              <span>Silver Avg Cost ($/oz)</span>
-              <input type="number" id="input-stack-silver-cost" class="text-input stack-input" min="0" step="0.01" placeholder="e.g. 28.50" />
-            </label>
+          <div class="macro-tile">
+            <span class="macro-k">10Y Yield</span>
+            <strong class="macro-v" id="macro-tnx">—</strong>
+            <span class="macro-d" id="macro-tnx-chg">—</span>
           </div>
-
-          <div class="stack-readout-grid" id="stack-readout">
-            <div class="stack-stat">
-              <span class="stack-stat-k">Total Melt Value</span>
-              <strong class="stack-stat-v" id="stack-total-val">$0.00</strong>
-              <span class="stack-stat-s" id="stack-day-chg">Enter oz above to track live</span>
-            </div>
-            <div class="stack-stat">
-              <span class="stack-stat-k">Unrealized P&amp;L</span>
-              <strong class="stack-stat-v" id="stack-pnl-val">—</strong>
-              <span class="stack-stat-s" id="stack-pnl-pct">Cost basis vs spot</span>
-            </div>
-            <div class="stack-stat">
-              <span class="stack-stat-k">Allocation &amp; SGE Value</span>
-              <strong class="stack-stat-v" id="stack-split-val">—</strong>
-              <span class="stack-stat-s" id="stack-sge-val">Shanghai physical est.</span>
-            </div>
+          <div class="macro-tile">
+            <span class="macro-k">Copper (HG)</span>
+            <strong class="macro-v" id="macro-copper">—</strong>
+            <span class="macro-d" id="macro-copper-chg">—</span>
           </div>
-          <div class="stack-scenario-strip" id="stack-scenario-strip" hidden></div>
+          <div class="macro-tile">
+            <span class="macro-k">Platinum (XPT)</span>
+            <strong class="macro-v" id="macro-platinum">—</strong>
+            <span class="macro-d" id="macro-platinum-chg">—</span>
+          </div>
         </section>
       </section>
 
@@ -379,7 +373,12 @@
               <span class="metal-badge gold" style="width:30px;height:30px;font-size:11px;">XAU</span>
               <span class="signal-pill" id="outlook-gold-signal">Neutral</span>
             </div>
+            <div class="outlook-spot-sync">
+              <span id="outlook-gold-spot">Spot $—</span>
+              <span id="outlook-gold-fut">GC=F $—</span>
+            </div>
             <div>
+              <div class="forecast-target-k" id="outlook-gold-target-lbl">7-Day Base Target</div>
               <div class="forecast-base" id="outlook-gold-base">$—</div>
               <div class="forecast-drift" id="outlook-gold-drift">Base 0.0% · Score 0</div>
             </div>
@@ -398,7 +397,12 @@
               <span class="metal-badge silver" style="width:30px;height:30px;font-size:11px;">XAG</span>
               <span class="signal-pill" id="outlook-silver-signal">Neutral</span>
             </div>
+            <div class="outlook-spot-sync">
+              <span id="outlook-silver-spot">Spot $—</span>
+              <span id="outlook-silver-fut">SI=F $—</span>
+            </div>
             <div>
+              <div class="forecast-target-k" id="outlook-silver-target-lbl">7-Day Base Target</div>
               <div class="forecast-base" id="outlook-silver-base">$—</div>
               <div class="forecast-drift" id="outlook-silver-drift">Base 0.0% · Score 0</div>
             </div>
@@ -423,6 +427,47 @@
             </div>
           </div>
           <p class="outlook-summary" id="outlook-narrative">Loading macro and news synthesis…</p>
+        </section>
+
+        <!-- US Dollar Strength (DXY) & FX Cost Impact Panel -->
+        <section class="panel" id="panel-dollar-strength" aria-label="US Dollar Strength Index and bullion FX cost impact">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">US Dollar Strength (DXY) &amp; FX Cost Impact</h2>
+              <div class="panel-subtitle" id="dxy-panel-subtitle">ICE DXY geometric basket · Inverse bullion currency driver</div>
+            </div>
+            <span class="signal-pill" id="dxy-regime-badge">Balanced USD</span>
+          </div>
+          <div class="dxy-head-row">
+            <div>
+              <div class="dxy-index-val" id="dxy-index-val">—</div>
+              <div class="dxy-moves" id="dxy-moves-row">5d — · 20d — · vs 20d SMA —</div>
+            </div>
+            <div class="dxy-score-box">
+              <span class="dxy-score-k">USD Strength</span>
+              <strong class="dxy-score-v" id="dxy-score-val">50 / 100</strong>
+            </div>
+          </div>
+          <div class="dxy-meter-track">
+            <div class="dxy-meter-fill" id="dxy-meter-fill" style="width:50%"></div>
+          </div>
+          <div class="dxy-meter-labels">
+            <span>0 · Weak USD Tailwind</span>
+            <span>50 · Neutral</span>
+            <span>100 · Strong USD Headwind</span>
+          </div>
+          <div class="dxy-impact-grid">
+            <div class="dxy-impact-card">
+              <span class="dxy-impact-k" id="dxy-gold-impact-lbl">Gold 7D FX Cost Impact</span>
+              <strong class="dxy-impact-v" id="dxy-gold-impact">$0.00 / oz (0.00%)</strong>
+              <span class="dxy-impact-s" id="dxy-gold-corr">60d Au/DXY Corr —</span>
+            </div>
+            <div class="dxy-impact-card">
+              <span class="dxy-impact-k" id="dxy-silver-impact-lbl">Silver 7D FX Cost Impact</span>
+              <strong class="dxy-impact-v" id="dxy-silver-impact">$0.00 / oz (0.00%)</strong>
+              <span class="dxy-impact-s" id="dxy-silver-corr">60d Ag/DXY Corr —</span>
+            </div>
+          </div>
         </section>
 
         <!-- Institutional Pro Quant Signals (FRED TIPS, CFTC COT, Miners, Accuracy) -->
@@ -691,7 +736,94 @@
         </section>
       </section>
 
-      <!-- VIEW 3: ALERTS -->
+      <!-- VIEW 3: MY BULLION STACK (DEDICATED PRIVATE PORTFOLIO PAGE) -->
+      <section class="view-panel" id="view-stack" aria-label="My Bullion Stack physical holdings">
+        <div class="toolbar-row">
+          <span class="section-label">My Bullion Stack</span>
+          <span class="signal-pill bullish">100% Private · Local Only</span>
+        </div>
+
+        <!-- Physical Holdings & Melt Value -->
+        <section class="panel" id="panel-stack" aria-label="Private physical gold and silver stack tracker">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Physical Holdings &amp; Melt Value</h2>
+              <div class="panel-subtitle">Private valuation, daily P&amp;L &amp; probabilistic scenarios</div>
+            </div>
+            <div class="stack-actions">
+              <button type="button" class="chip-toggle" id="btn-export-backup" title="Export Stack & Settings Backup JSON">Export</button>
+              <button type="button" class="chip-toggle" id="btn-import-backup" title="Import Stack & Settings Backup JSON">Import</button>
+              <input type="file" id="input-import-backup" accept="application/json" hidden />
+            </div>
+          </div>
+
+          <div class="stack-inputs-grid">
+            <label class="stack-field">
+              <span>Gold Owned (troy oz)</span>
+              <input type="number" id="input-stack-gold-oz" class="text-input stack-input" min="0" step="0.01" placeholder="e.g. 2.5" />
+            </label>
+            <label class="stack-field">
+              <span>Gold Avg Cost ($/oz)</span>
+              <input type="number" id="input-stack-gold-cost" class="text-input stack-input" min="0" step="1" placeholder="e.g. 2450" />
+            </label>
+            <label class="stack-field">
+              <span>Silver Owned (troy oz)</span>
+              <input type="number" id="input-stack-silver-oz" class="text-input stack-input" min="0" step="0.1" placeholder="e.g. 150" />
+            </label>
+            <label class="stack-field">
+              <span>Silver Avg Cost ($/oz)</span>
+              <input type="number" id="input-stack-silver-cost" class="text-input stack-input" min="0" step="0.01" placeholder="e.g. 28.50" />
+            </label>
+          </div>
+
+          <div class="stack-readout-grid" id="stack-readout">
+            <div class="stack-stat">
+              <span class="stack-stat-k">Total Melt Value</span>
+              <strong class="stack-stat-v" id="stack-total-val">$0.00</strong>
+              <span class="stack-stat-s" id="stack-day-chg">Enter oz above to track live</span>
+            </div>
+            <div class="stack-stat">
+              <span class="stack-stat-k">Unrealized P&amp;L</span>
+              <strong class="stack-stat-v" id="stack-pnl-val">—</strong>
+              <span class="stack-stat-s" id="stack-pnl-pct">Cost basis vs spot</span>
+            </div>
+            <div class="stack-stat">
+              <span class="stack-stat-k">Allocation &amp; SGE Value</span>
+              <strong class="stack-stat-v" id="stack-split-val">—</strong>
+              <span class="stack-stat-s" id="stack-sge-val">Shanghai physical est.</span>
+            </div>
+          </div>
+          <div class="stack-scenario-strip" id="stack-scenario-strip" hidden></div>
+        </section>
+
+        <!-- Metal-by-Metal Breakdown -->
+        <section class="panel" id="panel-stack-breakdown" aria-label="Gold and Silver holdings breakdown">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Metal-by-Metal Breakdown</h2>
+              <div class="panel-subtitle">Weight (oz / g / kg), allocation share, daily P&amp;L &amp; Shanghai SGE value</div>
+            </div>
+          </div>
+          <div class="stack-breakdown-grid" id="stack-breakdown-grid">
+            <div class="empty-state">Enter your Gold or Silver ounces above to view metal-by-metal breakdown.</div>
+          </div>
+        </section>
+
+        <!-- FX Dollar Impact & Price Milestones -->
+        <section class="panel" id="panel-stack-scenarios" aria-label="FX Dollar Impact and Price Milestones">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">FX Dollar Impact &amp; Price Milestones</h2>
+              <div class="panel-subtitle">Live DXY currency impact, 2026 Historic Peak replay, Bull target &amp; Pullback stress</div>
+            </div>
+          </div>
+          <div class="stack-milestones-list" id="stack-milestones-list">
+            <div class="empty-state">Add holdings above to calculate DXY FX impact and price milestone valuations.</div>
+          </div>
+        </section>
+      </section>
+
+      <!-- VIEW 4: ALERTS -->
       <section class="view-panel" id="view-alerts" aria-label="Alert configuration">
         <div class="toolbar-row">
           <span class="section-label">Big Daily Move Rules</span>
@@ -886,6 +1018,14 @@ CATALYST_ALERTS=true</div>
           <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
         </svg>
         <span>Outlook</span>
+      </button>
+      <button type="button" class="nav-btn" data-view="stack" id="nav-stack">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+          <polyline points="2 17 12 22 22 17" />
+          <polyline points="2 12 12 17 22 12" />
+        </svg>
+        <span>Stack</span>
       </button>
       <button type="button" class="nav-btn" data-view="alerts" id="nav-alerts">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

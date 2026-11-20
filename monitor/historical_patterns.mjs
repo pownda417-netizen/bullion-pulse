@@ -727,8 +727,17 @@ export function computeQuantSignals(series = {}) {
   // Gold/Silver ratio mean-reversion (historical modern norm ~75-82)
   const ratioSignalSilver = clamp((ratio - 80) / 18, -0.7, 0.7);
 
-  // Cross-market macro shifts (5-day returns)
+  // Cross-market macro shifts (multi-timeframe DXY + 5-day rates/equities/metals)
+  const dxyLast = dxyCloses.length ? dxyCloses[dxyCloses.length - 1] : null;
   const dxy5dPct = pctChangeOver(dxyCloses, 5);
+  const dxy20dPct = pctChangeOver(dxyCloses, 20);
+  const dxySma20 = movingAverage(dxyCloses, 20);
+  const dxySma50 = movingAverage(dxyCloses, 50);
+  const dxyVsSma20Pct =
+    dxyLast != null && dxySma20 ? +(((dxyLast - dxySma20) / dxySma20) * 100).toFixed(2) : 0;
+  const dxyVsSma50Pct =
+    dxyLast != null && dxySma50 ? +(((dxyLast - dxySma50) / dxySma50) * 100).toFixed(2) : 0;
+
   const tnx5dPct = pctChangeOver(tnxCloses, 5);
   const spx5dPct = pctChangeOver(spxCloses, 5);
   const cuCloses = series.copper || [];
@@ -737,18 +746,47 @@ export function computeQuantSignals(series = {}) {
   const plat5dPct = pctChangeOver(platCloses, 5);
   const vixLast = vixCloses[vixCloses.length - 1] ?? 16.5;
 
-  // Weaker USD & falling yields are historically bullish for bullion
-  const ratesUsdMacro = clamp((-dxy5dPct / 2.2) * 0.6 + (-tnx5dPct / 6.0) * 0.4, -1, 1);
+  // Rolling correlations (up to 60 trading days)
+  const goldVsDxyCorr = pearsonCorrelation(dailyReturns(goldCloses.slice(-61)), dailyReturns(dxyCloses.slice(-61)));
+  const silverVsDxyCorr = pearsonCorrelation(dailyReturns(silverCloses.slice(-61)), dailyReturns(dxyCloses.slice(-61)));
+  const goldVsSpxCorr = pearsonCorrelation(dailyReturns(goldCloses.slice(-61)), dailyReturns(spxCloses.slice(-61)));
+
+  // Multi-timeframe US Dollar Strength Score (0 = Very Weak USD Tailwind, 50 = Balanced, 100 = Strong USD Headwind)
+  const dxyLevelTerm = dxyLast != null ? clamp((dxyLast - 101) / 8, -1, 1) : 0;
+  const dxyTrendTerm = clamp(
+    (dxy5dPct / 2.2) * 0.42 +
+      (dxy20dPct / 4.2) * 0.33 +
+      (dxyVsSma20Pct / 2.5) * 0.15 +
+      (dxyVsSma50Pct / 4.0) * 0.10,
+    -1,
+    1
+  );
+  const dxyComposite = clamp(dxyLevelTerm * 0.38 + dxyTrendTerm * 0.62, -1, 1);
+  const dxyStrengthScore = Math.round(clamp(50 + dxyComposite * 50, 0, 100));
+  const dxyRegime =
+    dxyStrengthScore >= 72
+      ? 'Strong USD Headwind'
+      : dxyStrengthScore >= 58
+        ? 'Firm USD'
+        : dxyStrengthScore <= 28
+          ? 'Weak USD Tailwind'
+          : dxyStrengthScore <= 42
+            ? 'Soft USD'
+            : 'Balanced USD';
+
+  // Scale ratesUsdMacro dynamically by rolling DXY sensitivity + multi-timeframe DXY trend
+  const dxySensitivity =
+    goldVsDxyCorr != null && Number.isFinite(goldVsDxyCorr)
+      ? clamp(0.75 + Math.max(0, -goldVsDxyCorr) * 0.65, 0.75, 1.3)
+      : 1.0;
+  const dxyMacroTerm = clamp(-(dxy5dPct / 2.2) * 0.58 - (dxy20dPct / 4.5) * 0.42, -1, 1);
+  const ratesUsdMacro = clamp(dxyMacroTerm * 0.62 * dxySensitivity + (-tnx5dPct / 6.0) * 0.38, -1, 1);
 
   // Equity stress: moderate-to-high VIX + equity drawdown boosts Gold safe-haven demand
   const equityStressGold = clamp((-spx5dPct / 4.5) * 0.6 + ((vixLast - 17) / 16) * 0.4, -0.8, 0.9);
   // Silver reacts positively to moderate risk-on growth, negatively to acute crashes (VIX > 28)
   const equityStressSilver =
     vixLast > 28 ? clamp(-((vixLast - 25) / 20), -0.8, 0) : clamp((spx5dPct / 5.0) * 0.4, -0.5, 0.5);
-
-  // Rolling correlations (up to 60 trading days)
-  const goldVsDxyCorr = pearsonCorrelation(dailyReturns(goldCloses.slice(-61)), dailyReturns(dxyCloses.slice(-61)));
-  const goldVsSpxCorr = pearsonCorrelation(dailyReturns(goldCloses.slice(-61)), dailyReturns(spxCloses.slice(-61)));
 
   return {
     goldDailyVol,
@@ -762,9 +800,26 @@ export function computeQuantSignals(series = {}) {
     ratesUsdMacro: +ratesUsdMacro.toFixed(3),
     equityStressGold: +equityStressGold.toFixed(3),
     equityStressSilver: +equityStressSilver.toFixed(3),
-    macroSnapshot: {
-      dxy: dxyCloses.length ? +dxyCloses[dxyCloses.length - 1].toFixed(2) : null,
+    dollarStrength: {
+      dxy: dxyLast != null ? +dxyLast.toFixed(2) : null,
       dxy5dPct: +dxy5dPct.toFixed(2),
+      dxy20dPct: +dxy20dPct.toFixed(2),
+      dxyVsSma20Pct,
+      dxyVsSma50Pct,
+      score: dxyStrengthScore,
+      regime: dxyRegime,
+      unitBias: +(-dxyComposite).toFixed(3),
+      goldVsDxyCorr,
+      silverVsDxyCorr,
+    },
+    macroSnapshot: {
+      dxy: dxyLast != null ? +dxyLast.toFixed(2) : null,
+      dxy5dPct: +dxy5dPct.toFixed(2),
+      dxy20dPct: +dxy20dPct.toFixed(2),
+      dxyVsSma20Pct,
+      dxyVsSma50Pct,
+      dxyStrengthScore,
+      dxyRegime,
       spx: spxCloses.length ? +spxCloses[spxCloses.length - 1].toFixed(1) : null,
       spx5dPct: +spx5dPct.toFixed(2),
       tnx: tnxCloses.length ? +tnxCloses[tnxCloses.length - 1].toFixed(2) : null,
@@ -779,6 +834,7 @@ export function computeQuantSignals(series = {}) {
       goldVolAnnPct: +(goldDailyVol * Math.sqrt(252) * 100).toFixed(1),
       silverVolAnnPct: +(silverDailyVol * Math.sqrt(252) * 100).toFixed(1),
       goldVsDxyCorr,
+      silverVsDxyCorr,
       goldVsSpxCorr,
     },
   };
@@ -1121,8 +1177,10 @@ export function buildOutlook({
       g = clamp(posMinersGold, -1, 1);
       s = clamp(posMinersSilver, -1, 1);
     } else if (id === 'comex_paper') {
-      const combG = blendOpt(comexGoldSig, basis?.gold?.signal ?? null, 0.72);
-      const combS = blendOpt(comexSilverSig, basis?.silver?.signal ?? null, 0.70);
+      const wComexG = basis?.gold?.isBackwardation ? 0.56 : 0.72;
+      const wComexS = basis?.silver?.isBackwardation ? 0.54 : 0.70;
+      const combG = blendOpt(comexGoldSig, basis?.gold?.signal ?? null, wComexG);
+      const combS = blendOpt(comexSilverSig, basis?.silver?.signal ?? null, wComexS);
       if (comexGoldSig != null || basis?.gold?.signal != null) {
         g = clamp(b.count > 0 ? g * 0.3 + combG * 0.7 : combG, -1, 1);
       }
@@ -1185,10 +1243,26 @@ export function buildOutlook({
       ? learnedWeights.coneMultiplier
       : coneMultiplier;
 
-  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver)
-  const goldUnit = clamp(goldDriverComposite * 1.48 * 0.78 + quant.goldTrend * 0.22 + driftNudgeGold, -1, 1);
+  // Direct Spot-to-Futures Backwardation price-discovery lift (Futures < Spot = downward-sloping curve)
+  const backwBoostGold =
+    basis?.gold?.priceDiscoveryBoost ??
+    (basis?.gold?.isBackwardation || (basis?.gold?.basisUsd ?? 1) < 0 ? 0.12 : 0);
+  const backwBoostSilver =
+    basis?.silver?.priceDiscoveryBoost ??
+    (basis?.silver?.isBackwardation || (basis?.silver?.basisUsd ?? 1) < 0 ? 0.14 : 0);
+
+  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation price-discovery lift
+  const goldUnit = clamp(
+    goldDriverComposite * 1.48 * 0.78 + quant.goldTrend * 0.22 + driftNudgeGold + backwBoostGold,
+    -1,
+    1
+  );
   const silverUnit = clamp(
-    silverDriverComposite * 1.48 * 0.75 + quant.silverTrend * 0.15 + quant.ratioSignalSilver * 0.10 + driftNudgeSilver,
+    silverDriverComposite * 1.48 * 0.75 +
+      quant.silverTrend * 0.15 +
+      quant.ratioSignalSilver * 0.10 +
+      driftNudgeSilver +
+      backwBoostSilver,
     -1,
     1
   );
@@ -1203,6 +1277,54 @@ export function buildOutlook({
       ? clamp(impliedVol.blendedGoldDailyVol / quant.goldDailyVol, 0.82, 1.32)
       : 1.0;
   const effectiveSilverDailyVol = quant.silverDailyVol * ivRatio;
+
+  // US Dollar Strength (DXY) FX Cost Impact attribution across 7D (5 trading days) & 30D (21 trading days)
+  const dsBase = quant.dollarStrength || {
+    dxy: quant.macroSnapshot.dxy ?? 103.7,
+    dxy5dPct: quant.macroSnapshot.dxy5dPct ?? 0,
+    dxy20dPct: quant.macroSnapshot.dxy20dPct ?? 0,
+    dxyVsSma20Pct: quant.macroSnapshot.dxyVsSma20Pct ?? 0,
+    dxyVsSma50Pct: quant.macroSnapshot.dxyVsSma50Pct ?? 0,
+    score: 50,
+    regime: 'Balanced USD',
+    unitBias: 0,
+    goldVsDxyCorr: quant.macroSnapshot.goldVsDxyCorr ?? null,
+    silverVsDxyCorr: quant.macroSnapshot.silverVsDxyCorr ?? null,
+  };
+  const dxyRatesShift = (scenarioIds.includes('hawkish_usd') ? -0.42 : 0) + (scenarioIds.includes('fed_rate_cut') ? 0.42 : 0);
+  const effDxyScore = Math.round(clamp(dsBase.score - dxyRatesShift * 45, 0, 100));
+  const effDxyRegime =
+    effDxyScore >= 72
+      ? 'Strong USD Headwind'
+      : effDxyScore >= 58
+        ? 'Firm USD'
+        : effDxyScore <= 28
+          ? 'Weak USD Tailwind'
+          : effDxyScore <= 42
+            ? 'Soft USD'
+            : 'Balanced USD';
+  const dxyUnitEffect = clamp((50 - effDxyScore) / 50, -1, 1); // negative when USD strong, positive when USD weak
+  const wRatesG = regimeWeightSet?.gold?.rates_usd ?? DRIVER_META.rates_usd.goldWeight;
+  const wRatesS = regimeWeightSet?.silver?.rates_usd ?? DRIVER_META.rates_usd.silverWeight;
+  const corrScaleG = clamp(0.65 + Math.max(0, -(dsBase.goldVsDxyCorr ?? -0.45)) * 0.7, 0.65, 1.25);
+  const corrScaleS = clamp(0.65 + Math.max(0, -(dsBase.silverVsDxyCorr ?? -0.40)) * 0.7, 0.65, 1.25);
+  const fxImpactFor = (days) => {
+    const gPct = dxyUnitEffect * wRatesG * 0.62 * corrScaleG * effectiveGoldDailyVol * Math.sqrt(days) * 0.72 * 100;
+    const sPct = dxyUnitEffect * wRatesS * 0.62 * corrScaleS * effectiveSilverDailyVol * Math.sqrt(days) * 0.72 * 100;
+    return {
+      goldPct: +gPct.toFixed(2),
+      goldUsdOz: +((spotGold * gPct) / 100).toFixed(2),
+      silverPct: +sPct.toFixed(2),
+      silverUsdOz: +((spotSilver * sPct) / 100).toFixed(2),
+    };
+  };
+  const dollarStrength = {
+    ...dsBase,
+    score: effDxyScore,
+    regime: effDxyRegime,
+    impact7d: fxImpactFor(5),
+    impact30d: fxImpactFor(21),
+  };
 
   // Confidence reflects evidence breadth + agreement across drivers (capped at 86% to stay honest)
   const activeVals = Object.values(drivers).map((d) => d.gold).filter((v) => Math.abs(v) >= 0.1);
@@ -1251,6 +1373,7 @@ export function buildOutlook({
     comex,
     institutionalSignals: inst,
     marketRegime,
+    dollarStrength,
   });
 
   // Run Merton Jump-Diffusion Monte Carlo simulations (with COMEX + Event Calendar + GVZ + Basis + Carry + self-calibrated tail multipliers)
@@ -1376,6 +1499,7 @@ export function buildOutlook({
       jumpDiffusion30d: silverMc30d,
     },
     marketRegime,
+    dollarStrength,
     drivers: Object.values(drivers),
     macroSnapshot: quant.macroSnapshot,
     goldSilverRatio: quant.ratio,
@@ -1390,7 +1514,7 @@ export function buildOutlook({
   };
 }
 
-function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCount, proSignals, comex, institutionalSignals, marketRegime }) {
+function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCount, proSignals, comex, institutionalSignals, marketRegime, dollarStrength }) {
   const gLabel = signalLabelFromScore(goldScore).toLowerCase();
   const sLabel = signalLabelFromScore(silverScore).toLowerCase();
   const lead = topDrivers
@@ -1408,6 +1532,12 @@ function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCou
       `Regime decomposition: Gold ${marketRegime.gold.label} (${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver ${marketRegime.silver.label} (${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S).`
     );
   }
+  if (dollarStrength?.dxy != null) {
+    const gFx = dollarStrength.impact7d?.goldUsdOz ?? 0;
+    extras.push(
+      `US Dollar Index (DXY ${dollarStrength.dxy.toFixed(2)}, strength ${dollarStrength.score}/100 · ${dollarStrength.regime}) implies ${gFx >= 0 ? '+' : '−'}$${Math.abs(gFx).toFixed(2)}/oz 7d FX cost impact on Gold.`
+    );
+  }
   if (comex?.gold?.paperToRegisteredRatio && comex?.silver?.paperToRegisteredRatio) {
     extras.push(
       `COMEX paper claims stand at ${comex.gold.paperToRegisteredRatio}:1 for Gold (${comex.gold.openInterestContracts.toLocaleString('en-US')} GC) and ${comex.silver.paperToRegisteredRatio}:1 for Silver (${comex.silver.openInterestContracts.toLocaleString('en-US')} SI) vs. registered vaults.`
@@ -1420,8 +1550,11 @@ function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCou
   if (institutionalSignals?.impliedVol?.gvz != null) {
     extras.push(`Options ^GVZ implied vol is ${institutionalSignals.impliedVol.gvz}% (${institutionalSignals.impliedVol.regime}).`);
   }
-  if (institutionalSignals?.basis?.silver?.basisUsd < 0) {
-    extras.push(`COMEX Silver futures sit in backwardation (${institutionalSignals.basis.silver.basisUsd.toFixed(2)}/oz vs spot), signaling immediate physical tightness.`);
+  if (institutionalSignals?.basis?.gold?.isBackwardation || (institutionalSignals?.basis?.gold?.basisUsd ?? 1) < 0) {
+    extras.push(`COMEX Gold futures sit in downward-sloping backwardation (${institutionalSignals.basis.gold.basisUsd.toFixed(2)}/oz vs spot), lifting upside price discovery.`);
+  }
+  if (institutionalSignals?.basis?.silver?.isBackwardation || (institutionalSignals?.basis?.silver?.basisUsd ?? 1) < 0) {
+    extras.push(`COMEX Silver futures sit in downward-sloping backwardation (${institutionalSignals.basis.silver.basisUsd.toFixed(2)}/oz vs spot), signaling immediate physical tightness and lifting upside price discovery.`);
   }
   if (proSignals?.realYields?.realYield10yPct != null) {
     extras.push(`10Y TIPS real yield sits at ${proSignals.realYields.realYield10yPct}% (${proSignals.realYields.realDelta5dBps >= 0 ? '+' : ''}${proSignals.realYields.realDelta5dBps} bps 5d).`);

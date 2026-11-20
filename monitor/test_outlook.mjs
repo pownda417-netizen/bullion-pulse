@@ -632,10 +632,74 @@ const btSkill = runWalkForwardBacktest({
 assert.ok(btSkill.gold && Number.isFinite(btSkill.gold.pinballSkillPct));
 assert.ok(btSkill.silver && Number.isFinite(btSkill.silver.pinballSkillPct));
 
-// 19. Short Squeeze vs. True Price Discovery Classifier (Discovery, Squeeze, Hybrid, Bias, Neutral & buildOutlook)
-const backwBasis = computeBasisSignal({ spotGold: 3600, futGold: 3622, spotSilver: 44.0, futSilver: 43.4 });
-assert.equal(backwBasis.gold.isBackwardation, false, 'Contango gold futures must set isBackwardation=false');
-assert.equal(backwBasis.silver.isBackwardation, true, 'Downward-sloping silver futures must set isBackwardation=true');
+// 19. US Dollar Strength (DXY) Multi-Timeframe Score, silverVsDxyCorr & 7D/30D FX Cost Impact
+const strongDxySeries = Array.from({ length: 45 }, (_, i) => 100.5 + i * 0.18 + Math.sin(i / 2.2) * 0.22);
+const weakDxySeries = Array.from({ length: 45 }, (_, i) => 104.5 - i * 0.20 + Math.sin(i / 2.2) * 0.22);
+const invGoldFromStrongDxy = strongDxySeries.map((d) => 3650 - (d - 100) * 18);
+const invSilverFromStrongDxy = strongDxySeries.map((d) => 43 - (d - 100) * 0.32);
+
+const qStrongDxy = computeQuantSignals({
+  gold: invGoldFromStrongDxy,
+  silver: invSilverFromStrongDxy,
+  dxy: strongDxySeries,
+});
+assert.ok(qStrongDxy.dollarStrength && qStrongDxy.dollarStrength.score >= 70, `Strong rising DXY must score >=70, got ${qStrongDxy.dollarStrength?.score}`);
+assert.ok(qStrongDxy.dollarStrength.regime.includes('USD'), 'Must classify USD regime');
+assert.ok(qStrongDxy.macroSnapshot.silverVsDxyCorr != null && qStrongDxy.macroSnapshot.silverVsDxyCorr < -0.5, 'Must compute inverse 60d silverVsDxyCorr');
+assert.ok(qStrongDxy.macroSnapshot.dxy20dPct > 0 && qStrongDxy.macroSnapshot.dxyVsSma20Pct > 0);
+
+const oStrongDxy = buildOutlook({
+  spotGold: 3530,
+  spotSilver: 41.2,
+  series: { gold: invGoldFromStrongDxy, silver: invSilverFromStrongDxy, dxy: strongDxySeries },
+});
+const oWeakDxy = buildOutlook({
+  spotGold: 3530,
+  spotSilver: 41.2,
+  series: {
+    gold: weakDxySeries.map((d) => 3500 + (107 - d) * 18),
+    silver: weakDxySeries.map((d) => 40 + (107 - d) * 0.32),
+    dxy: weakDxySeries,
+  },
+});
+assert.ok(oStrongDxy.dollarStrength?.impact7d?.goldUsdOz < 0, 'Strong USD must create negative Gold FX cost impact');
+assert.ok(oStrongDxy.dollarStrength?.impact30d?.goldUsdOz < oStrongDxy.dollarStrength?.impact7d?.goldUsdOz, '30D FX drag magnitude must exceed 7D');
+assert.ok(oWeakDxy.dollarStrength?.score <= 30 && oWeakDxy.dollarStrength?.impact7d?.goldUsdOz > 0, 'Weak USD must create positive Gold FX tailwind');
+assert.ok(oStrongDxy.narrative.includes('US Dollar Index (DXY'), 'buildNarrative must include DXY strength synthesis');
+
+// 20. Futures & Spot-to-Futures Backwardation Price-Discovery Lift
+const backwBasis = computeBasisSignal({ spotGold: 3600, futGold: 3578, spotSilver: 44.0, futSilver: 43.35 });
+const contangoBasis = computeBasisSignal({ spotGold: 3600, futGold: 3628, spotSilver: 44.0, futSilver: 44.32 });
+assert.equal(backwBasis.gold.isBackwardation, true);
+assert.equal(backwBasis.silver.isBackwardation, true);
+assert.equal(backwBasis.gold.curveSlope, 'Downward-Sloping (Backwardation)');
+assert.equal(backwBasis.silver.curveSlope, 'Downward-Sloping (Backwardation)');
+assert.ok(backwBasis.gold.priceDiscoveryBoost > 0 && backwBasis.silver.priceDiscoveryBoost > 0);
+assert.equal(contangoBasis.gold.isBackwardation, false);
+assert.equal(contangoBasis.gold.priceDiscoveryBoost, 0);
+
+const oBackw = buildOutlook({
+  spotGold: 3600,
+  spotSilver: 44.0,
+  comex: buildBaselineComexSnapshot(),
+  institutionalSignals: { ...buildBaselineInstitutionalSignals(), basis: backwBasis },
+});
+const oContango = buildOutlook({
+  spotGold: 3600,
+  spotSilver: 44.0,
+  comex: buildBaselineComexSnapshot(),
+  institutionalSignals: { ...buildBaselineInstitutionalSignals(), basis: contangoBasis },
+});
+assert.ok(oBackw.gold.score > oContango.gold.score, `Gold backwardation score (${oBackw.gold.score}) must exceed contango (${oContango.gold.score})`);
+assert.ok(oBackw.silver.score > oContango.silver.score, `Silver backwardation score (${oBackw.silver.score}) must exceed contango (${oContango.silver.score})`);
+assert.ok(oBackw.gold.horizon30d.base > oContango.gold.horizon30d.base, 'Gold backwardation 30d base target must exceed contango');
+assert.ok(oBackw.silver.horizon30d.base > oContango.silver.horizon30d.base, 'Silver backwardation 30d base target must exceed contango');
+assert.ok(oBackw.narrative.includes('downward-sloping backwardation'), 'Narrative must mention downward-sloping backwardation');
+
+// 21. Short Squeeze vs. True Price Discovery Classifier (Discovery, Squeeze, Hybrid, Bias, Neutral & buildOutlook)
+const mixedBasis = computeBasisSignal({ spotGold: 3600, futGold: 3622, spotSilver: 44.0, futSilver: 43.4 });
+assert.equal(mixedBasis.gold.isBackwardation, false, 'Contango gold futures must set isBackwardation=false');
+assert.equal(mixedBasis.silver.isBackwardation, true, 'Downward-sloping silver futures must set isBackwardation=true');
 
 // 19a. True Price Discovery (structural repricing without acute squeeze catalysts)
 const discRegime = computeMarketRegimeDecomposition({
@@ -772,4 +836,4 @@ assert.ok(regimeOutlook.marketRegime?.gold && regimeOutlook.marketRegime?.silver
 assert.ok(regimeOutlook.gold.regime && regimeOutlook.silver.regime, 'buildOutlook must attach per-metal regime');
 assert.ok(regimeOutlook.narrative.includes('Regime decomposition:'), 'buildNarrative must include regime decomposition');
 
-console.log('All 19 Bullion Pulse suites (Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');
+console.log('All 21 Bullion Pulse suites (Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');

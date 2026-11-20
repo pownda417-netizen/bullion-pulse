@@ -258,12 +258,16 @@ async function maybeEnhanceWithGemini(outlook, apiKey) {
       .slice(0, 6)
       .map((c) => `${c.symbol} ${c.pct1d >= 0 ? '+' : ''}${c.pct1d}%`)
       .join(', ');
+    const ds = outlook.dollarStrength;
+    const bs = outlook.institutionalSignals?.basis;
     const prompt =
       `You are a disciplined precious-metals desk strategist. Respond strictly as JSON with keys:\n` +
       `{"narrative":"3 concise bullets (<75 words total, plain English, no hype or guarantees)","surpriseBiasGold":number(-0.25 to +0.25),"surpriseBiasSilver":number(-0.25 to +0.25),"catalystUrgency":number(0 to 1)}\n` +
       `Base surpriseBias only on macro/headline surprises NOT yet priced into trailing closes (0 if balanced).\n\n` +
       `Gold Spot $${outlook.gold.spot}: ${outlook.gold.signal} (score ${outlook.gold.score}/100, 7d base $${outlook.gold.horizon7d.base}, 30d base $${outlook.gold.horizon30d.base})\n` +
       `Silver Spot $${outlook.silver.spot}: ${outlook.silver.signal} (score ${outlook.silver.score}/100, 7d base $${outlook.silver.horizon7d.base}, 30d base $${outlook.silver.horizon30d.base}, Au/Ag ratio ${outlook.goldSilverRatio}:1)\n` +
+      `US Dollar Strength (DXY): ${ds?.dxy ?? '—'} (Score ${ds?.score ?? '—'}/100 · ${ds?.regime || 'Balanced'}, 7d Au FX impact ${ds?.impact7d?.goldUsdOz >= 0 ? '+' : ''}$${ds?.impact7d?.goldUsdOz ?? 0}/oz)\n` +
+      `COMEX Futures Curve: GC basis ${bs?.gold?.basisUsd ?? '—'} (${bs?.gold?.curveSlope || bs?.gold?.state || 'Contango'}) · SI basis ${bs?.silver?.basisUsd ?? '—'} (${bs?.silver?.curveSlope || bs?.silver?.state || 'Contango'})\n` +
       `COMEX Paper vs Registered: GC ${cGold?.paperToRegisteredRatio ?? '—'}:1 · SI ${cSil?.paperToRegisteredRatio ?? '—'}:1\n` +
       `Shanghai SGE Au99.99 premium: ${sge?.premiumUsdOz >= 0 ? '+' : ''}$${sge?.premiumUsdOz ?? '—'}/oz · 10Y TIPS real yield: ${ry?.realYield10yPct ?? '—'}% (${ry?.realDelta5dBps ?? 0} bps 5d)\n` +
       `Miners (${miners?.regime || 'Neutral'} · Au ${miners?.goldBreadthPct ?? '—'}% / Ag ${miners?.silverBreadthPct ?? '—'}% 5d breadth): ${topMiners || 'N/A'}\n` +

@@ -1671,7 +1671,13 @@
     "goldVolAnnPct": 26.6,
     "silverVolAnnPct": 41.6,
     "goldVsDxyCorr": -0.36,
-    "goldVsSpxCorr": 0.41
+    "goldVsSpxCorr": 0.41,
+    "dxy20dPct": 0.53,
+    "dxyVsSma20Pct": 0.23,
+    "dxyVsSma50Pct": 0.36,
+    "dxyStrengthScore": 60,
+    "dxyRegime": "Firm USD",
+    "silverVsDxyCorr": -0.32
   },
   "goldSilverRatio": 86.02,
   "shanghai": {
@@ -2112,20 +2118,24 @@
         "futures": 3528.8,
         "basisUsd": 0,
         "basisPct": 0,
+        "isBackwardation": false,
+        "curveSlope": "Flat / Compressed EFP",
+        "priceDiscoveryBoost": 0.025,
         "signal": 0.28,
         "jumpBoost": 0.08,
-        "state": "Compressed EFP",
-        "isBackwardation": false
+        "state": "Compressed EFP"
       },
       "silver": {
         "spot": 41.03,
         "futures": 41.03,
         "basisUsd": 0,
         "basisPct": 0,
+        "isBackwardation": false,
+        "curveSlope": "Flat / Compressed EFP",
+        "priceDiscoveryBoost": 0.025,
         "signal": 0.28,
         "jumpBoost": 0.08,
-        "state": "Compressed EFP",
-        "isBackwardation": false
+        "state": "Compressed EFP"
       }
     }
   },
@@ -2691,6 +2701,30 @@
         "cotPts": 24,
         "volPts": 18
       }
+    }
+  },
+  "dollarStrength": {
+    "dxy": 103.75,
+    "dxy5dPct": 0.33,
+    "dxy20dPct": 0.53,
+    "dxyVsSma20Pct": 0.23,
+    "dxyVsSma50Pct": 0.36,
+    "score": 60,
+    "regime": "Firm USD",
+    "unitBias": -0.2,
+    "goldVsDxyCorr": -0.36,
+    "silverVsDxyCorr": -0.32,
+    "impact7d": {
+      "goldPct": -0.06,
+      "goldUsdOz": -2.02,
+      "silverPct": -0.06,
+      "silverUsdOz": -0.03
+    },
+    "impact30d": {
+      "goldPct": -0.12,
+      "goldUsdOz": -4.15,
+      "silverPct": -0.13,
+      "silverUsdOz": -0.05
     }
   }
 }

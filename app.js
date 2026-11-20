@@ -96,7 +96,15 @@ const state = {
   },
   liveMacro: {
     platinum: null,
+    dxy: null,
+    dxySource: '',
     consensusNote: '',
+  },
+  futures: {
+    gold: null,
+    silver: null,
+    liveFetched: false,
+    source: '',
   },
   history: {
     gold: [],
@@ -326,6 +334,92 @@ async function fetchLivePlatinumPrice() {
     }
   } catch {
     // Keep outlook macroSnapshot platinum
+  }
+}
+
+/** Exact ICE US Dollar Index (DXY) geometric basket formula from USD-per-unit-inverse FX rates (currency per 1 USD) */
+function computeIceDxyFromRates(rates) {
+  if (!rates) return null;
+  const eur = Number(rates.EUR);
+  const jpy = Number(rates.JPY);
+  const gbp = Number(rates.GBP);
+  const cad = Number(rates.CAD);
+  const sek = Number(rates.SEK);
+  const chf = Number(rates.CHF);
+  if (![eur, jpy, gbp, cad, sek, chf].every((v) => Number.isFinite(v) && v > 0)) return null;
+  const dxy =
+    50.14348112 *
+    Math.pow(eur, 0.576) *
+    Math.pow(jpy, 0.136) *
+    Math.pow(gbp, 0.119) *
+    Math.pow(cad, 0.091) *
+    Math.pow(sek, 0.042) *
+    Math.pow(chf, 0.036);
+  return Number.isFinite(dxy) && dxy > 60 && dxy < 160 ? +dxy.toFixed(2) : null;
+}
+
+async function fetchLiveDxyIndex() {
+  const tryEndpoint = async (url, label) => {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 4500);
+    try {
+      const res = await fetch(url, { ...ANON_FETCH_OPTS, signal: ctrl.signal });
+      if (!res.ok) return null;
+      const json = await res.json();
+      const val = computeIceDxyFromRates(json?.rates);
+      return val != null ? { val, label } : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(tid);
+    }
+  };
+
+  const hit =
+    (await tryEndpoint('https://open.er-api.com/v6/latest/USD', 'Live ICE DXY')) ||
+    (await tryEndpoint(
+      'https://api.frankfurter.app/latest?from=USD&to=EUR,JPY,GBP,CAD,SEK,CHF',
+      'Live ICE DXY'
+    ));
+
+  if (hit) {
+    state.liveMacro.dxy = hit.val;
+    state.liveMacro.dxySource = hit.label;
+    renderMacroStrip();
+    renderOutlook();
+    renderStackTracker();
+    renderChart();
+  }
+}
+
+async function fetchLiveFuturesQuotes() {
+  const fetchYahooLast = async (symbol) => {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=5m&range=1d`;
+      const res = await fetch(url, { ...ANON_FETCH_OPTS, signal: ctrl.signal });
+      if (!res.ok) return null;
+      const json = await res.json();
+      const meta = json?.chart?.result?.[0]?.meta;
+      const price = Number(meta?.regularMarketPrice);
+      return Number.isFinite(price) && price > 0 ? price : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(tid);
+    }
+  };
+
+  const [gc, si] = await Promise.all([fetchYahooLast('GC=F'), fetchYahooLast('SI=F')]);
+  if (gc != null || si != null) {
+    if (gc != null) state.futures.gold = gc;
+    if (si != null) state.futures.silver = si;
+    state.futures.liveFetched = true;
+    state.futures.source = 'Live COMEX GC=F / SI=F';
+    renderFuturesPanel();
+    renderOutlook();
+    renderChart();
   }
 }
 
@@ -2432,7 +2526,9 @@ async function fetchOutlookData() {
     outlookState.data = FALLBACK_OUTLOOK;
   }
   renderMacroStrip();
+  renderFuturesPanel();
   renderOutlook();
+  renderStackTracker();
   renderChart();
 }
 
@@ -2598,6 +2694,145 @@ function computeMarketRegimeClient({
   };
 }
 
+function computeClientFuturesBasis(spotGold, spotSilver, base) {
+  const baseBasis = base?.institutionalSignals?.basis || null;
+  const candlesGold = state.candles?.gold;
+  const candlesSilver = state.candles?.silver;
+  const lastCandleGold = candlesGold?.length ? candlesGold[candlesGold.length - 1].c : null;
+  const lastCandleSilver = candlesSilver?.length ? candlesSilver[candlesSilver.length - 1].c : null;
+
+  const calc = (spot, liveFut, snapBasis, fallbackCandle, isSilver) => {
+    const s = Number(spot);
+    const fut = Number.isFinite(liveFut) && liveFut > 0
+      ? liveFut
+      : Number.isFinite(snapBasis?.futures) && snapBasis.futures > 0
+        ? snapBasis.futures
+        : Number.isFinite(fallbackCandle) && fallbackCandle > 0
+          ? fallbackCandle
+          : s;
+    if (!Number.isFinite(s) || s <= 0 || !Number.isFinite(fut) || fut <= 0) return null;
+    const basisUsd = +(fut - s).toFixed(2);
+    const basisPct = +((basisUsd / s) * 100).toFixed(3);
+    const isBackwardation = basisUsd < 0;
+    let signal = 0;
+    let jumpBoost = 0;
+    let priceDiscoveryBoost = 0;
+    let curveState = 'Normal Contango';
+    let curveSlope = 'Upward-Sloping (Contango)';
+
+    if (isBackwardation) {
+      signal = clampNum(0.45 + Math.abs(basisPct) * 0.9, 0.45, 0.9);
+      jumpBoost = 0.22;
+      priceDiscoveryBoost = clampNum(0.08 + Math.abs(basisPct) * 0.22, 0.08, 0.28);
+      curveState = 'Backwardation (Tight!)';
+      curveSlope = 'Downward-Sloping (Backwardation)';
+    } else if (basisPct < (isSilver ? 0.22 : 0.18)) {
+      signal = 0.28;
+      jumpBoost = 0.08;
+      priceDiscoveryBoost = 0.025;
+      curveState = 'Compressed EFP';
+      curveSlope = 'Flat / Compressed EFP';
+    } else if (basisPct > 1.15) {
+      signal = -0.22;
+      curveState = 'Wide Contango';
+      curveSlope = 'Steep Contango';
+    }
+
+    return {
+      spot: +s.toFixed(2),
+      futures: +fut.toFixed(2),
+      basisUsd,
+      basisPct,
+      isBackwardation,
+      curveSlope,
+      priceDiscoveryBoost: +priceDiscoveryBoost.toFixed(3),
+      signal: +signal.toFixed(3),
+      jumpBoost,
+      state: curveState,
+      live: Number.isFinite(liveFut) && liveFut > 0,
+    };
+  };
+
+  return {
+    gold: calc(spotGold, state.futures.gold, baseBasis?.gold, lastCandleGold, false),
+    silver: calc(spotSilver, state.futures.silver, baseBasis?.silver, lastCandleSilver, true),
+    source: state.futures.liveFetched ? state.futures.source : 'COMEX Futures Snapshot',
+  };
+}
+
+function computeClientDollarStrength(base, spotGold, spotSilver, gDailyVol, sDailyVol, learnedW) {
+  const snap = base?.macroSnapshot || {};
+  const ds = base?.dollarStrength || {};
+  const snapDxy = ds.dxy ?? snap.dxy ?? 103.71;
+  const liveDxy = state.liveMacro.dxy;
+  const dxy = liveDxy != null ? liveDxy : snapDxy;
+  const liveDeltaPct = liveDxy != null && snapDxy > 0 ? ((liveDxy - snapDxy) / snapDxy) * 100 : 0;
+
+  const dxy5dPct = +((ds.dxy5dPct ?? snap.dxy5dPct ?? 0) + liveDeltaPct).toFixed(2);
+  const dxy20dPct = +((ds.dxy20dPct ?? snap.dxy20dPct ?? dxy5dPct * 1.4) + liveDeltaPct).toFixed(2);
+  const dxyVsSma20Pct = +((ds.dxyVsSma20Pct ?? snap.dxyVsSma20Pct ?? dxy5dPct * 0.5) + liveDeltaPct).toFixed(2);
+
+  let baseScore = ds.score ?? snap.dxyStrengthScore;
+  if (!Number.isFinite(baseScore)) {
+    const lvl = clampNum((dxy - 101) / 8, -1, 1);
+    const tr = clampNum((dxy5dPct / 2.2) * 0.45 + (dxy20dPct / 4.2) * 0.35 + (dxyVsSma20Pct / 2.5) * 0.2, -1, 1);
+    baseScore = Math.round(clampNum(50 + (lvl * 0.38 + tr * 0.62) * 50, 0, 100));
+  } else if (liveDeltaPct !== 0) {
+    baseScore = Math.round(clampNum(baseScore + liveDeltaPct * 12, 0, 100));
+  }
+
+  let scenarioShift = 0;
+  if (outlookState.activeScenarios.has('hawkish_usd')) scenarioShift += 19;
+  if (outlookState.activeScenarios.has('fed_rate_cut')) scenarioShift -= 19;
+  const score = Math.round(clampNum(baseScore + scenarioShift, 0, 100));
+
+  const regime =
+    score >= 72
+      ? 'Strong USD Headwind'
+      : score >= 58
+        ? 'Firm USD'
+        : score <= 28
+          ? 'Weak USD Tailwind'
+          : score <= 42
+            ? 'Soft USD'
+            : 'Balanced USD';
+
+  const goldVsDxyCorr = ds.goldVsDxyCorr ?? snap.goldVsDxyCorr ?? -0.45;
+  const silverVsDxyCorr = ds.silverVsDxyCorr ?? snap.silverVsDxyCorr ?? -0.40;
+  const dxyUnitEffect = clampNum((50 - score) / 50, -1, 1);
+  const wRatesG = learnedW?.gold?.rates_usd ?? DRIVER_WEIGHTS.rates_usd?.gold ?? 0.19;
+  const wRatesS = learnedW?.silver?.rates_usd ?? DRIVER_WEIGHTS.rates_usd?.silver ?? 0.14;
+  const corrScaleG = clampNum(0.65 + Math.max(0, -(goldVsDxyCorr ?? -0.45)) * 0.7, 0.65, 1.25);
+  const corrScaleS = clampNum(0.65 + Math.max(0, -(silverVsDxyCorr ?? -0.40)) * 0.7, 0.65, 1.25);
+
+  const calcImpact = (days) => {
+    const gPct = dxyUnitEffect * wRatesG * 0.62 * corrScaleG * gDailyVol * Math.sqrt(days) * 0.72 * 100;
+    const sPct = dxyUnitEffect * wRatesS * 0.62 * corrScaleS * sDailyVol * Math.sqrt(days) * 0.72 * 100;
+    return {
+      goldPct: +gPct.toFixed(2),
+      goldUsdOz: +((spotGold * gPct) / 100).toFixed(2),
+      silverPct: +sPct.toFixed(2),
+      silverUsdOz: +((spotSilver * sPct) / 100).toFixed(2),
+    };
+  };
+
+  return {
+    dxy: +Number(dxy).toFixed(2),
+    live: liveDxy != null,
+    source: liveDxy != null ? state.liveMacro.dxySource || 'Live ICE DXY' : 'DXY Snapshot',
+    dxy5dPct,
+    dxy20dPct,
+    dxyVsSma20Pct,
+    score,
+    regime,
+    goldVsDxyCorr,
+    silverVsDxyCorr,
+    liveDeltaPct: +liveDeltaPct.toFixed(2),
+    impact7d: calcImpact(5),
+    impact30d: calcImpact(21),
+  };
+}
+
 function computeInteractiveOutlook() {
   const base = outlookState.data || FALLBACK_OUTLOOK;
   const spotGold = state.quotes.gold.price || base.gold?.spot || 3542.81;
@@ -2605,6 +2840,8 @@ function computeInteractiveOutlook() {
 
   const drivers = (base.drivers || []).map((d) => ({ ...d }));
   const liveComex = comexState.data || base.comex || FALLBACK_COMEX;
+  const futures = computeClientFuturesBasis(spotGold, spotSilver, base);
+
   let comexRow = drivers.find((d) => d.id === 'comex_paper');
   if (!comexRow) {
     comexRow = {
@@ -2616,9 +2853,29 @@ function computeInteractiveOutlook() {
       headlineCount: 0,
     };
     drivers.push(comexRow);
-  } else if (comexState.data) {
+  } else if (comexState.data && comexState.data !== base?.comex) {
     comexRow.gold = liveComex.gold.signal;
     comexRow.silver = liveComex.silver.signal;
+  }
+
+  // Blend live futures backwardation into comex_paper driver when active
+  if (comexRow && futures.gold?.isBackwardation) {
+    comexRow.gold = +clampNum(comexRow.gold * 0.56 + futures.gold.signal * 0.44, -1, 1).toFixed(3);
+  }
+  if (comexRow && futures.silver?.isBackwardation) {
+    comexRow.silver = +clampNum(comexRow.silver * 0.54 + futures.silver.signal * 0.46, -1, 1).toFixed(3);
+  }
+
+  // Apply live ICE DXY delta into rates_usd driver when live FX moves vs snapshot
+  const snapDxy = base?.dollarStrength?.dxy ?? base?.macroSnapshot?.dxy ?? null;
+  if (state.liveMacro.dxy != null && snapDxy > 0) {
+    const dxyLivePct = ((state.liveMacro.dxy - snapDxy) / snapDxy) * 100;
+    const ratesRow = drivers.find((d) => d.id === 'rates_usd');
+    if (ratesRow && Math.abs(dxyLivePct) >= 0.05) {
+      const nudge = clampNum(-dxyLivePct / 2.2, -0.35, 0.35);
+      ratesRow.gold = +clampNum(ratesRow.gold + nudge, -1, 1).toFixed(3);
+      ratesRow.silver = +clampNum(ratesRow.silver + nudge, -1, 1).toFixed(3);
+    }
   }
 
   for (const sid of outlookState.activeScenarios) {
@@ -2644,8 +2901,11 @@ function computeInteractiveOutlook() {
 
   const driftG = clampNum((base.selfLearning?.driftBiasGoldPct || 0) * 0.14, -0.06, 0.06);
   const driftS = clampNum((base.selfLearning?.driftBiasSilverPct || 0) * 0.14, -0.06, 0.06);
-  const gUnit = clampNum(gComp * 1.45 + driftG, -1, 1);
-  const sUnit = clampNum(sComp * 1.45 + driftS, -1, 1);
+  const backwBoostGold = futures.gold?.priceDiscoveryBoost || 0;
+  const backwBoostSilver = futures.silver?.priceDiscoveryBoost || 0;
+
+  const gUnit = clampNum(gComp * 1.45 + driftG + backwBoostGold, -1, 1);
+  const sUnit = clampNum(sComp * 1.45 + driftS + backwBoostSilver, -1, 1);
   const gScore = Math.round(gUnit * 100);
   const sScore = Math.round(sUnit * 100);
 
@@ -2653,6 +2913,15 @@ function computeInteractiveOutlook() {
   const sDailyVol = ((base.macroSnapshot?.silverVolAnnPct || 29.5) / 100) / Math.sqrt(252);
   const days = outlookState.horizon === '30d' ? 21 : 5;
   const coneMult = base.selfLearning?.coneMultiplier || base.coneMultiplier || 1.0;
+
+  const dollarStrength = computeClientDollarStrength(
+    base,
+    spotGold,
+    spotSilver,
+    gDailyVol,
+    sDailyVol,
+    learnedW
+  );
 
   const project = (spot, vol, unit) => {
     const sig = vol * Math.sqrt(days);
@@ -2696,19 +2965,42 @@ function computeInteractiveOutlook() {
     .map((id) => OUTLOOK_SCENARIOS.find((s) => s.id === id)?.label)
     .filter(Boolean);
 
+  const liveBasisChanged =
+    Boolean(futures.gold?.isBackwardation) !== Boolean(base?.institutionalSignals?.basis?.gold?.isBackwardation) ||
+    Boolean(futures.silver?.isBackwardation) !== Boolean(base?.institutionalSignals?.basis?.silver?.isBackwardation);
+
+  const regimeBase = liveBasisChanged
+    ? {
+        ...base,
+        institutionalSignals: {
+          ...(base?.institutionalSignals || {}),
+          basis: { gold: futures.gold, silver: futures.silver },
+        },
+      }
+    : base;
+
   const marketRegime = computeMarketRegimeClient({
-    base,
+    base: regimeBase,
     drivers,
     liveComex,
     gUnit,
     sUnit,
     hasInteractiveOverrides:
-      outlookState.activeScenarios.size > 0 || !!(comexState.data && comexState.data !== base?.comex),
+      outlookState.activeScenarios.size > 0 ||
+      liveBasisChanged ||
+      !!(comexState.data && comexState.data !== base?.comex),
   });
 
+  const liveGLabel = signalFromScore(gScore).label.toLowerCase();
+  const liveSLabel = signalFromScore(sScore).label.toLowerCase();
+  const syncedBaseNarrative = (base.narrative || '').replace(
+    /Anonymous model signals a [a-z ]+ tilt for Gold and [a-z ]+ tilt for Silver/i,
+    `Anonymous model signals a ${liveGLabel} tilt for Gold and ${liveSLabel} tilt for Silver`
+  );
+
   const narrative = activeNames.length
-    ? `Simulated shock active (${activeNames.join(' + ')}): historical cross-market weights shift Gold to ${signalFromScore(gScore).label.toLowerCase()} (${gScore >= 0 ? '+' : ''}${gScore}, ${marketRegime.gold.label} ${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver to ${signalFromScore(sScore).label.toLowerCase()} (${sScore >= 0 ? '+' : ''}${sScore}, ${marketRegime.silver.label} ${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S) over the ${outlookState.horizon} window.`
-    : base.narrative;
+    ? `Simulated shock active (${activeNames.join(' + ')}): historical cross-market weights shift Gold to ${liveGLabel} (${gScore >= 0 ? '+' : ''}${gScore}, ${marketRegime.gold.label} ${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver to ${liveSLabel} (${sScore >= 0 ? '+' : ''}${sScore}, ${marketRegime.silver.label} ${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S) over the ${outlookState.horizon} window.`
+    : syncedBaseNarrative;
 
   return {
     base,
@@ -2716,6 +3008,8 @@ function computeInteractiveOutlook() {
     analogs,
     narrative,
     days,
+    futures,
+    dollarStrength,
     marketRegime,
     gold: {
       spot: spotGold,
@@ -2738,6 +3032,142 @@ function computeInteractiveOutlook() {
   };
 }
 
+function renderFuturesPanel(outlookRes = null) {
+  if (!document.getElementById('panel-futures')) return;
+  const res = outlookRes || computeInteractiveOutlook();
+  const fut = res.futures;
+  if (!fut) return;
+
+  const isG = state.settings.unit === 'g';
+  const uLbl = isG ? 'g' : 'oz';
+
+  const renderCard = (metal, data) => {
+    if (!data) return;
+    const card = document.getElementById(`futures-card-${metal}`);
+    const priceEl = document.getElementById(`fut-${metal}-price`);
+    const basisEl = document.getElementById(`fut-${metal}-basis`);
+    const curveEl = document.getElementById(`fut-${metal}-curve`);
+    const boostEl = document.getElementById(`fut-${metal}-boost`);
+
+    const dispFut = convertUnit(data.futures);
+    const dispBasis = convertUnit(data.basisUsd);
+    const dec = dispFut >= 500 ? 2 : 2;
+    if (priceEl) priceEl.textContent = formatMoney(dispFut, dec);
+    if (basisEl) {
+      const sign = dispBasis > 0 ? '+' : dispBasis < 0 ? '−' : '';
+      const pctSign = data.basisPct > 0 ? '+' : data.basisPct < 0 ? '−' : '';
+      basisEl.textContent = `Basis ${sign}$${Math.abs(dispBasis).toFixed(2)}/${uLbl} (${pctSign}${Math.abs(data.basisPct).toFixed(2)}%)`;
+      basisEl.className = `futures-basis ${data.isBackwardation ? 'up' : data.basisPct > 1.15 ? 'down' : ''}`;
+    }
+    if (curveEl) {
+      if (data.isBackwardation) {
+        curveEl.textContent = 'BACKWARDATION ↑';
+        curveEl.className = 'futures-curve-pill backw';
+      } else if (data.state === 'Compressed EFP') {
+        curveEl.textContent = 'Compressed EFP';
+        curveEl.className = 'futures-curve-pill tight';
+      } else {
+        curveEl.textContent = data.state;
+        curveEl.className = 'futures-curve-pill';
+      }
+    }
+    if (card) card.classList.toggle('backwardation', !!data.isBackwardation);
+    if (boostEl) {
+      if (data.isBackwardation) {
+        const liftPts = Math.round((data.priceDiscoveryBoost || 0) * 100);
+        boostEl.textContent = `Downward-sloping curve (Fut < Spot) · +${liftPts} pts upward price-discovery lift active`;
+      } else if (data.state === 'Compressed EFP') {
+        const liftPts = Math.round((data.priceDiscoveryBoost || 0) * 100);
+        boostEl.textContent = `Tight EFP spread near parity · +${liftPts} pts mild discovery support`;
+      } else {
+        boostEl.textContent = `${data.curveSlope || 'Upward-sloping contango curve'} · Spot ${formatMoney(convertUnit(data.spot))}`;
+      }
+    }
+  };
+
+  renderCard('gold', fut.gold);
+  renderCard('silver', fut.silver);
+
+  const subEl = document.getElementById('futures-subtitle');
+  const badgeEl = document.getElementById('futures-status-badge');
+  const anyBackw = !!(fut.gold?.isBackwardation || fut.silver?.isBackwardation);
+  if (subEl) {
+    subEl.textContent = `${fut.source} · ${anyBackw ? 'Backwardation active → lifting predictions' : 'Spot vs. COMEX curve synced into predictions'}`;
+  }
+  if (badgeEl) {
+    badgeEl.textContent = anyBackw ? 'Backwardation ↑' : fut.gold?.state === 'Compressed EFP' || fut.silver?.state === 'Compressed EFP' ? 'Tight EFP' : 'Contango';
+    badgeEl.className = `signal-pill ${anyBackw ? 'bullish' : ''}`;
+  }
+}
+
+function renderDollarStrength(res) {
+  if (!document.getElementById('panel-dollar-strength')) return;
+  const ds = res?.dollarStrength;
+  if (!ds) return;
+
+  const is30d = outlookState.horizon === '30d';
+  const hLbl = is30d ? '30D' : '7D';
+  const imp = is30d ? ds.impact30d : ds.impact7d;
+  const isG = state.settings.unit === 'g';
+  const uLbl = isG ? 'g' : 'oz';
+
+  const idxEl = document.getElementById('dxy-index-val');
+  const movesEl = document.getElementById('dxy-moves-row');
+  const scoreEl = document.getElementById('dxy-score-val');
+  const badgeEl = document.getElementById('dxy-regime-badge');
+  const subEl = document.getElementById('dxy-panel-subtitle');
+  const fillEl = document.getElementById('dxy-meter-fill');
+
+  if (idxEl) idxEl.textContent = ds.dxy != null ? ds.dxy.toFixed(2) : '—';
+  if (movesEl) {
+    const f = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`;
+    movesEl.textContent = `5d ${f(ds.dxy5dPct)} · 20d ${f(ds.dxy20dPct)} · vs 20d SMA ${f(ds.dxyVsSma20Pct)}`;
+  }
+  if (scoreEl) scoreEl.textContent = `${ds.score} / 100`;
+  if (badgeEl) {
+    badgeEl.textContent = ds.regime;
+    badgeEl.className = `signal-pill ${ds.score <= 42 ? 'bullish' : ds.score >= 58 ? 'bearish' : ''}`;
+  }
+  if (subEl) {
+    subEl.textContent = `${ds.source} · Inverse USD strength driver in ${hLbl} bullion forecasts`;
+  }
+  if (fillEl) {
+    fillEl.style.left = `${clampNum(ds.score, 2, 98)}%`;
+  }
+
+  const gLblEl = document.getElementById('dxy-gold-impact-lbl');
+  const gValEl = document.getElementById('dxy-gold-impact');
+  const gCorrEl = document.getElementById('dxy-gold-corr');
+  const sLblEl = document.getElementById('dxy-silver-impact-lbl');
+  const sValEl = document.getElementById('dxy-silver-impact');
+  const sCorrEl = document.getElementById('dxy-silver-corr');
+
+  const fmtFx = (usdOz, pct) => {
+    const val = convertUnit(usdOz);
+    const sign = val > 0 ? '+' : val < 0 ? '−' : '';
+    const pSign = pct > 0 ? '+' : pct < 0 ? '−' : '';
+    return `${sign}$${Math.abs(val).toFixed(isG ? 3 : 2)}/${uLbl} (${pSign}${Math.abs(pct).toFixed(2)}%)`;
+  };
+
+  if (gLblEl) gLblEl.textContent = `Gold ${hLbl} FX Cost Impact`;
+  if (gValEl && imp) {
+    gValEl.textContent = fmtFx(imp.goldUsdOz, imp.goldPct);
+    gValEl.className = `dxy-impact-v ${imp.goldUsdOz > 0.005 ? 'up' : imp.goldUsdOz < -0.005 ? 'down' : ''}`;
+  }
+  if (gCorrEl) {
+    gCorrEl.textContent = `60d Au/DXY Corr ${ds.goldVsDxyCorr != null ? Number(ds.goldVsDxyCorr).toFixed(2) : '—'}`;
+  }
+
+  if (sLblEl) sLblEl.textContent = `Silver ${hLbl} FX Cost Impact`;
+  if (sValEl && imp) {
+    sValEl.textContent = fmtFx(imp.silverUsdOz, imp.silverPct);
+    sValEl.className = `dxy-impact-v ${imp.silverUsdOz > 0.001 ? 'up' : imp.silverUsdOz < -0.001 ? 'down' : ''}`;
+  }
+  if (sCorrEl) {
+    sCorrEl.textContent = `60d Ag/DXY Corr ${ds.silverVsDxyCorr != null ? Number(ds.silverVsDxyCorr).toFixed(2) : '—'}`;
+  }
+}
+
 function renderOutlook() {
   const view = document.getElementById('view-outlook');
   if (!view) return;
@@ -2747,15 +3177,28 @@ function renderOutlook() {
   document.getElementById('horizon-7d')?.classList.toggle('active', outlookState.horizon === '7d');
   document.getElementById('horizon-30d')?.classList.toggle('active', outlookState.horizon === '30d');
 
-  // Render Gold & Silver probabilistic cards
+  // Render Gold & Silver probabilistic cards (with Markets-synced Spot + Futures Curve header)
+  const hTargetTitle = outlookState.horizon === '30d' ? '30-Day Base Target' : '7-Day Base Target';
   for (const metal of ['gold', 'silver']) {
     const m = res[metal];
+    const f = res.futures?.[metal];
     const sigEl = document.getElementById(`outlook-${metal}-signal`);
+    const spotEl = document.getElementById(`outlook-${metal}-spot`);
+    const futEl = document.getElementById(`outlook-${metal}-fut`);
+    const targetLblEl = document.getElementById(`outlook-${metal}-target-lbl`);
     const baseEl = document.getElementById(`outlook-${metal}-base`);
     const driftEl = document.getElementById(`outlook-${metal}-drift`);
     const markerEl = document.getElementById(`outlook-${metal}-marker`);
     const bearEl = document.getElementById(`outlook-${metal}-bear`);
     const bullEl = document.getElementById(`outlook-${metal}-bull`);
+
+    if (spotEl) spotEl.textContent = `Spot ${formatMoney(convertUnit(m.spot))}`;
+    if (futEl && f) {
+      const code = metal === 'gold' ? 'GC=F' : 'SI=F';
+      const tag = f.isBackwardation ? ' BACKW ↑' : '';
+      futEl.textContent = `${code} ${formatMoney(convertUnit(f.futures))}${tag}`;
+    }
+    if (targetLblEl) targetLblEl.textContent = hTargetTitle;
 
     sigEl.textContent = m.signal.label;
     sigEl.className = `signal-pill ${m.signal.cls}`;
@@ -2769,6 +3212,7 @@ function renderOutlook() {
 
   document.getElementById('outlook-confidence').textContent = `Confidence ${res.base.confidence || 62}%`;
   document.getElementById('outlook-narrative').textContent = res.narrative;
+  renderDollarStrength(res);
 
   const outlookRegimePill = document.getElementById('outlook-regime-pill');
   if (outlookRegimePill && res.marketRegime?.gold && res.marketRegime?.silver) {
@@ -3398,18 +3842,26 @@ function renderInstitutionalPulse(outlookRes) {
     crossSub.textContent = cm.regime;
   }
 
-  // 5. COMEX Spot-to-Futures Basis (Backwardation / Contango)
+  // 5. COMEX Spot-to-Futures Basis (Backwardation / Contango) synced with Markets via outlookRes.futures
   const basisVal = document.getElementById('inst-basis-val');
   const basisSub = document.getElementById('inst-basis-sub');
-  if (basisVal && basisSub && inst.basis) {
-    const bg = inst.basis.gold;
-    const bs = inst.basis.silver;
-    const gStr = bg ? `Au ${bg.basisUsd >= 0 ? '+' : '−'}$${Math.abs(bg.basisUsd).toFixed(1)}` : 'Au —';
+  const activeBasis = outlookRes?.futures?.gold || outlookRes?.futures?.silver ? outlookRes.futures : inst.basis;
+  if (basisVal && basisSub && activeBasis) {
+    const bg = activeBasis.gold;
+    const bs = activeBasis.silver;
+    const gStr = bg ? `Au ${bg.basisUsd >= 0 ? '+' : '−'}$${Math.abs(bg.basisUsd).toFixed(2)}` : 'Au —';
     const sStr = bs ? `Ag ${bs.basisUsd >= 0 ? '+' : '−'}$${Math.abs(bs.basisUsd).toFixed(2)}` : 'Ag —';
     basisVal.textContent = `${gStr} · ${sStr}`;
     const tight = (bs?.basisUsd ?? 1) < 0 || (bg?.basisUsd ?? 1) < 0;
     basisVal.className = `inst-val ${tight ? 'up' : ''}`;
-    basisSub.textContent = bs?.basisUsd < 0 ? 'Silver Backwardation (Tight!)' : (bg?.state || bs?.state || 'Normal Contango');
+    basisSub.textContent =
+      bs?.basisUsd < 0 && bg?.basisUsd < 0
+        ? 'Au & Ag Backwardation ↑'
+        : bs?.basisUsd < 0
+          ? 'Silver Backwardation (Tight!)'
+          : bg?.basisUsd < 0
+            ? 'Gold Backwardation (Tight!)'
+            : bg?.state || bs?.state || 'Normal Contango';
   }
 }
 
@@ -4132,7 +4584,14 @@ function renderMacroStrip() {
     }
   };
   const livePlat = state.liveMacro.platinum ?? snap.platinum;
-  setTile('macro-dxy', 'macro-dxy-chg', snap.dxy != null ? Number(snap.dxy).toFixed(2) : '—', snap.dxy5dPct);
+  const liveDxy = state.liveMacro.dxy ?? snap.dxy;
+  setTile(
+    'macro-dxy',
+    'macro-dxy-chg',
+    liveDxy != null ? Number(liveDxy).toFixed(2) : '—',
+    state.liveMacro.dxy != null ? null : snap.dxy5dPct,
+    state.liveMacro.dxy != null ? state.liveMacro.dxySource || 'Live ICE DXY' : null
+  );
   setTile('macro-tnx', 'macro-tnx-chg', snap.tnx != null ? `${Number(snap.tnx).toFixed(2)}%` : '—', snap.tnx5dPct);
   setTile('macro-copper', 'macro-copper-chg', snap.copper != null ? `$${Number(snap.copper).toFixed(2)}` : '—', snap.cu5dPct);
   setTile(
@@ -4146,13 +4605,16 @@ function renderMacroStrip() {
 
 function renderStackTracker() {
   const totalEl = document.getElementById('stack-total-val');
-  if (!totalEl) return;
+  const headerMeltValEl = document.getElementById('header-melt-val');
+  const headerMeltBtnEl = document.getElementById('btn-header-melt');
   const dayEl = document.getElementById('stack-day-chg');
   const pnlValEl = document.getElementById('stack-pnl-val');
   const pnlPctEl = document.getElementById('stack-pnl-pct');
   const splitEl = document.getElementById('stack-split-val');
   const sgeEl = document.getElementById('stack-sge-val');
   const scStripEl = document.getElementById('stack-scenario-strip');
+  const breakdownEl = document.getElementById('stack-breakdown-grid');
+  const milestonesEl = document.getElementById('stack-milestones-list');
 
   const st = state.settings.stack || {};
   const gOz = Math.max(0, parseFloat(st.goldOz) || 0);
@@ -4161,7 +4623,9 @@ function renderStackTracker() {
   const sCost = Math.max(0, parseFloat(st.silverCost) || 0);
 
   if (gOz <= 0 && sOz <= 0) {
-    totalEl.textContent = '$0.00';
+    if (totalEl) totalEl.textContent = '$0.00';
+    if (headerMeltValEl) headerMeltValEl.textContent = '$0.00';
+    if (headerMeltBtnEl) headerMeltBtnEl.className = 'header-melt-btn';
     if (dayEl) {
       dayEl.textContent = 'Enter oz above to track live';
       dayEl.className = 'stack-stat-s';
@@ -4174,19 +4638,34 @@ function renderStackTracker() {
     if (splitEl) splitEl.textContent = '—';
     if (sgeEl) sgeEl.textContent = 'Shanghai physical est.';
     if (scStripEl) scStripEl.hidden = true;
+    if (breakdownEl) {
+      breakdownEl.innerHTML =
+        '<div class="empty-state">Enter your Gold or Silver ounces above to view metal-by-metal breakdown.</div>';
+    }
+    if (milestonesEl) {
+      milestonesEl.innerHTML =
+        '<div class="empty-state">Add holdings above to calculate DXY FX impact and price milestone valuations.</div>';
+    }
     return;
   }
 
-  const gSpot = state.quotes.gold.price || 0;
-  const sSpot = state.quotes.silver.price || 0;
+  const gSpot = state.quotes.gold.price || outlookState.data?.gold?.spot || 0;
+  const sSpot = state.quotes.silver.price || outlookState.data?.silver?.spot || 0;
   const gVal = gOz * gSpot;
   const sVal = sOz * sSpot;
   const totalVal = gVal + sVal;
-  const dayChg = gOz * (state.quotes.gold.chg || 0) + sOz * (state.quotes.silver.chg || 0);
+  const gDayChg = gOz * (state.quotes.gold.chg || 0);
+  const sDayChg = sOz * (state.quotes.silver.chg || 0);
+  const dayChg = gDayChg + sDayChg;
   const prevTotal = totalVal - dayChg;
   const dayPct = prevTotal > 0 ? (dayChg / prevTotal) * 100 : 0;
 
-  totalEl.textContent = totalVal > 0 ? formatMoney(totalVal) : '$—';
+  const formattedTotal = totalVal > 0 ? formatMoney(totalVal) : '$—';
+  if (totalEl) totalEl.textContent = formattedTotal;
+  if (headerMeltValEl) headerMeltValEl.textContent = formattedTotal;
+  if (headerMeltBtnEl) {
+    headerMeltBtnEl.className = `header-melt-btn ${dayChg > 0.01 ? 'up' : dayChg < -0.01 ? 'down' : ''}`;
+  }
   if (dayEl) {
     if (totalVal > 0) {
       dayEl.textContent = `Today: ${formatSignedMoney(dayChg)} (${formatSignedPct(dayPct)})`;
@@ -4231,16 +4710,19 @@ function renderStackTracker() {
   const gSgeOz = sge?.gold?.usdPerOz ?? ((sge?.gold?.cnyPerG || 635) * TROY_OZ_TO_GRAMS) / usdCny;
   const sSgeOzRaw = sge?.silver?.usdPerOz ?? (((sge?.silver?.cnyPerKg || 8450) / 1000) * TROY_OZ_TO_GRAMS) / usdCny;
   const sSgeOz = sSgeOzRaw / 1.13;
-  const sgeTotal = gOz * gSgeOz + sOz * sSgeOz;
+  const gSgeVal = gOz * gSgeOz;
+  const sSgeVal = sOz * sSgeOz;
+  const sgeTotal = gSgeVal + sSgeVal;
   const sgeDiff = sgeTotal - totalVal;
   if (sgeEl) {
     sgeEl.textContent =
       totalVal > 0 ? `SGE Eq: ${formatMoney(sgeTotal)} (${formatSignedMoney(sgeDiff)})` : 'Shanghai physical est.';
   }
 
+  const oRes = totalVal > 0 ? computeInteractiveOutlook() : null;
+
   if (scStripEl) {
-    if (totalVal > 0) {
-      const oRes = computeInteractiveOutlook();
+    if (totalVal > 0 && oRes) {
       const bearVal = gOz * oRes.gold.range.bear + sOz * oRes.silver.range.bear;
       const baseVal = gOz * oRes.gold.range.base + sOz * oRes.silver.range.base;
       const bullVal = gOz * oRes.gold.range.bull + sOz * oRes.silver.range.bull;
@@ -4271,6 +4753,124 @@ function renderStackTracker() {
       scStripEl.hidden = true;
     }
   }
+
+  // Metal-by-Metal Breakdown (#panel-stack-breakdown)
+  if (breakdownEl) {
+    const fmtWeight = (oz) => {
+      const grams = oz * TROY_OZ_TO_GRAMS;
+      return grams >= 1000
+        ? `${oz.toFixed(2)} oz · ${(grams / 1000).toFixed(2)} kg`
+        : `${oz.toFixed(2)} oz · ${grams.toFixed(1)} g`;
+    };
+    const buildMetalCard = ({ code, cls, name, oz, val, share, cost, dayDelta, sgeVal }) => {
+      const hasCost = oz > 0 && cost > 0;
+      const pnl = hasCost ? val - oz * cost : null;
+      const pnlPct = hasCost && oz * cost > 0 ? (pnl / (oz * cost)) * 100 : null;
+      const pnlText =
+        pnl != null ? `${formatSignedMoney(pnl)} (${formatSignedPct(pnlPct)})` : 'No cost basis';
+      return `
+        <article class="stack-metal-card">
+          <div class="stack-metal-head">
+            <div class="stack-metal-title">
+              <span class="metal-badge ${cls}" style="width:28px;height:28px;font-size:10px;">${code}</span>
+              <span>${name}</span>
+            </div>
+            <strong class="stack-metal-val">${formatMoney(val)}</strong>
+          </div>
+          <div class="stack-alloc-bar">
+            <div class="stack-alloc-fill ${cls === 'silver' ? 'silver' : ''}" style="width:${share}%"></div>
+          </div>
+          <div class="stack-metal-meta">
+            <span>Weight: ${escapeHtml(fmtWeight(oz))}</span>
+            <span>Share: ${share}% of stack</span>
+            <span>Today: ${escapeHtml(formatSignedMoney(dayDelta))}</span>
+            <span>P&amp;L: ${escapeHtml(pnlText)}</span>
+            <span>SGE Eq: ${escapeHtml(formatMoney(sgeVal))}</span>
+            <span>Spot: ${escapeHtml(formatMoney(oz > 0 ? val / oz : 0))}/oz</span>
+          </div>
+        </article>`;
+    };
+    breakdownEl.innerHTML =
+      buildMetalCard({
+        code: 'XAU',
+        cls: 'gold',
+        name: 'Physical Gold',
+        oz: gOz,
+        val: gVal,
+        share: gShare,
+        cost: gCost,
+        dayDelta: gDayChg,
+        sgeVal: gSgeVal,
+      }) +
+      buildMetalCard({
+        code: 'XAG',
+        cls: 'silver',
+        name: 'Physical Silver',
+        oz: sOz,
+        val: sVal,
+        share: sShare,
+        cost: sCost,
+        dayDelta: sDayChg,
+        sgeVal: sSgeVal,
+      });
+  }
+
+  // FX Dollar Impact & Price Milestones (#panel-stack-scenarios)
+  if (milestonesEl && oRes) {
+    const hLbl = outlookState.horizon === '30d' ? '30D' : '7D';
+    const fxImp = outlookState.horizon === '30d' ? oRes.dollarStrength?.impact30d : oRes.dollarStrength?.impact7d;
+    const fxDelta = (fxImp?.goldUsdOz || 0) * gOz + (fxImp?.silverUsdOz || 0) * sOz;
+    const fxAfterVal = totalVal + fxDelta;
+
+    const peakVal = gOz * 5589.38 + sOz * 121.62;
+    const bullVal = gOz * oRes.gold.range.bull + sOz * oRes.silver.range.bull;
+    const bearVal = gOz * oRes.gold.range.bear + sOz * oRes.silver.range.bear;
+
+    const rows = [
+      {
+        name: `Live DXY FX Stack Impact (${hLbl})`,
+        sub: `DXY ${oRes.dollarStrength?.dxy?.toFixed(2) ?? '—'} · ${oRes.dollarStrength?.score ?? 50}/100 (${oRes.dollarStrength?.regime || 'Balanced'})`,
+        val: fxAfterVal,
+        delta: fxDelta,
+      },
+      {
+        name: '2026 Historic Peak Replay',
+        sub: 'Gold $5,589.38/oz · Silver $121.62/oz',
+        val: peakVal,
+        delta: peakVal - totalVal,
+      },
+      {
+        name: `${hLbl} Bull Target (P90)`,
+        sub: `Au ${formatMoney(oRes.gold.range.bull, 0)} · Ag ${formatMoney(oRes.silver.range.bull, 2)}`,
+        val: bullVal,
+        delta: bullVal - totalVal,
+      },
+      {
+        name: `${hLbl} Pullback Stress (P10)`,
+        sub: `Au ${formatMoney(oRes.gold.range.bear, 0)} · Ag ${formatMoney(oRes.silver.range.bear, 2)}`,
+        val: bearVal,
+        delta: bearVal - totalVal,
+      },
+    ];
+
+    milestonesEl.innerHTML = rows
+      .map((r) => {
+        const pct = totalVal > 0 ? (r.delta / totalVal) * 100 : 0;
+        const cls = r.delta > 0.01 ? 'up' : r.delta < -0.01 ? 'down' : '';
+        return `
+          <div class="stack-milestone-row">
+            <div class="stack-ms-left">
+              <span class="stack-ms-name">${escapeHtml(r.name)}</span>
+              <span class="stack-ms-sub">${escapeHtml(r.sub)}</span>
+            </div>
+            <div class="stack-ms-right">
+              <span class="stack-ms-val">${formatMoney(r.val)}</span>
+              <span class="stack-ms-delta ${cls}">${formatSignedMoney(r.delta)} (${formatSignedPct(pct)})</span>
+            </div>
+          </div>`;
+      })
+      .join('');
+  }
 }
 
 function renderAll() {
@@ -4278,6 +4878,7 @@ function renderAll() {
   renderStatus();
   renderMetalCard('gold');
   renderMetalCard('silver');
+  renderFuturesPanel();
   renderStats();
   renderStackTracker();
   renderShanghai();
@@ -4310,12 +4911,15 @@ function switchView(viewName) {
 }
 
 function wireEvents() {
-  // Title-bar & bottom navigation
+  // Title-bar & bottom navigation + Persistent Title-Bar Melt Value button
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       if (btn.tagName === 'A') e.preventDefault();
       switchView(btn.dataset.view);
     });
+  });
+  document.getElementById('btn-header-melt')?.addEventListener('click', () => {
+    switchView('stack');
   });
 
   // Candlestick chart 1D–ALL timeframe selector (lazy-loads candles_hist.json once on 7D–ALL)
@@ -4386,6 +4990,7 @@ function wireEvents() {
     mcState.horizon = '7d';
     mcState.cacheKey = '';
     renderOutlook();
+    renderStackTracker();
     renderChart();
   });
   document.getElementById('horizon-30d')?.addEventListener('click', () => {
@@ -4393,6 +4998,7 @@ function wireEvents() {
     mcState.horizon = '1m';
     mcState.cacheKey = '';
     renderOutlook();
+    renderStackTracker();
     renderChart();
   });
   document.getElementById('scenario-chips')?.addEventListener('click', (e) => {
@@ -4402,11 +5008,13 @@ function wireEvents() {
     if (outlookState.activeScenarios.has(id)) outlookState.activeScenarios.delete(id);
     else outlookState.activeScenarios.add(id);
     renderOutlook();
+    renderStackTracker();
     renderChart();
   });
   document.getElementById('btn-reset-scenarios')?.addEventListener('click', () => {
     outlookState.activeScenarios.clear();
     renderOutlook();
+    renderStackTracker();
     renderChart();
   });
 
@@ -4493,6 +5101,8 @@ function wireEvents() {
     fetchCandlesData();
     fetchComexData();
     fetchLivePlatinumPrice();
+    fetchLiveDxyIndex();
+    fetchLiveFuturesQuotes();
   });
   document.getElementById('btn-refresh-comex')?.addEventListener('click', () => {
     fetchComexData();
@@ -4878,6 +5488,8 @@ function refreshSlowFeeds(force = false) {
   fetchShanghaiData();
   fetchComexData();
   fetchLivePlatinumPrice();
+  fetchLiveDxyIndex();
+  fetchLiveFuturesQuotes();
 }
 
 function startPolling() {
@@ -4923,6 +5535,8 @@ function init() {
   fetchCandlesData();
   fetchComexData();
   fetchLivePlatinumPrice();
+  fetchLiveDxyIndex();
+  fetchLiveFuturesQuotes();
   startPolling();
   registerServiceWorker();
 }
