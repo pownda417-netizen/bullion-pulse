@@ -1,0 +1,73 @@
+{
+  "updatedAt": "2026-11-20T04:54:27.760Z",
+  "scorecard": {
+    "live7d": {
+      "count": 0,
+      "dirHitPct": null,
+      "inConePct": null,
+      "avgErrPct": null
+    },
+    "live30d": {
+      "count": 0,
+      "dirHitPct": null,
+      "inConePct": null,
+      "avgErrPct": null
+    },
+    "coneMultiplier": 1,
+    "recentGrades": []
+  },
+  "predictions": [
+    {
+      "id": "2026-11-20-gold",
+      "createdAt": "2026-11-20T04:54:27.760Z",
+      "metal": "gold",
+      "spotAtForecast": 3742.5,
+      "score": 41,
+      "signal": "Bullish",
+      "horizon7d": {
+        "bear": 3703.07,
+        "base": 3756,
+        "bull": 3808.93,
+        "bearPct": -1.05,
+        "expectedPct": 0.36,
+        "bullPct": 1.78
+      },
+      "horizon30d": {
+        "bear": 3661.69,
+        "base": 3770.17,
+        "bull": 3878.64,
+        "bearPct": -2.16,
+        "expectedPct": 0.74,
+        "bullPct": 3.64
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-20-silver",
+      "createdAt": "2026-11-20T04:54:27.760Z",
+      "metal": "silver",
+      "spotAtForecast": 45.28,
+      "score": 56,
+      "signal": "Strong Bullish",
+      "horizon7d": {
+        "bear": 44.52,
+        "base": 45.69,
+        "bull": 46.85,
+        "bearPct": -1.67,
+        "expectedPct": 0.9,
+        "bullPct": 3.47
+      },
+      "horizon30d": {
+        "bear": 43.73,
+        "base": 46.11,
+        "bull": 48.5,
+        "bearPct": -3.43,
+        "expectedPct": 1.84,
+        "bullPct": 7.11
+      },
+      "graded7d": null,
+      "graded30d": null
+    }
+  ]
+}

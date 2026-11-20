@@ -1,0 +1,53 @@
+name: Daily Post-Close Self-Learning (5:10 PM ET)
+
+on:
+  schedule:
+    # 5:10 PM EDT (21:10 UTC) & 5:10 PM EST (22:10 UTC) Mon-Fri.
+    # monitor/self_learn.mjs checks America/New_York time (>= 17:05 ET)
+    # and enforces strict once-per-NY-trading-day deduplication so it runs
+    # exactly ONCE per trading day, 10 minutes after market close, year-round.
+    - cron: '10 21 * * 1-5'
+    - cron: '10 22 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bullion-pulse-data-commit
+  cancel-in-progress: false
+
+jobs:
+  self-learn:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Grade multi-horizon predictions & adapt regime weights (5:10 PM ET)
+        run: node monitor/self_learn.mjs
+
+      - name: Re-run outlook with updated self-learned weights
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          CATALYST_ALERTS: 'false'
+        run: node monitor/analyze_outlook.mjs
+
+      - name: Commit updated learned weights & outlook
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/learned_weights.json data/outlook.json data/comex.json data/shanghai.json data/candles.json data/candles_1d.json data/candles_hist.json data/accuracy_log.json
+          if ! git diff --cached --quiet; then
+            git commit -m "learn: daily 5:10 PM ET multi-horizon post-close calibration"
+            git pull --rebase --autostash
+            git push
+          else
+            echo "No daily learning update required."
+          fi

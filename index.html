@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Bullion Pulse — Spot Gold &amp; Silver Tracker</title>
+  <meta name="description" content="Mobile PWA tracking live spot Gold (XAU/USD) and Silver (XAG/USD) prices with customizable big daily move push alerts via ntfy.sh." />
+
+  <!-- PWA & iOS Home Screen Meta -->
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0D0E11" id="meta-theme-color" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Bullion Pulse" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-bar">
+      <div class="brand">
+        <img src="./icons/icon-192.png" alt="Bullion Pulse icon" class="brand-icon" width="34" height="34" />
+        <div class="brand-text">
+          <h1 class="brand-title">Bullion Pulse</h1>
+          <div class="status-line">
+            <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+            <span id="status-text">Connecting to spot feed…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button type="button" class="icon-btn" id="btn-refresh" aria-label="Refresh spot prices" title="Refresh spot prices">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+            <path d="M16 16h5v5" />
+          </svg>
+        </button>
+        <button type="button" class="icon-btn" id="btn-theme" aria-label="Toggle light or dark theme" title="Toggle theme">
+          <svg id="icon-theme" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- Active Move Alert Banner -->
+      <section class="alert-banner" id="alert-banner" hidden role="alert">
+        <div>
+          <div class="alert-banner-title" id="alert-banner-title">Big Daily Move Detected</div>
+          <div class="alert-banner-body" id="alert-banner-body"></div>
+        </div>
+        <button type="button" class="alert-dismiss" id="btn-dismiss-banner" aria-label="Dismiss alert">&times;</button>
+      </section>
+
+      <!-- VIEW 1: MARKETS -->
+      <section class="view-panel active" id="view-markets" aria-label="Spot metal markets">
+        <div class="toolbar-row">
+          <span class="section-label">Spot USD Markets</span>
+          <div class="segmented" role="group" aria-label="Weight unit">
+            <button type="button" id="unit-oz" class="active">Troy oz</button>
+            <button type="button" id="unit-g">Gram</button>
+          </div>
+        </div>
+
+        <!-- Gold Card -->
+        <article class="metal-card selected" id="card-gold" data-metal="gold" tabindex="0" aria-label="Gold spot price card">
+          <div class="metal-header">
+            <div class="metal-identity">
+              <div class="metal-badge gold">XAU</div>
+              <div>
+                <div class="metal-name">Gold Spot</div>
+                <div class="metal-sub" id="gold-unit-label">USD / troy oz</div>
+              </div>
+            </div>
+            <div class="change-pill" id="gold-pct">--%</div>
+          </div>
+
+          <div class="metal-price-row">
+            <div class="metal-price" id="gold-price">$—,———.——</div>
+            <div class="metal-delta-usd" id="gold-chg">$—.——</div>
+          </div>
+
+          <div class="threshold-meter">
+            <div class="threshold-meta">
+              <span id="gold-meter-label">Daily move vs ±1.5% alert</span>
+              <span id="gold-meter-status">0%</span>
+            </div>
+            <div class="threshold-track">
+              <div class="threshold-fill" id="gold-meter-fill"></div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Silver Card -->
+        <article class="metal-card" id="card-silver" data-metal="silver" tabindex="0" aria-label="Silver spot price card">
+          <div class="metal-header">
+            <div class="metal-identity">
+              <div class="metal-badge silver">XAG</div>
+              <div>
+                <div class="metal-name">Silver Spot</div>
+                <div class="metal-sub" id="silver-unit-label">USD / troy oz</div>
+              </div>
+            </div>
+            <div class="change-pill" id="silver-pct">--%</div>
+          </div>
+
+          <div class="metal-price-row">
+            <div class="metal-price" id="silver-price">$——.——</div>
+            <div class="metal-delta-usd" id="silver-chg">$—.——</div>
+          </div>
+
+          <div class="threshold-meter">
+            <div class="threshold-meta">
+              <span id="silver-meter-label">Daily move vs ±3.0% alert</span>
+              <span id="silver-meter-status">0%</span>
+            </div>
+            <div class="threshold-track">
+              <div class="threshold-fill" id="silver-meter-fill"></div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Multi-Timeframe OHLC Candlestick & Prediction Fan Chart -->
+        <section class="panel" id="panel-chart" aria-label="OHLC candlestick chart with prediction lines and timeframe selector">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title" id="chart-title">Gold (XAU/USD) · 1D (5m)</h2>
+              <div class="panel-subtitle" id="chart-subtitle">5m OHLC candles · Next refresh in 05:00</div>
+            </div>
+            <div class="chart-controls">
+              <button type="button" id="btn-toggle-forecast" class="chip-toggle active" aria-pressed="true">Forecast</button>
+              <div class="segmented" role="group" aria-label="Chart metal selector">
+                <button type="button" id="chart-btn-gold" class="active">XAU</button>
+                <button type="button" id="chart-btn-silver">XAG</button>
+              </div>
+            </div>
+          </div>
+          <div class="tf-bar" id="chart-tf-bar" role="group" aria-label="Candlestick chart timeframe">
+            <button type="button" class="tf-btn active" data-tf="1d">1D</button>
+            <button type="button" class="tf-btn" data-tf="7d">7D</button>
+            <button type="button" class="tf-btn" data-tf="1m">1M</button>
+            <button type="button" class="tf-btn" data-tf="6m">6M</button>
+            <button type="button" class="tf-btn" data-tf="1y">1Y</button>
+            <button type="button" class="tf-btn" data-tf="5y">5Y</button>
+            <button type="button" class="tf-btn" data-tf="10y">10Y</button>
+            <button type="button" class="tf-btn" data-tf="all">ALL</button>
+          </div>
+          <div class="ohlc-row">
+            <div class="ohlc-bar" id="chart-ohlc">Drag or tap a candle to inspect OHLC</div>
+            <span class="tf-return-pill" id="chart-tf-change">+0.7%</span>
+          </div>
+          <div class="chart-wrap chart-wrap-tall">
+            <canvas id="intraday-chart" aria-label="Multi-timeframe OHLC candlestick chart with P10 to P90 prediction cone"></canvas>
+          </div>
+          <div class="chart-legend">
+            <span><i class="dot-up"></i> Up</span>
+            <span><i class="dot-down"></i> Down</span>
+            <span><i class="line-bull"></i> P90 Bull</span>
+            <span><i class="line-base"></i> P50 Base</span>
+            <span><i class="line-bear"></i> P10 Bear</span>
+          </div>
+        </section>
+
+        <!-- Market Reference Strip -->
+        <section class="stats-grid" aria-label="Key market metrics">
+          <div class="stat-item">
+            <div class="stat-label">Au / Ag Ratio</div>
+            <div class="stat-value" id="stat-ratio">-- : 1</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label" id="stat-close-label">XAU Prev Close</div>
+            <div class="stat-value" id="stat-close">$—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Candles</div>
+            <div class="stat-value" id="stat-refresh">5m live</div>
+          </div>
+        </section>
+
+        <!-- Shanghai Gold Exchange (SGE) Panel -->
+        <section class="panel" id="panel-shanghai" aria-label="Shanghai Gold Exchange spot prices">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Shanghai (SGE)</h2>
+              <div class="panel-subtitle" id="sge-subtitle">Au99.99 &amp; Ag(T+D) · FX USD/CNY —</div>
+            </div>
+            <span class="signal-pill" id="sge-status-badge">SGE</span>
+          </div>
+
+          <div class="sge-grid">
+            <article class="sge-card">
+              <div class="sge-card-top">
+                <span class="sge-contract" id="sge-gold-contract">Au99.99</span>
+                <span class="sge-pct" id="sge-gold-pct">--%</span>
+              </div>
+              <div class="sge-cny" id="sge-gold-cny">¥— / g</div>
+              <div class="sge-usd" id="sge-gold-usd">$— / oz</div>
+              <div class="sge-spread" id="sge-gold-premium">Premium vs West: —</div>
+            </article>
+
+            <article class="sge-card">
+              <div class="sge-card-top">
+                <span class="sge-contract" id="sge-silver-contract">Ag(T+D)</span>
+                <span class="sge-pct" id="sge-silver-pct">--%</span>
+              </div>
+              <div class="sge-cny" id="sge-silver-cny">¥— / kg</div>
+              <div class="sge-usd" id="sge-silver-usd">$— / oz</div>
+              <div class="sge-spread" id="sge-silver-premium">Ex-13% VAT: —</div>
+            </article>
+          </div>
+
+          <div class="sge-bench-row" id="sge-benchmarks">
+            SHAU &amp; SHAG benchmarks load automatically from SGE.
+          </div>
+        </section>
+      </section>
+
+      <!-- VIEW 2: OUTLOOK (NEWS + HISTORICAL PATTERNS) -->
+      <section class="view-panel" id="view-outlook" aria-label="News and historical pattern outlook">
+        <div class="toolbar-row">
+          <span class="section-label">Macro &amp; Pattern Outlook</span>
+          <div class="segmented" role="group" aria-label="Forecast horizon">
+            <button type="button" id="horizon-7d" class="active">7-Day</button>
+            <button type="button" id="horizon-30d">30-Day</button>
+          </div>
+        </div>
+
+        <div class="disclaimer-note">
+          <strong>Anonymous &amp; Private:</strong> Runs locally with public feeds — zero accounts, zero cookies, zero tracking. Probabilistic model combines global silver/gold news, Shanghai SGE premiums, macro indicators, and historical analogs (not financial advice).
+        </div>
+
+        <!-- Gold & Silver Probabilistic Range Cards -->
+        <div class="forecast-grid">
+          <article class="forecast-card" id="forecast-gold">
+            <div class="forecast-top">
+              <span class="metal-badge gold" style="width:30px;height:30px;font-size:11px;">XAU</span>
+              <span class="signal-pill" id="outlook-gold-signal">Neutral</span>
+            </div>
+            <div>
+              <div class="forecast-base" id="outlook-gold-base">$—</div>
+              <div class="forecast-drift" id="outlook-gold-drift">Base 0.0% · Score 0</div>
+            </div>
+            <div class="range-bar">
+              <div class="range-fill" style="left:8%;width:84%;"></div>
+              <div class="range-marker" id="outlook-gold-marker" style="left:50%;"></div>
+            </div>
+            <div class="range-labels">
+              <span id="outlook-gold-bear">Bear —</span>
+              <span id="outlook-gold-bull">Bull —</span>
+            </div>
+          </article>
+
+          <article class="forecast-card" id="forecast-silver">
+            <div class="forecast-top">
+              <span class="metal-badge silver" style="width:30px;height:30px;font-size:11px;">XAG</span>
+              <span class="signal-pill" id="outlook-silver-signal">Neutral</span>
+            </div>
+            <div>
+              <div class="forecast-base" id="outlook-silver-base">$—</div>
+              <div class="forecast-drift" id="outlook-silver-drift">Base 0.0% · Score 0</div>
+            </div>
+            <div class="range-bar">
+              <div class="range-fill" style="left:8%;width:84%;"></div>
+              <div class="range-marker" id="outlook-silver-marker" style="left:50%;"></div>
+            </div>
+            <div class="range-labels">
+              <span id="outlook-silver-bear">Bear —</span>
+              <span id="outlook-silver-bull">Bull —</span>
+            </div>
+          </article>
+        </div>
+
+        <!-- Narrative Synthesis -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Pattern Summary</h2>
+            <span class="panel-subtitle" id="outlook-confidence">Confidence —%</span>
+          </div>
+          <p class="outlook-summary" id="outlook-narrative">Loading macro and news synthesis…</p>
+        </section>
+
+        <!-- Institutional Pro Quant Signals (FRED TIPS, CFTC COT, Miners, Accuracy) -->
+        <section class="pro-grid" aria-label="Institutional quantitative signals">
+          <article class="pro-card">
+            <div class="pro-label">10Y Real Yield (TIPS)</div>
+            <div class="pro-value" id="pro-realyield">—%</div>
+            <div class="pro-sub" id="pro-realyield-sub">FRED DFII10 · Breakeven —%</div>
+          </article>
+          <article class="pro-card">
+            <div class="pro-label">CFTC COT Crowding</div>
+            <div class="pro-value" id="pro-cot">Au — · Ag —</div>
+            <div class="pro-sub" id="pro-cot-sub">52w Managed Money pct</div>
+          </article>
+          <article class="pro-card">
+            <div class="pro-label">Miners (GDX / SIL)</div>
+            <div class="pro-value" id="pro-miners">— / —</div>
+            <div class="pro-sub" id="pro-miners-sub">10d relative vs spot</div>
+          </article>
+          <article class="pro-card">
+            <div class="pro-label">Model Scorecard</div>
+            <div class="pro-value" id="pro-accuracy">—% Dir</div>
+            <div class="pro-sub" id="pro-accuracy-sub">—% in Bear–Bull cone</div>
+          </article>
+        </section>
+
+        <!-- COMEX Paper Gold & Paper Silver Contracts vs. Registered Vaults -->
+        <section class="panel" id="panel-comex" aria-label="COMEX paper contracts versus registered physical inventory">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">COMEX Paper vs. Physical</h2>
+              <div class="panel-subtitle" id="comex-subtitle">Fresh GC/SI open interest · Feeds every prediction</div>
+            </div>
+            <button type="button" class="btn mc-rerun-btn" id="btn-refresh-comex" title="Grab fresh COMEX open interest & vault data">Fetch Fresh</button>
+          </div>
+
+          <div class="comex-grid">
+            <article class="comex-card">
+              <div class="comex-top">
+                <span class="comex-code gold">COMEX GC · Gold</span>
+                <span class="comex-ratio" id="comex-gold-ratio">3.49 : 1</span>
+              </div>
+              <div class="comex-contracts" id="comex-gold-oi">494,233 contracts</div>
+              <div class="comex-oz" id="comex-gold-oz">49.42M paper · 14.17M reg oz</div>
+              <div class="comex-bar"><div class="comex-bar-fill gold" id="comex-gold-bar" style="width:65%"></div></div>
+              <div class="comex-foot" id="comex-gold-regime">Registered −4.3% (30d)</div>
+            </article>
+
+            <article class="comex-card">
+              <div class="comex-top">
+                <span class="comex-code silver">COMEX SI · Silver</span>
+                <span class="comex-ratio" id="comex-silver-ratio">6.74 : 1</span>
+              </div>
+              <div class="comex-contracts" id="comex-silver-oi">136,400 contracts</div>
+              <div class="comex-oz" id="comex-silver-oz">682.0M paper · 101.2M reg oz</div>
+              <div class="comex-bar"><div class="comex-bar-fill silver" id="comex-silver-bar" style="width:82%"></div></div>
+              <div class="comex-foot" id="comex-silver-regime">Physical Squeeze Stress</div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Institutional Pulse: Event Calendar, ^GVZ IV, ETF Flows, Copper/JPY & COMEX Basis -->
+        <section class="panel" id="panel-institutional" aria-label="Institutional microstructure and catalyst calendar">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Institutional Pulse</h2>
+              <div class="panel-subtitle">Options IV · ETF Flows · Copper/JPY · EFP Basis</div>
+            </div>
+            <span class="signal-pill" id="inst-event-badge">Catalyst Watch</span>
+          </div>
+
+          <div class="event-strip" id="inst-event-strip" aria-label="Upcoming macro and COMEX volatility catalysts">
+            <div class="event-pill">
+              <span class="event-dot"></span>
+              <span class="event-name">COMEX Silver First Notice Day</span>
+              <span class="event-eta">11d · Nov 30</span>
+            </div>
+          </div>
+
+          <div class="inst-grid">
+            <article class="inst-card">
+              <div class="inst-label">Options IV (^GVZ)</div>
+              <div class="inst-val" id="inst-gvz-val">21.4% IV</div>
+              <div class="inst-sub" id="inst-gvz-sub">+4.9% vs RV · Breakout</div>
+            </article>
+            <article class="inst-card">
+              <div class="inst-label">ETF Flows (GLD/SLV)</div>
+              <div class="inst-val" id="inst-etf-val">1.31× Vol</div>
+              <div class="inst-sub" id="inst-etf-sub">PSLV +1.35% vs SLV</div>
+            </article>
+            <article class="inst-card">
+              <div class="inst-label">Copper &amp; Yen Carry</div>
+              <div class="inst-val" id="inst-cross-val">Cu +2.5% · ¥151.4</div>
+              <div class="inst-sub" id="inst-cross-sub">Silver industrial tailwind</div>
+            </article>
+            <article class="inst-card">
+              <div class="inst-label">COMEX EFP Basis</div>
+              <div class="inst-val" id="inst-basis-val">Au +$5.7 · Ag −$0.07</div>
+              <div class="inst-sub" id="inst-basis-sub">Silver Backwardation!</div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Merton Jump-Diffusion Monte Carlo Panel -->
+        <section class="panel" id="panel-jump-diffusion" aria-label="Merton Jump-Diffusion Monte Carlo simulation">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Jump-Diffusion Monte Carlo</h2>
+              <div class="panel-subtitle" id="mc-subtitle">1,500 paths · Fat-tail P10–P90</div>
+            </div>
+            <div class="mc-controls">
+              <div class="segmented" role="group" aria-label="Monte Carlo metal">
+                <button type="button" id="mc-btn-gold" class="active">XAU</button>
+                <button type="button" id="mc-btn-silver">XAG</button>
+              </div>
+              <button type="button" class="btn mc-rerun-btn" id="btn-rerun-mc" title="Run fresh 1,500 paths">Re-run</button>
+            </div>
+          </div>
+
+          <div class="tf-bar" id="mc-tf-bar" role="group" aria-label="Monte Carlo projection timeframe">
+            <button type="button" class="tf-btn" data-mc-tf="1d">1D</button>
+            <button type="button" class="tf-btn active" data-mc-tf="7d">7D</button>
+            <button type="button" class="tf-btn" data-mc-tf="1m">1M</button>
+            <button type="button" class="tf-btn" data-mc-tf="6m">6M</button>
+            <button type="button" class="tf-btn" data-mc-tf="1y">1Y</button>
+            <button type="button" class="tf-btn" data-mc-tf="5y">5Y</button>
+            <button type="button" class="tf-btn" data-mc-tf="10y">10Y</button>
+            <button type="button" class="tf-btn" data-mc-tf="all">ALL</button>
+          </div>
+
+          <div class="mc-canvas-wrap">
+            <canvas id="mc-paths-canvas" aria-label="Jump-Diffusion Monte Carlo simulated price paths with P10 to P90 bands"></canvas>
+          </div>
+
+          <div class="chart-legend mc-legend">
+            <span><i class="line-bull"></i> P90 Upside</span>
+            <span><i class="line-base"></i> P50 Median</span>
+            <span><i class="line-bear"></i> P10 Tail</span>
+            <span><i class="line-target"></i> Target</span>
+          </div>
+
+          <div class="mc-stats-row">
+            <div class="mc-stat">
+              <span class="mc-stat-label">P10 Tail</span>
+              <span class="mc-stat-val down" id="mc-p10">$—</span>
+            </div>
+            <div class="mc-stat">
+              <span class="mc-stat-label">P50 Median</span>
+              <span class="mc-stat-val" id="mc-p50">$—</span>
+            </div>
+            <div class="mc-stat">
+              <span class="mc-stat-label">P90 Upside</span>
+              <span class="mc-stat-val up" id="mc-p90">$—</span>
+            </div>
+            <div class="mc-stat">
+              <span class="mc-stat-label">Finish &gt; Spot</span>
+              <span class="mc-stat-val" id="mc-prob-up">—%</span>
+            </div>
+          </div>
+
+          <div class="mc-target-box">
+            <div class="mc-target-head">
+              <label class="mc-target-label" for="input-mc-target">Target Hit Probability</label>
+              <div class="mc-presets">
+                <button type="button" class="mc-preset-btn" data-pct="5">+5%</button>
+                <button type="button" class="mc-preset-btn" data-pct="10">+10%</button>
+                <button type="button" class="mc-preset-btn" data-pct="-5">−5%</button>
+              </div>
+            </div>
+            <div class="mc-input-row">
+              <span class="mc-currency">$</span>
+              <input type="number" id="input-mc-target" class="mc-target-input" step="any" inputmode="decimal" value="4000" aria-label="Target price in USD" />
+              <span class="mc-target-delta" id="mc-target-delta">+6.9% vs spot</span>
+            </div>
+            <div class="mc-prob-grid">
+              <div class="mc-prob-card">
+                <div class="mc-prob-top">
+                  <span>Touch Anytime</span>
+                  <strong id="mc-touch-pct">—%</strong>
+                </div>
+                <div class="mc-prob-bar"><div class="mc-prob-fill touch" id="mc-touch-bar" style="width:0%"></div></div>
+                <div class="mc-prob-hint" id="mc-touch-hint">Hits target any day in window</div>
+              </div>
+              <div class="mc-prob-card">
+                <div class="mc-prob-top">
+                  <span>Finish Beyond</span>
+                  <strong id="mc-finish-pct">—%</strong>
+                </div>
+                <div class="mc-prob-bar"><div class="mc-prob-fill finish" id="mc-finish-bar" style="width:0%"></div></div>
+                <div class="mc-prob-hint" id="mc-finish-hint">Closes beyond target at end</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Interactive What-If Event Stress Tester -->
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">What-If Event Simulator</h2>
+              <div class="panel-subtitle">Toggle macro shocks to test historical metal reactions</div>
+            </div>
+            <button type="button" class="btn" id="btn-reset-scenarios" style="padding:5px 9px;font-size:11.5px;">Reset</button>
+          </div>
+          <div class="chip-wrap" id="scenario-chips"></div>
+        </section>
+
+        <!-- 9 Macro & Quant Drivers -->
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">9 Active Macro &amp; Quant Drivers</h2>
+              <div class="panel-subtitle">Left = Bearish · Right = Bullish (Au / Ag)</div>
+            </div>
+          </div>
+          <div class="driver-list" id="outlook-drivers"></div>
+        </section>
+
+        <!-- Historical Analogs -->
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Closest Historical Analogs</h2>
+              <div class="panel-subtitle">Past episodes matching today's active drivers</div>
+            </div>
+          </div>
+          <div class="analog-list" id="outlook-analogs"></div>
+        </section>
+
+        <!-- Live Walk-Forward & Daily 5:10 PM ET Self-Learning -->
+        <section class="panel" id="panel-self-learn" aria-label="Walk-forward accuracy and daily post-close self-learning">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Walk-Forward &amp; Self-Learning</h2>
+              <div class="panel-subtitle" id="accuracy-meta">Auto-learns once daily at 5:10 PM ET (10m after close)</div>
+            </div>
+            <span class="signal-pill bullish" id="sl-status-badge">Active · 5 cycles</span>
+          </div>
+          <div class="sl-meta-grid" id="sl-summary-strip"></div>
+          <div class="driver-list" id="accuracy-breakdown"></div>
+        </section>
+
+        <!-- Scored World & Metals News -->
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Recency-Weighted News Clusters</h2>
+              <div class="panel-subtitle" id="outlook-updated">18h decay · Deduplicated · Tiered sources</div>
+            </div>
+          </div>
+          <ul class="news-list" id="outlook-news"></ul>
+        </section>
+      </section>
+
+      <!-- VIEW 3: ALERTS -->
+      <section class="view-panel" id="view-alerts" aria-label="Alert configuration">
+        <div class="toolbar-row">
+          <span class="section-label">Big Daily Move Rules</span>
+        </div>
+
+        <section class="panel">
+          <div class="control-group">
+            <div class="control-top">
+              <label class="control-label" for="input-gold-threshold">Gold (XAU) Alert Threshold</label>
+              <span class="control-value" id="label-gold-threshold">±1.5%</span>
+            </div>
+            <input type="range" id="input-gold-threshold" min="0.5" max="5.0" step="0.1" value="1.5" />
+            <div class="control-hint">Triggers when daily Gold move reaches or exceeds this % from previous close.</div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-top">
+              <label class="control-label" for="input-silver-threshold">Silver (XAG) Alert Threshold</label>
+              <span class="control-value silver" id="label-silver-threshold">±3.0%</span>
+            </div>
+            <input type="range" id="input-silver-threshold" class="silver-range" min="1.0" max="10.0" step="0.25" value="3.0" />
+            <div class="control-hint">Silver is ~2× more volatile than Gold; ±3.0% filters out routine daily noise.</div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-top">
+              <label class="control-label" for="input-sge-threshold">Shanghai Gold Premium Alert</label>
+              <span class="control-value" id="label-sge-threshold">±$35/oz</span>
+            </div>
+            <input type="range" id="input-sge-threshold" min="10" max="100" step="5" value="35" />
+            <div class="control-hint">Alerts via ntfy.sh when SGE Au99.99 trades at a large physical premium or discount vs. Western Spot.</div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-top">
+              <label class="control-label" for="select-direction">Alert Direction</label>
+            </div>
+            <select id="select-direction" class="select-input">
+              <option value="both">Both surges (+) and drops (−)</option>
+              <option value="up">Surges up only (+)</option>
+              <option value="down">Drops down only (−)</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Anonymous Phone Push (ntfy.sh)</h2>
+              <div class="panel-subtitle">No email or phone number needed — use a random private topic name</div>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label" for="input-ntfy-topic">Your Anonymous ntfy Topic</label>
+            <input type="text" id="input-ntfy-topic" class="text-input" placeholder="e.g. bullion-pulse-8f3a9c" autocomplete="off" spellcheck="false" />
+            <div class="btn-row">
+              <button type="button" class="btn btn-primary" id="btn-test-ntfy">Send Test Push</button>
+              <button type="button" class="btn" id="btn-simulate-move">Simulate Move</button>
+            </div>
+            <button type="button" class="btn btn-full" id="btn-simulate-sge" style="margin-top: 8px;">Simulate Shanghai Premium Spike (+$42/oz)</button>
+            <div class="feedback-note" id="ntfy-feedback" role="status"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Alert History</h2>
+            <button type="button" class="btn" id="btn-clear-log" style="padding: 6px 10px; font-size: 12px;">Clear</button>
+          </div>
+          <ul class="log-list" id="alert-log">
+            <li class="empty-state">No alerts triggered yet. Tap "Simulate Big Move" above to test.</li>
+          </ul>
+        </section>
+      </section>
+
+      <!-- VIEW 4: SETUP -->
+      <section class="view-panel" id="view-setup" aria-label="Phone installation and background monitor setup">
+        <div class="toolbar-row">
+          <span class="section-label">Install &amp; 24/7 Background Alerts</span>
+        </div>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">1. Add App to Your Phone</h2>
+          </div>
+          <ol class="step-list">
+            <li class="step-item">
+              <span class="step-num">1</span>
+              <div class="step-body">
+                <h3>iPhone (Safari)</h3>
+                <p>Open your hosted URL in Safari, tap the <strong>Share</strong> icon, then choose <strong>Add to Home Screen</strong>.</p>
+              </div>
+            </li>
+            <li class="step-item">
+              <span class="step-num">2</span>
+              <div class="step-body">
+                <h3>Android (Chrome)</h3>
+                <p>Open the URL in Chrome, tap the <strong>⋮ menu</strong>, then tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">2. Free Phone Push &amp; News Engine</h2>
+          </div>
+          <ol class="step-list">
+            <li class="step-item">
+              <span class="step-num">1</span>
+              <div class="step-body">
+                <h3>Install the free ntfy app</h3>
+                <p>Download <strong>ntfy</strong> from the Apple App Store or Google Play, tap <strong>+</strong>, and subscribe to your private topic from the Alerts tab.</p>
+              </div>
+            </li>
+            <li class="step-item">
+              <span class="step-num">2</span>
+              <div class="step-body">
+                <h3>Enable GitHub Actions Secrets &amp; Variables</h3>
+                <p>In your GitHub repo → <strong>Settings → Secrets and variables → Actions</strong>, add <code>NTFY_TOPIC</code> (and optionally <code>GEMINI_API_KEY</code> for AI-written daily briefings):</p>
+                <div class="code-block" id="setup-secrets-preview">NTFY_TOPIC=your-private-topic
+GOLD_THRESHOLD_PCT=1.5
+SILVER_THRESHOLD_PCT=3.0
+CATALYST_ALERTS=true</div>
+              </div>
+            </li>
+            <li class="step-item">
+              <span class="step-num">3</span>
+              <div class="step-body">
+                <h3>Automatic Background Monitoring</h3>
+                <p>One workflow checks spot moves every 10 minutes; a second workflow refreshes world/metals news &amp; historical outlook every 2 hours.</p>
+              </div>
+            </li>
+          </ol>
+          <button type="button" class="btn btn-full" id="btn-copy-config" style="margin-top: 14px;">Copy Alert Config Snippet</button>
+          <div class="feedback-note" id="copy-feedback" role="status"></div>
+        </section>
+      </section>
+    </main>
+
+    <!-- Bottom Tab Navigation -->
+    <nav class="bottom-nav" aria-label="Primary navigation">
+      <button type="button" class="nav-btn active" data-view="markets" id="nav-markets" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+          <polyline points="16 7 22 7 22 13" />
+        </svg>
+        <span>Markets</span>
+      </button>
+      <button type="button" class="nav-btn" data-view="outlook" id="nav-outlook">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+        </svg>
+        <span>Outlook</span>
+      </button>
+      <button type="button" class="nav-btn" data-view="alerts" id="nav-alerts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        <span>Alerts</span>
+      </button>
+      <button type="button" class="nav-btn" data-view="setup" id="nav-setup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+          <line x1="12" y1="18" x2="12.01" y2="18" />
+        </svg>
+        <span>Setup</span>
+      </button>
+    </nav>
+  </div>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
