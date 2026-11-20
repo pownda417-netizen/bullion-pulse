@@ -2,8 +2,8 @@ name: Bullion Pulse — News & Macro Outlook Refresh
 
 on:
   schedule:
-    # Refresh news catalysts & historical macro outlook every 2 hours Mon–Fri
-    - cron: '15 */2 * * 1-5'
+    # Refresh news catalysts & historical macro outlook every 30 minutes (24/7)
+    - cron: '10,40 * * * *'
   workflow_dispatch:
 
 permissions:

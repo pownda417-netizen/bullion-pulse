@@ -3,6 +3,11 @@ name: Deploy Bullion Pulse PWA to GitHub Pages
 on:
   push:
     branches: ['main']
+  workflow_run:
+    workflows:
+      - 'Bullion Pulse — News & Macro Outlook Refresh'
+      - 'Daily Post-Close Self-Learning (5:10 PM ET)'
+    types: [completed]
   workflow_dispatch:
 
 permissions:

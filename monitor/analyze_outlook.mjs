@@ -15,7 +15,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildOutlook } from './historical_patterns.mjs';
+import { buildOutlook, projectHorizon } from './historical_patterns.mjs';
 import { parseGoldPriceOrg } from './check_metals.mjs';
 import { fetchShanghaiMetals } from './shanghai.mjs';
 import { fetchMetalMultiTimeframeCandles, splitCandlePayloads } from './candles.mjs';
@@ -86,6 +86,7 @@ const YAHOO_SYMBOLS = {
   slv: 'SLV',
   pslv: 'PSLV',
   copper: 'HG=F',
+  platinum: 'PL=F',
   usdjpy: 'JPY=X',
   nem: 'NEM',
   aem: 'AEM',
@@ -169,17 +170,27 @@ async function fetchYahooDailySeries(symbol) {
   if (!res.ok) throw new Error(`Yahoo ${symbol} HTTP ${res.status}`);
   const data = await res.json();
   const q = data?.chart?.result?.[0]?.indicators?.quote?.[0] || {};
+  const rawO = q.open || [];
+  const rawH = q.high || [];
+  const rawL = q.low || [];
   const rawC = q.close || [];
   const rawV = q.volume || [];
+  const opens = [];
+  const highs = [];
+  const lows = [];
   const closes = [];
   const volumes = [];
   for (let i = 0; i < rawC.length; i++) {
-    if (typeof rawC[i] === 'number' && Number.isFinite(rawC[i])) {
-      closes.push(rawC[i]);
+    const c = rawC[i];
+    if (typeof c === 'number' && Number.isFinite(c)) {
+      closes.push(c);
+      opens.push(typeof rawO[i] === 'number' && Number.isFinite(rawO[i]) ? rawO[i] : c);
+      highs.push(typeof rawH[i] === 'number' && Number.isFinite(rawH[i]) ? rawH[i] : c);
+      lows.push(typeof rawL[i] === 'number' && Number.isFinite(rawL[i]) ? rawL[i] : c);
       volumes.push(typeof rawV[i] === 'number' && Number.isFinite(rawV[i]) ? rawV[i] : 0);
     }
   }
-  return { closes, volumes };
+  return { opens, highs, lows, closes, volumes };
 }
 
 async function fetchMarketSeries() {
@@ -190,8 +201,13 @@ async function fetchMarketSeries() {
   const series = {};
   for (const r of settled) {
     if (r.status === 'fulfilled') {
-      const [key, { closes, volumes }] = r.value;
+      const [key, { opens, highs, lows, closes, volumes }] = r.value;
       series[key] = closes;
+      if (key === 'gold' || key === 'silver') {
+        series[`${key}Open`] = opens;
+        series[`${key}High`] = highs;
+        series[`${key}Low`] = lows;
+      }
       if (key === 'gld' || key === 'slv') {
         series[`${key}Volumes`] = volumes;
       }
@@ -220,18 +236,39 @@ async function fetchSpotBaseline(series) {
   };
 }
 
-/* ---------- Optional Gemini AI Narrative Upgrade ---------- */
+/* ---------- Optional Gemini AI Narrative & Structured Surprise Scoring ---------- */
+
+function signalLabelFromScore(score) {
+  if (score >= 45) return 'Strong Bullish';
+  if (score >= 16) return 'Bullish';
+  if (score <= -45) return 'Strong Bearish';
+  if (score <= -16) return 'Bearish';
+  return 'Neutral';
+}
 
 async function maybeEnhanceWithGemini(outlook, apiKey) {
   if (!apiKey) return outlook;
   try {
+    const cGold = outlook.comex?.gold;
+    const cSil = outlook.comex?.silver;
+    const sge = outlook.shanghai?.gold;
+    const ry = outlook.proSignals?.realYields;
+    const miners = outlook.proSignals?.miners;
+    const topMiners = (miners?.sectorLeaders || [])
+      .slice(0, 6)
+      .map((c) => `${c.symbol} ${c.pct1d >= 0 ? '+' : ''}${c.pct1d}%`)
+      .join(', ');
     const prompt =
-      `You are a concise precious metals macro analyst. Write a 2-sentence plain-English synthesis ` +
-      `(no hype, no guaranteed price claims) explaining the current Gold and Silver outlook based strictly on this data:\n` +
-      `Gold signal: ${outlook.gold.signal} (score ${outlook.gold.score}/100, 30d base ${outlook.gold.horizon30d.base})\n` +
-      `Silver signal: ${outlook.silver.signal} (score ${outlook.silver.score}/100, 30d base ${outlook.silver.horizon30d.base})\n` +
+      `You are a disciplined precious-metals desk strategist. Respond strictly as JSON with keys:\n` +
+      `{"narrative":"3 concise bullets (<75 words total, plain English, no hype or guarantees)","surpriseBiasGold":number(-0.25 to +0.25),"surpriseBiasSilver":number(-0.25 to +0.25),"catalystUrgency":number(0 to 1)}\n` +
+      `Base surpriseBias only on macro/headline surprises NOT yet priced into trailing closes (0 if balanced).\n\n` +
+      `Gold Spot $${outlook.gold.spot}: ${outlook.gold.signal} (score ${outlook.gold.score}/100, 7d base $${outlook.gold.horizon7d.base}, 30d base $${outlook.gold.horizon30d.base})\n` +
+      `Silver Spot $${outlook.silver.spot}: ${outlook.silver.signal} (score ${outlook.silver.score}/100, 7d base $${outlook.silver.horizon7d.base}, 30d base $${outlook.silver.horizon30d.base}, Au/Ag ratio ${outlook.goldSilverRatio}:1)\n` +
+      `COMEX Paper vs Registered: GC ${cGold?.paperToRegisteredRatio ?? '—'}:1 · SI ${cSil?.paperToRegisteredRatio ?? '—'}:1\n` +
+      `Shanghai SGE Au99.99 premium: ${sge?.premiumUsdOz >= 0 ? '+' : ''}$${sge?.premiumUsdOz ?? '—'}/oz · 10Y TIPS real yield: ${ry?.realYield10yPct ?? '—'}% (${ry?.realDelta5dBps ?? 0} bps 5d)\n` +
+      `Miners (${miners?.regime || 'Neutral'} · Au ${miners?.goldBreadthPct ?? '—'}% / Ag ${miners?.silverBreadthPct ?? '—'}% 5d breadth): ${topMiners || 'N/A'}\n` +
       `Active drivers: ${outlook.drivers.map((d) => `${d.shortLabel}: Au ${d.gold}, Ag ${d.silver}`).join('; ')}\n` +
-      `Top headlines: ${outlook.headlines.slice(0, 6).map((h) => h.title).join(' | ')}`;
+      `Headlines: ${outlook.headlines.slice(0, 8).map((h) => h.title).join(' | ')}`;
 
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
@@ -240,15 +277,65 @@ async function maybeEnhanceWithGemini(outlook, apiKey) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
         }),
       }
     );
     if (!res.ok) return outlook;
     const json = await res.json();
-    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (text) {
-      return { ...outlook, narrative: text, aiEnhanced: true };
+    const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!rawText) return outlook;
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      return { ...outlook, narrative: rawText, aiEnhanced: true };
     }
+
+    const nextNarrative =
+      typeof parsed.narrative === 'string' && parsed.narrative.trim()
+        ? parsed.narrative.trim()
+        : outlook.narrative;
+    const clampBias = (v) =>
+      Number.isFinite(Number(v)) ? Math.max(-0.25, Math.min(0.25, Number(v))) : 0;
+    const biasG = clampBias(parsed.surpriseBiasGold);
+    const biasS = clampBias(parsed.surpriseBiasSilver);
+    const coneMult = outlook.coneMultiplier || 1.0;
+    const gDailyVol = ((outlook.macroSnapshot?.goldVolAnnPct || 16.5) / 100) / Math.sqrt(252);
+    const sDailyVol = ((outlook.macroSnapshot?.silverVolAnnPct || 29.5) / 100) / Math.sqrt(252);
+
+    const adjUnitG = Math.max(-1, Math.min(1, outlook.gold.score / 100 + biasG * 0.45));
+    const adjUnitS = Math.max(-1, Math.min(1, outlook.silver.score / 100 + biasS * 0.45));
+    const nextScoreG = Math.round(adjUnitG * 100);
+    const nextScoreS = Math.round(adjUnitS * 100);
+
+    return {
+      ...outlook,
+      narrative: nextNarrative,
+      aiEnhanced: true,
+      aiSurprise: {
+        goldBias: +biasG.toFixed(3),
+        silverBias: +biasS.toFixed(3),
+        urgency: Number.isFinite(Number(parsed.catalystUrgency))
+          ? +Math.max(0, Math.min(1, Number(parsed.catalystUrgency))).toFixed(2)
+          : 0,
+      },
+      gold: {
+        ...outlook.gold,
+        score: nextScoreG,
+        signal: signalLabelFromScore(nextScoreG),
+        horizon7d: projectHorizon(outlook.gold.spot, gDailyVol, adjUnitG, 5, coneMult),
+        horizon30d: projectHorizon(outlook.gold.spot, gDailyVol, adjUnitG, 21, coneMult),
+      },
+      silver: {
+        ...outlook.silver,
+        score: nextScoreS,
+        signal: signalLabelFromScore(nextScoreS),
+        horizon7d: projectHorizon(outlook.silver.spot, sDailyVol, adjUnitS, 5, coneMult),
+        horizon30d: projectHorizon(outlook.silver.spot, sDailyVol, adjUnitS, 21, coneMult),
+      },
+    };
   } catch (err) {
     console.warn(`Optional Gemini synthesis skipped: ${err.message}`);
   }

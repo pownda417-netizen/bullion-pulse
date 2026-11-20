@@ -219,6 +219,7 @@ export function computeMinersConfirmation(series = {}) {
     if (!Array.isArray(arr) || arr.length < 2) continue;
     const pct1d = pctReturnOver(arr, 1);
     const pct5d = pctReturnOver(arr, 5);
+    const win = arr.slice(-14).map((v) => +v.toFixed(2));
     sectorLeaders.push({
       symbol: co.symbol,
       name: co.name,
@@ -226,6 +227,9 @@ export function computeMinersConfirmation(series = {}) {
       last: +arr[arr.length - 1].toFixed(2),
       pct1d: pct1d ?? 0,
       pct5d: pct5d ?? 0,
+      high14: +Math.max(...win).toFixed(2),
+      low14: +Math.min(...win).toFixed(2),
+      spark: win,
     });
   }
 

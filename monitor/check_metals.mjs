@@ -106,10 +106,16 @@ export function evaluateMetalAlert({
   escalationStepPct = 1.0,
   prevAlert = null,
   dayKey,
+  requireConfirmation = false,
+  pendingAlert = null,
 }) {
   const absPct = Math.abs(quote.pct);
   if (absPct < thresholdPct) {
-    return { shouldAlert: false, reason: 'below_threshold' };
+    return {
+      shouldAlert: false,
+      reason: 'below_threshold',
+      nextPending: pendingAlert ? null : undefined,
+    };
   }
 
   const dir = quote.pct >= 0 ? 'up' : 'down';
@@ -132,7 +138,20 @@ export function evaluateMetalAlert({
       dir,
       absPct,
       nextState: { day: dayKey, dir, absPct },
+      nextPending: null,
     };
+  }
+
+  // Optional 2-check confirmation filters out brief single-tick stop-hunt wicks
+  const isExtremeSpike = absPct >= thresholdPct * 1.65;
+  if (requireConfirmation && !isExtremeSpike) {
+    if (!pendingAlert || pendingAlert.day !== dayKey || pendingAlert.dir !== dir) {
+      return {
+        shouldAlert: false,
+        reason: 'pending_confirmation',
+        nextPending: { day: dayKey, dir, hits: 1 },
+      };
+    }
   }
 
   return {
@@ -141,6 +160,7 @@ export function evaluateMetalAlert({
     dir,
     absPct,
     nextState: { day: dayKey, dir, absPct },
+    nextPending: null,
   };
 }
 
@@ -246,6 +266,40 @@ export function formatShanghaiNtfyPayload({
   return payload;
 }
 
+export function evaluatePriceTargets({
+  goldPrice,
+  silverPrice,
+  ratio,
+  targets = {},
+  prevTargetsState = {},
+  dayKey,
+}) {
+  const rules = [
+    { id: 'goldAbove', label: 'Gold (XAU)', symbol: 'XAU', val: goldPrice, target: Number(targets.goldAbove), op: 'gte', fmt: (v) => `$${v.toFixed(2)}/oz`, dir: 'up' },
+    { id: 'goldBelow', label: 'Gold (XAU)', symbol: 'XAU', val: goldPrice, target: Number(targets.goldBelow), op: 'lte', fmt: (v) => `$${v.toFixed(2)}/oz`, dir: 'down' },
+    { id: 'silverAbove', label: 'Silver (XAG)', symbol: 'XAG', val: silverPrice, target: Number(targets.silverAbove), op: 'gte', fmt: (v) => `$${v.toFixed(2)}/oz`, dir: 'up' },
+    { id: 'silverBelow', label: 'Silver (XAG)', symbol: 'XAG', val: silverPrice, target: Number(targets.silverBelow), op: 'lte', fmt: (v) => `$${v.toFixed(2)}/oz`, dir: 'down' },
+    { id: 'ratioAbove', label: 'Au/Ag Ratio', symbol: 'AU/AG', val: ratio, target: Number(targets.ratioAbove), op: 'gte', fmt: (v) => `${v.toFixed(1)}:1`, dir: 'up' },
+  ];
+  const triggered = [];
+  const nextState = { ...(prevTargetsState || {}) };
+  for (const r of rules) {
+    if (!Number.isFinite(r.target) || r.target <= 0 || !Number.isFinite(r.val)) continue;
+    const hit = r.op === 'gte' ? r.val >= r.target : r.val <= r.target;
+    if (!hit) continue;
+    if (nextState[r.id] === dayKey) continue;
+    nextState[r.id] = dayKey;
+    triggered.push({
+      id: r.id,
+      symbol: r.symbol,
+      dir: r.dir,
+      title: `${r.label} Target Hit (${r.op === 'gte' ? '≥' : '≤'} ${r.fmt(r.target)})`,
+      message: `${r.label} reached ${r.fmt(r.val)} (your target rule: ${r.op === 'gte' ? '≥' : '≤'} ${r.fmt(r.target)}).`,
+    });
+  }
+  return { triggered, nextState };
+}
+
 /* ---------- State & Publishing ---------- */
 
 async function readState(statePath) {
@@ -295,6 +349,7 @@ async function main() {
   const shanghaiPremThreshold = parseFloat(process.env.SHANGHAI_PREMIUM_THRESHOLD_USD || '35');
   const directionRule = (process.env.ALERT_DIRECTION || 'both').trim().toLowerCase();
   const escalationStep = parseFloat(process.env.ESCALATION_STEP_PCT || '1.0');
+  const requireConfirmation = (process.env.CONFIRM_MOVES || '').trim().toLowerCase() === 'true';
   const appUrl = (process.env.APP_URL || '').trim();
   const statePath = process.env.STATE_FILE || path.resolve('monitor/state.json');
 
@@ -358,6 +413,7 @@ async function main() {
   }
 
   const alertState = await readState(statePath);
+  if (!alertState.pending) alertState.pending = {};
   const checks = [
     { key: 'XAU', quote: market.gold, threshold: goldThreshold },
     { key: 'XAG', quote: market.silver, threshold: silverThreshold },
@@ -372,7 +428,15 @@ async function main() {
       escalationStepPct: escalationStep,
       prevAlert: alertState[key],
       dayKey,
+      requireConfirmation,
+      pendingAlert: alertState.pending[key] || null,
     });
+
+    if (!dryRun && evaluation.nextPending !== undefined) {
+      if (evaluation.nextPending) alertState.pending[key] = evaluation.nextPending;
+      else delete alertState.pending[key];
+      stateChanged = true;
+    }
 
     if (!evaluation.shouldAlert) {
       console.log(`  ${key}: no alert (${evaluation.reason})`);
@@ -395,6 +459,7 @@ async function main() {
       await sendNtfy(ntfyServer, payload, ntfyToken);
       console.log(`  ${key}: alert sent (${evaluation.kind}) -> ${payload.title}`);
       alertState[key] = evaluation.nextState;
+      delete alertState.pending[key];
       stateChanged = true;
     }
   }
@@ -428,6 +493,40 @@ async function main() {
         alertState.SGE_AU_PREM = sgeEval.nextState;
         stateChanged = true;
       }
+    }
+  }
+
+  // Evaluate Custom Absolute USD & Ratio Price Targets
+  const tgtEval = evaluatePriceTargets({
+    goldPrice: market.gold.price,
+    silverPrice: market.silver.price,
+    ratio,
+    targets: {
+      goldAbove: process.env.GOLD_ABOVE_USD,
+      goldBelow: process.env.GOLD_BELOW_USD,
+      silverAbove: process.env.SILVER_ABOVE_USD,
+      silverBelow: process.env.SILVER_BELOW_USD,
+      ratioAbove: process.env.RATIO_ABOVE,
+    },
+    prevTargetsState: alertState.TARGETS || {},
+    dayKey,
+  });
+  for (const hit of tgtEval.triggered) {
+    const payload = {
+      topic: ntfyTopic || 'dry-run-topic',
+      title: hit.title,
+      message: `${hit.message}\nAu: $${market.gold.price.toFixed(2)} · Ag: $${market.silver.price.toFixed(2)} · Ratio: ${ratio.toFixed(1)}:1`,
+      priority: 4,
+      tags: hit.dir === 'up' ? ['dart', 'coin'] : ['warning', 'coin'],
+      ...(appUrl ? { click: appUrl } : {}),
+    };
+    if (dryRun) {
+      console.log(`  TARGET (${hit.id}): DRY RUN ->`, JSON.stringify(payload));
+    } else {
+      await sendNtfy(ntfyServer, payload, ntfyToken);
+      console.log(`  TARGET (${hit.id}): alert sent -> ${payload.title}`);
+      alertState.TARGETS = tgtEval.nextState;
+      stateChanged = true;
     }
   }
 

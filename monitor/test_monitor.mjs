@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   evaluateMetalAlert,
+  evaluatePriceTargets,
   evaluateShanghaiPremiumAlert,
   formatNtfyPayload,
   formatShanghaiNtfyPayload,
@@ -240,4 +241,67 @@ const fullBytes = JSON.stringify(seededAll).length;
 const intradayBytes = JSON.stringify(intraday1d).length;
 assert.ok(intradayBytes < fullBytes * 0.25, `1D payload (${intradayBytes}B) should be >75% smaller than full (${fullBytes}B)`);
 
-console.log('All 13 Bullion Pulse monitor, Shanghai alert, split-payload & multi-timeframe candle tests passed!');
+// 14. Custom absolute USD & Au/Ag ratio target price alerts + same-day deduplication
+const tgt1 = evaluatePriceTargets({
+  goldPrice: 3655,
+  silverPrice: 39.8,
+  ratio: 91.8,
+  targets: { goldAbove: 3650, silverBelow: 40, ratioAbove: 85 },
+  prevTargetsState: {},
+  dayKey: '2026-11-20',
+});
+assert.equal(tgt1.triggered.length, 3);
+assert.ok(tgt1.triggered.some((t) => t.id === 'goldAbove'));
+assert.ok(tgt1.triggered.some((t) => t.id === 'silverBelow'));
+assert.ok(tgt1.triggered.some((t) => t.id === 'ratioAbove'));
+const tgtDup = evaluatePriceTargets({
+  goldPrice: 3660,
+  silverPrice: 39.5,
+  ratio: 92.6,
+  targets: { goldAbove: 3650, silverBelow: 40, ratioAbove: 85 },
+  prevTargetsState: tgt1.nextState,
+  dayKey: '2026-11-20',
+});
+assert.equal(tgtDup.triggered.length, 0, 'Same-day duplicate targets must deduplicate');
+
+// 15. Sustained anti-wick confirmation filter (requires 2 consecutive hits unless >=1.65x threshold)
+const firstWick = evaluateMetalAlert({
+  quote: { pct: 1.75 },
+  thresholdPct: 1.5,
+  directionRule: 'both',
+  escalationStepPct: 1.0,
+  prevAlert: null,
+  dayKey: '2026-11-20',
+  requireConfirmation: true,
+  pendingAlert: null,
+});
+assert.equal(firstWick.shouldAlert, false);
+assert.equal(firstWick.reason, 'pending_confirmation');
+assert.ok(firstWick.nextPending && firstWick.nextPending.dir === 'up');
+
+const confirmedSecond = evaluateMetalAlert({
+  quote: { pct: 1.82 },
+  thresholdPct: 1.5,
+  directionRule: 'both',
+  escalationStepPct: 1.0,
+  prevAlert: null,
+  dayKey: '2026-11-20',
+  requireConfirmation: true,
+  pendingAlert: firstWick.nextPending,
+});
+assert.equal(confirmedSecond.shouldAlert, true);
+assert.equal(confirmedSecond.kind, 'initial');
+
+const extremeInstant = evaluateMetalAlert({
+  quote: { pct: -2.8 },
+  thresholdPct: 1.5,
+  directionRule: 'both',
+  escalationStepPct: 1.0,
+  prevAlert: null,
+  dayKey: '2026-11-20',
+  requireConfirmation: true,
+  pendingAlert: null,
+});
+assert.equal(extremeInstant.shouldAlert, true, 'Extreme spike >=1.65x threshold fires immediately');
+
+console.log('All 15 Bullion Pulse monitor, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');

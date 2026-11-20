@@ -26,6 +26,7 @@ import {
   buildBaselineComexSnapshot,
   computeComexSignal,
   parseCftcOpenInterest,
+  parseCmeStocksBuffer,
   parseVaultHtml,
 } from './comex.mjs';
 import {
@@ -559,10 +560,21 @@ const sectorMinersSig = computeMinersConfirmation({
   cde: [21.1, 20.9, 20.7, 20.5, 20.3, 20.1, 19.9, 19.8, 19.6, 19.4, 19.22],
 });
 assert.equal(sectorMinersSig.sectorLeaders.length, 9);
+assert.ok(Array.isArray(sectorMinersSig.sectorLeaders[0].spark) && sectorMinersSig.sectorLeaders[0].spark.length === 11);
+assert.ok(sectorMinersSig.sectorLeaders[0].high14 >= sectorMinersSig.sectorLeaders[0].low14);
 assert.equal(sectorMinersSig.goldBreadthPct, 0);
 assert.equal(sectorMinersSig.silverBreadthPct, 0);
 assert.ok(sectorMinersSig.goldSignal < -0.15 && sectorMinersSig.silverSignal < -0.15);
 assert.equal(sectorMinersSig.regime, 'Miners Lagging (Pressure)');
+
+const quantMacro = computeQuantSignals({
+  gold: [3600, 3590, 3580, 3570, 3560, 3542.81],
+  silver: [43.5, 43.2, 43.0, 42.7, 42.5, 42.22],
+  copper: [5.3, 5.35, 5.4, 5.5, 5.55, 5.62],
+  platinum: [940, 945, 950, 952, 956, 960],
+});
+assert.equal(quantMacro.macroSnapshot.copper, 5.62);
+assert.equal(quantMacro.macroSnapshot.platinum, 960);
 
 const strikeCls = classifyHeadline({ title: 'First Majestic Silver Q3 output drops 41% on San Dimas labor strike' });
 assert.ok(strikeCls && strikeCls.driver === 'mining_supply' && strikeCls.silverImpact > 0);
@@ -571,4 +583,52 @@ assert.ok(aiscCls && aiscCls.driver === 'mining_supply' && aiscCls.goldImpact > 
 const rampCls = classifyHeadline({ title: 'Barrick Mining Loulo-Gounkoto ramps up 16% QoQ ahead of American Barrick IPO' });
 assert.ok(rampCls && rampCls.driver === 'mining_supply' && rampCls.goldImpact < 0);
 
-console.log('All 17 Bullion Pulse suites (Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');
+// 18. CME Official Vault Parser, Exact BLS CPI Schedule, OHLC GK+EWMA Volatility, RSI(14) & Backtest Skill Score
+const fakeCmeBuf = Buffer.from(
+  'DEPOSITORY SUMMARY\nTOTAL REGISTERED   14,175,200\nTOTAL ELIGIBLE    8,892,400\nCOMBINED TOTAL   23,067,600',
+  'latin1'
+);
+const parsedCmeGold = parseCmeStocksBuffer(fakeCmeBuf, 'gold');
+assert.ok(parsedCmeGold && parsedCmeGold.registeredOz === 14175200 && parsedCmeGold.eligibleOz === 8892400);
+assert.equal(parsedCmeGold.vaultSource, 'CME Official Daily Stocks');
+
+const evDec05 = getUpcomingEventRisk(new Date('2026-12-05T12:00:00Z'));
+const decCpi = evDec05.upcoming.find((e) => e.type === 'cpi' && e.date.startsWith('2026-12'));
+assert.ok(decCpi && decCpi.date === '2026-12-10', 'Verified Dec 2026 CPI must match BLS Dec 10 release date');
+
+const n35 = Array.from({ length: 35 }, (_, i) => 4000 - i * 28);
+const qRsi = computeQuantSignals({
+  gold: n35,
+  goldOpen: n35.map((c) => c + 12),
+  goldHigh: n35.map((c) => c + 24),
+  goldLow: n35.map((c) => c - 18),
+  silver: n35.map((c) => c / 80),
+});
+assert.ok(qRsi.goldRsi14 != null && qRsi.goldRsi14 < 20, `Monotonic drop must trigger oversold RSI <20, got ${qRsi.goldRsi14}`);
+assert.ok(qRsi.macroSnapshot.goldRsi14 === qRsi.goldRsi14 && qRsi.goldDailyVol >= 0.0055);
+
+const calmCloses = Array.from({ length: 30 }, (_, i) => 3500 + (i % 2 === 0 ? 12 : -12));
+const qCloseOnly = computeQuantSignals({ gold: calmCloses, silver: calmCloses.map((c) => c / 80) });
+const qWideOhlc = computeQuantSignals({
+  gold: calmCloses,
+  goldOpen: calmCloses,
+  goldHigh: calmCloses.map((c) => c + 95),
+  goldLow: calmCloses.map((c) => c - 95),
+  silver: calmCloses.map((c) => c / 80),
+});
+assert.ok(qWideOhlc.goldDailyVol > qCloseOnly.goldDailyVol, 'Garman-Klass intraday OHLC range must raise volatility estimate over calm closes');
+
+const btSkill = runWalkForwardBacktest({
+  gold: Array.from({ length: 45 }, (_, i) => 3500 + Math.sin(i / 4) * 90 + i * 2),
+  silver: Array.from({ length: 45 }, (_, i) => 42 + Math.sin(i / 4) * 1.4 + i * 0.04),
+  dxy: Array.from({ length: 45 }, (_, i) => 104 - Math.sin(i / 4) * 0.8),
+  tnx: Array.from({ length: 45 }, (_, i) => 4.4 - Math.sin(i / 5) * 0.12),
+  gdx: Array.from({ length: 45 }, (_, i) => 70 + Math.sin(i / 4) * 3.1 + i * 0.08),
+  sil: Array.from({ length: 45 }, (_, i) => 48 + Math.sin(i / 4) * 2.2 + i * 0.06),
+  copper: Array.from({ length: 45 }, (_, i) => 5.5 + Math.sin(i / 4) * 0.2),
+  gvz: Array.from({ length: 45 }, () => 19.5),
+});
+assert.ok(btSkill.gold && Number.isFinite(btSkill.gold.pinballSkillPct));
+assert.ok(btSkill.silver && Number.isFinite(btSkill.silver.pinballSkillPct));
+
+console.log('All 18 Bullion Pulse suites (CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');

@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=14" />
+  <link rel="stylesheet" href="./styles.css?v=17" />
 </head>
 <body>
   <div class="app-shell">
@@ -33,6 +33,37 @@
           </div>
         </div>
       </div>
+
+      <nav class="top-nav" aria-label="Primary navigation">
+        <a href="#markets" class="nav-btn active" data-view="markets" id="top-nav-markets" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+            <polyline points="16 7 22 7 22 13" />
+          </svg>
+          <span>Markets</span>
+        </a>
+        <a href="#outlook" class="nav-btn" data-view="outlook" id="top-nav-outlook">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+          </svg>
+          <span>Outlook</span>
+        </a>
+        <a href="#alerts" class="nav-btn" data-view="alerts" id="top-nav-alerts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          <span>Alerts</span>
+        </a>
+        <a href="#setup" class="nav-btn" data-view="setup" id="top-nav-setup">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+            <line x1="12" y1="18" x2="12.01" y2="18" />
+          </svg>
+          <span>Setup</span>
+        </a>
+      </nav>
 
       <div class="header-actions">
         <button type="button" class="icon-btn" id="btn-refresh" aria-label="Refresh spot prices" title="Refresh spot prices">
@@ -64,6 +95,30 @@
 
       <!-- VIEW 1: MARKETS -->
       <section class="view-panel active" id="view-markets" aria-label="Spot metal markets">
+        <!-- Cross-Market Live Macro Ticker Strip -->
+        <section class="macro-strip" id="macro-ticker-strip" aria-label="Live macro drivers">
+          <div class="macro-tile">
+            <span class="macro-k">DXY Dollar</span>
+            <strong class="macro-v" id="macro-dxy">—</strong>
+            <span class="macro-d" id="macro-dxy-chg">—</span>
+          </div>
+          <div class="macro-tile">
+            <span class="macro-k">10Y Yield</span>
+            <strong class="macro-v" id="macro-tnx">—</strong>
+            <span class="macro-d" id="macro-tnx-chg">—</span>
+          </div>
+          <div class="macro-tile">
+            <span class="macro-k">Copper (HG)</span>
+            <strong class="macro-v" id="macro-copper">—</strong>
+            <span class="macro-d" id="macro-copper-chg">—</span>
+          </div>
+          <div class="macro-tile">
+            <span class="macro-k">Platinum (XPT)</span>
+            <strong class="macro-v" id="macro-platinum">—</strong>
+            <span class="macro-d" id="macro-platinum-chg">—</span>
+          </div>
+        </section>
+
         <div class="toolbar-row">
           <span class="section-label">Spot USD Markets</span>
           <div class="segmented" role="group" aria-label="Weight unit">
@@ -140,9 +195,12 @@
             <div class="chart-controls">
               <button type="button" id="btn-toggle-forecast" class="chip-toggle active" aria-pressed="true">Forecast</button>
               <button type="button" id="btn-toggle-fib" class="chip-toggle chip-fib" aria-pressed="false" title="Toggle Fibonacci retracement levels">Fib</button>
+              <button type="button" id="btn-toggle-sma" class="chip-toggle chip-sma" aria-pressed="false" title="Toggle 20/50 Simple Moving Averages">SMA</button>
+              <button type="button" id="btn-toggle-rsi" class="chip-toggle chip-rsi" aria-pressed="false" title="Toggle RSI(14) momentum oscillator">RSI</button>
               <div class="segmented" role="group" aria-label="Chart metal selector">
                 <button type="button" id="chart-btn-gold" class="active">XAU</button>
                 <button type="button" id="chart-btn-silver">XAG</button>
+                <button type="button" id="chart-btn-ratio" title="Gold / Silver Ratio Chart">RATIO</button>
               </div>
             </div>
           </div>
@@ -162,6 +220,17 @@
           </div>
           <div class="chart-wrap chart-wrap-tall">
             <canvas id="intraday-chart" aria-label="Multi-timeframe OHLC candlestick chart with P10 to P90 prediction cone"></canvas>
+            <canvas id="chart-crosshair-overlay" aria-hidden="true"></canvas>
+            <div class="chart-tooltip" id="chart-tooltip" hidden></div>
+          </div>
+          <div class="rsi-pane-wrap" id="rsi-pane-wrap" hidden>
+            <div class="rsi-pane-head">
+              <span>RSI (14)</span>
+              <span class="rsi-val-pill" id="rsi-value-pill">—</span>
+            </div>
+            <div class="rsi-canvas-box">
+              <canvas id="rsi-chart" aria-label="RSI 14 momentum oscillator"></canvas>
+            </div>
           </div>
           <div class="chart-legend">
             <span><i class="dot-up"></i> Up</span>
@@ -170,6 +239,7 @@
             <span><i class="line-base"></i> P50 Base</span>
             <span><i class="line-bear"></i> P10 Bear</span>
             <span id="legend-fib" hidden><i class="line-fib"></i> Fib</span>
+            <span id="legend-sma" hidden><i class="line-sma20"></i> SMA 20 · <i class="line-sma50"></i> SMA 50</span>
           </div>
         </section>
 
@@ -224,6 +294,60 @@
           <div class="sge-bench-row" id="sge-benchmarks">
             SHAU &amp; SHAG benchmarks load automatically from SGE.
           </div>
+        </section>
+
+        <!-- 100% Private Local Physical Bullion Stack Tracker -->
+        <section class="panel" id="panel-stack" aria-label="Private physical gold and silver stack tracker">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">My Bullion Stack</h2>
+              <div class="panel-subtitle">Private valuation &amp; daily P&amp;L (oz · cost basis)</div>
+            </div>
+            <div class="stack-actions">
+              <button type="button" class="chip-toggle" id="btn-export-backup" title="Export Stack & Settings Backup JSON">Export</button>
+              <button type="button" class="chip-toggle" id="btn-import-backup" title="Import Stack & Settings Backup JSON">Import</button>
+              <input type="file" id="input-import-backup" accept="application/json" hidden />
+              <span class="signal-pill bullish">Stored Locally</span>
+            </div>
+          </div>
+
+          <div class="stack-inputs-grid">
+            <label class="stack-field">
+              <span>Gold Owned (troy oz)</span>
+              <input type="number" id="input-stack-gold-oz" class="text-input stack-input" min="0" step="0.01" placeholder="e.g. 2.5" />
+            </label>
+            <label class="stack-field">
+              <span>Gold Avg Cost ($/oz)</span>
+              <input type="number" id="input-stack-gold-cost" class="text-input stack-input" min="0" step="1" placeholder="e.g. 2450" />
+            </label>
+            <label class="stack-field">
+              <span>Silver Owned (troy oz)</span>
+              <input type="number" id="input-stack-silver-oz" class="text-input stack-input" min="0" step="0.1" placeholder="e.g. 150" />
+            </label>
+            <label class="stack-field">
+              <span>Silver Avg Cost ($/oz)</span>
+              <input type="number" id="input-stack-silver-cost" class="text-input stack-input" min="0" step="0.01" placeholder="e.g. 28.50" />
+            </label>
+          </div>
+
+          <div class="stack-readout-grid" id="stack-readout">
+            <div class="stack-stat">
+              <span class="stack-stat-k">Total Melt Value</span>
+              <strong class="stack-stat-v" id="stack-total-val">$0.00</strong>
+              <span class="stack-stat-s" id="stack-day-chg">Enter oz above to track live</span>
+            </div>
+            <div class="stack-stat">
+              <span class="stack-stat-k">Unrealized P&amp;L</span>
+              <strong class="stack-stat-v" id="stack-pnl-val">—</strong>
+              <span class="stack-stat-s" id="stack-pnl-pct">Cost basis vs spot</span>
+            </div>
+            <div class="stack-stat">
+              <span class="stack-stat-k">Allocation &amp; SGE Value</span>
+              <strong class="stack-stat-v" id="stack-split-val">—</strong>
+              <span class="stack-stat-s" id="stack-sge-val">Shanghai physical est.</span>
+            </div>
+          </div>
+          <div class="stack-scenario-strip" id="stack-scenario-strip" hidden></div>
         </section>
       </section>
 
@@ -320,11 +444,12 @@
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Sector Bellwethers (9 Miners)</h2>
-              <div class="panel-subtitle" id="sector-subtitle">Producers &amp; streamers · Feeds mining &amp; breadth signal</div>
+              <div class="panel-subtitle" id="sector-subtitle">Tap any company for 14d chart &amp; catalysts</div>
             </div>
             <span class="signal-pill" id="sector-regime-badge">Mixed</span>
           </div>
           <div class="sector-grid" id="sector-leaders-grid"></div>
+          <div class="sector-detail-drawer" id="sector-detail-drawer" hidden></div>
         </section>
 
         <!-- COMEX Paper Gold & Paper Silver Contracts vs. Registered Vaults -->
@@ -540,6 +665,7 @@
             <span class="signal-pill bullish" id="sl-status-badge">Active · 5 cycles</span>
           </div>
           <div class="sl-meta-grid" id="sl-summary-strip"></div>
+          <div class="sl-replay-wrap" id="sl-replay-wrap" hidden></div>
           <div class="driver-list" id="accuracy-breakdown"></div>
         </section>
 
@@ -599,6 +725,43 @@
               <option value="down">Drops down only (−)</option>
             </select>
           </div>
+
+          <label class="confirm-toggle-row" for="chk-confirm-moves">
+            <input type="checkbox" id="chk-confirm-moves" />
+            <div>
+              <strong>Sustained Move Confirmation (Anti-Wick Filter)</strong>
+              <span>Requires 2 consecutive live checks above % rule before pushing (extreme ≥1.65× spikes &amp; USD targets still fire immediately).</span>
+            </div>
+          </label>
+
+          <div class="target-alerts-section">
+            <div class="control-top">
+              <span class="control-label">Custom Target Price Alerts (Optional)</span>
+            </div>
+            <div class="target-grid">
+              <label>
+                <span>Gold Above (≥ $)</span>
+                <input type="number" id="input-target-gold-above" class="text-input" min="0" step="10" placeholder="e.g. 3650" />
+              </label>
+              <label>
+                <span>Gold Below (≤ $)</span>
+                <input type="number" id="input-target-gold-below" class="text-input" min="0" step="10" placeholder="e.g. 3450" />
+              </label>
+              <label>
+                <span>Silver Above (≥ $)</span>
+                <input type="number" id="input-target-silver-above" class="text-input" min="0" step="0.5" placeholder="e.g. 45.00" />
+              </label>
+              <label>
+                <span>Silver Below (≤ $)</span>
+                <input type="number" id="input-target-silver-below" class="text-input" min="0" step="0.5" placeholder="e.g. 40.00" />
+              </label>
+              <label>
+                <span>Au / Ag Ratio Above (≥)</span>
+                <input type="number" id="input-target-ratio-above" class="text-input" min="0" step="1" placeholder="e.g. 85" />
+              </label>
+            </div>
+            <div class="control-hint">Triggers banner, Browser Alert &amp; ntfy push once per day when live spot hits target.</div>
+          </div>
         </section>
 
         <section class="panel">
@@ -617,6 +780,7 @@
               <button type="button" class="btn" id="btn-simulate-move">Simulate Move</button>
             </div>
             <button type="button" class="btn btn-full" id="btn-simulate-sge" style="margin-top: 8px;">Simulate Shanghai Premium Spike (+$42/oz)</button>
+            <button type="button" class="btn btn-full" id="btn-enable-web-notif" style="margin-top: 8px;">Enable Browser Notifications</button>
             <div class="feedback-note" id="ntfy-feedback" role="status"></div>
           </div>
         </section>
@@ -730,6 +894,6 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=14" defer></script>
+  <script src="./app.js?v=17" defer></script>
 </body>
 </html>

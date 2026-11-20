@@ -600,6 +600,77 @@ function movingAverage(closes, period) {
   return slice.reduce((s, v) => s + v, 0) / slice.length;
 }
 
+function ewmaVolatility(closes, lambda = 0.94) {
+  const rets = dailyReturns(closes.slice(-45));
+  if (rets.length < 4) return null;
+  let variance = rets[0] * rets[0];
+  for (let i = 1; i < rets.length; i++) {
+    variance = lambda * variance + (1 - lambda) * (rets[i] * rets[i]);
+  }
+  return Math.sqrt(Math.max(0, variance));
+}
+
+function garmanKlassVol(opens = [], highs = [], lows = [], closes = []) {
+  const n = Math.min(opens.length, highs.length, lows.length, closes.length);
+  if (n < 8) return null;
+  const start = Math.max(0, n - 21);
+  let sum = 0;
+  let used = 0;
+  const c2 = 2 * Math.LN2 - 1;
+  for (let i = start; i < n; i++) {
+    const o = opens[i];
+    const h = highs[i];
+    const l = lows[i];
+    const c = closes[i];
+    if (!(o > 0 && h >= l && l > 0 && c > 0)) continue;
+    const hl = Math.log(h / l);
+    const co = Math.log(c / o);
+    sum += 0.5 * hl * hl - c2 * co * co;
+    used++;
+  }
+  return used >= 5 ? Math.sqrt(Math.max(0, sum / used)) : null;
+}
+
+function computeRsi14(closes, period = 14) {
+  if (!Array.isArray(closes) || closes.length <= period) return null;
+  const rets = [];
+  for (let i = 1; i < closes.length; i++) {
+    rets.push(closes[i] - closes[i - 1]);
+  }
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 0; i < period; i++) {
+    if (rets[i] >= 0) avgGain += rets[i];
+    else avgLoss += Math.abs(rets[i]);
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  for (let i = period; i < rets.length; i++) {
+    const g = rets[i] >= 0 ? rets[i] : 0;
+    const l = rets[i] < 0 ? Math.abs(rets[i]) : 0;
+    avgGain = (avgGain * (period - 1) + g) / period;
+    avgLoss = (avgLoss * (period - 1) + l) / period;
+  }
+  if (avgLoss === 0) return avgGain === 0 ? 50 : 98;
+  const rs = avgGain / avgLoss;
+  return +(100 - 100 / (1 + rs)).toFixed(1);
+}
+
+function dampenTrendByRsi(rawTrend, rsi) {
+  if (rsi == null) return rawTrend;
+  if (rsi <= 22 && rawTrend < 0) {
+    const scale = clamp((rsi - 10) / 14, 0.35, 1);
+    const reboundNudge = clamp((24 - rsi) / 55, 0, 0.22);
+    return clamp(rawTrend * scale + reboundNudge, -1, 1);
+  }
+  if (rsi >= 78 && rawTrend > 0) {
+    const scale = clamp((90 - rsi) / 14, 0.35, 1);
+    const pullbackNudge = clamp((rsi - 76) / 55, 0, 0.22);
+    return clamp(rawTrend * scale - pullbackNudge, -1, 1);
+  }
+  return rawTrend;
+}
+
 export function computeQuantSignals(series = {}) {
   const goldCloses = series.gold || [];
   const silverCloses = series.silver || [];
@@ -611,22 +682,47 @@ export function computeQuantSignals(series = {}) {
   const goldRet = dailyReturns(goldCloses.slice(-30));
   const silverRet = dailyReturns(silverCloses.slice(-30));
 
+  const goldStd = stdDev(goldRet);
+  const goldEwma = ewmaVolatility(goldCloses);
+  const goldGk = garmanKlassVol(series.goldOpen, series.goldHigh, series.goldLow, goldCloses);
+  const goldBlendVol =
+    goldGk && goldStd && goldEwma
+      ? 0.40 * goldStd + 0.35 * goldEwma + 0.25 * goldGk
+      : goldEwma && goldStd
+        ? 0.55 * goldStd + 0.45 * goldEwma
+        : goldStd;
+
+  const silverStd = stdDev(silverRet);
+  const silverEwma = ewmaVolatility(silverCloses);
+  const silverGk = garmanKlassVol(series.silverOpen, series.silverHigh, series.silverLow, silverCloses);
+  const silverBlendVol =
+    silverGk && silverStd && silverEwma
+      ? 0.40 * silverStd + 0.35 * silverEwma + 0.25 * silverGk
+      : silverEwma && silverStd
+        ? 0.55 * silverStd + 0.45 * silverEwma
+        : silverStd;
+
   // Fallback daily volatilities if historical data is thin (typical long-run σ: ~0.95% gold, ~1.85% silver)
-  const goldDailyVol = clamp(stdDev(goldRet) || 0.0095, 0.0055, 0.025);
-  const silverDailyVol = clamp(stdDev(silverRet) || 0.0185, 0.010, 0.045);
+  const goldDailyVol = clamp(goldBlendVol || 0.0095, 0.0055, 0.028);
+  const silverDailyVol = clamp(silverBlendVol || 0.0185, 0.010, 0.048);
 
   const goldLast = goldCloses[goldCloses.length - 1] ?? 2685;
   const silverLast = silverCloses[silverCloses.length - 1] ?? 31.5;
   const ratio = silverLast > 0 ? goldLast / silverLast : 85;
 
-  // Trend: price vs 20d & 50d moving averages
+  const goldRsi14 = computeRsi14(goldCloses);
+  const silverRsi14 = computeRsi14(silverCloses);
+
+  // Trend: price vs 20d & 50d moving averages (damped at extreme RSI exhaustion readings)
   const goldSma20 = movingAverage(goldCloses, 20) ?? goldLast;
   const goldSma50 = movingAverage(goldCloses, 50) ?? goldLast;
   const silverSma20 = movingAverage(silverCloses, 20) ?? silverLast;
   const silverSma50 = movingAverage(silverCloses, 50) ?? silverLast;
 
-  const goldTrend = clamp(((goldLast - goldSma20) / goldSma20) * 14 + ((goldSma20 - goldSma50) / goldSma50) * 10, -1, 1);
-  const silverTrend = clamp(((silverLast - silverSma20) / silverSma20) * 10 + ((silverSma20 - silverSma50) / silverSma50) * 8, -1, 1);
+  const rawGoldTrend = clamp(((goldLast - goldSma20) / goldSma20) * 14 + ((goldSma20 - goldSma50) / goldSma50) * 10, -1, 1);
+  const rawSilverTrend = clamp(((silverLast - silverSma20) / silverSma20) * 10 + ((silverSma20 - silverSma50) / silverSma50) * 8, -1, 1);
+  const goldTrend = dampenTrendByRsi(rawGoldTrend, goldRsi14);
+  const silverTrend = dampenTrendByRsi(rawSilverTrend, silverRsi14);
 
   // Gold/Silver ratio mean-reversion (historical modern norm ~75-82)
   const ratioSignalSilver = clamp((ratio - 80) / 18, -0.7, 0.7);
@@ -635,6 +731,10 @@ export function computeQuantSignals(series = {}) {
   const dxy5dPct = pctChangeOver(dxyCloses, 5);
   const tnx5dPct = pctChangeOver(tnxCloses, 5);
   const spx5dPct = pctChangeOver(spxCloses, 5);
+  const cuCloses = series.copper || [];
+  const platCloses = series.platinum || [];
+  const cu5dPct = pctChangeOver(cuCloses, 5);
+  const plat5dPct = pctChangeOver(platCloses, 5);
   const vixLast = vixCloses[vixCloses.length - 1] ?? 16.5;
 
   // Weaker USD & falling yields are historically bullish for bullion
@@ -653,6 +753,8 @@ export function computeQuantSignals(series = {}) {
   return {
     goldDailyVol,
     silverDailyVol,
+    goldRsi14,
+    silverRsi14,
     ratio: +ratio.toFixed(2),
     goldTrend: +goldTrend.toFixed(3),
     silverTrend: +silverTrend.toFixed(3),
@@ -667,7 +769,13 @@ export function computeQuantSignals(series = {}) {
       spx5dPct: +spx5dPct.toFixed(2),
       tnx: tnxCloses.length ? +tnxCloses[tnxCloses.length - 1].toFixed(2) : null,
       tnx5dPct: +tnx5dPct.toFixed(2),
+      copper: cuCloses.length ? +cuCloses[cuCloses.length - 1].toFixed(2) : null,
+      cu5dPct: +cu5dPct.toFixed(2),
+      platinum: platCloses.length ? +platCloses[platCloses.length - 1].toFixed(1) : null,
+      platinum5dPct: +plat5dPct.toFixed(2),
       vix: vixCloses.length ? +vixLast.toFixed(1) : null,
+      goldRsi14,
+      silverRsi14,
       goldVolAnnPct: +(goldDailyVol * Math.sqrt(252) * 100).toFixed(1),
       silverVolAnnPct: +(silverDailyVol * Math.sqrt(252) * 100).toFixed(1),
       goldVsDxyCorr,
@@ -686,7 +794,7 @@ function signalLabelFromScore(score) {
   return 'Neutral';
 }
 
-function projectHorizon(spotPrice, dailyVol, compositeUnitScore, tradingDays, coneMultiplier = 1.0) {
+export function projectHorizon(spotPrice, dailyVol, compositeUnitScore, tradingDays, coneMultiplier = 1.0) {
   const sigmaH = dailyVol * Math.sqrt(tradingDays);
   // Modest expected drift capped to realistic fraction of horizon volatility
   const expectedDrift = compositeUnitScore * sigmaH * 0.72;

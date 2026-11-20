@@ -160,6 +160,43 @@ export function parseVaultHtml(html, metal) {
     registeredOz,
     eligibleOz: eligibleOz || Math.round(registeredOz * (metal === 'silver' ? 2.2 : 0.65)),
     registered30dPct,
+    vaultSource: 'Public COMEX Mirror',
+  };
+}
+
+/**
+ * Extracts TOTAL REGISTERED and TOTAL ELIGIBLE troy oz from official CME Daily Metal Stocks
+ * .xls (BIFF/OLE2) or CSV/text reports without external dependencies.
+ */
+export function parseCmeStocksBuffer(buf, metal = 'gold') {
+  if (!buf) return null;
+  const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  const ascii = Buffer.from(u8).toString('latin1').replace(/[^\x20-\x7e\r\n]/g, ' ');
+  const utf16 = Buffer.from(u8).toString('utf16le').replace(/[^\x20-\x7e\r\n]/g, ' ');
+  const combined = `${ascii}\n${utf16}`.replace(/\s+/g, ' ');
+
+  const minReg = metal === 'silver' ? 20_000_000 : 3_000_000;
+  const maxReg = metal === 'silver' ? 400_000_000 : 80_000_000;
+  const parseNumAfter = (labelRx) => {
+    const m = combined.match(labelRx);
+    if (!m || !m[1]) return null;
+    const nums = m[1]
+      .replace(/,/g, '')
+      .match(/\d+(?:\.\d+)?/g)
+      ?.map(Number)
+      .filter((n) => Number.isFinite(n) && n >= minReg / 2 && n <= maxReg * 6);
+    return nums?.length ? Math.round(nums[nums.length - 1]) : null;
+  };
+
+  const registeredOz = parseNumAfter(/TOTAL\s+REGISTERED\b([\s\S]{1,140}?)(?=\bTOTAL\s+|\bCOMBINED\b|$)/i);
+  const eligibleOz = parseNumAfter(/TOTAL\s+ELIGIBLE\b([\s\S]{1,140}?)(?=\bTOTAL\s+|\bCOMBINED\b|$)/i);
+  if (!registeredOz || registeredOz < minReg || registeredOz > maxReg) return null;
+
+  return {
+    registeredOz,
+    eligibleOz: eligibleOz || Math.round(registeredOz * (metal === 'silver' ? 2.2 : 0.65)),
+    registered30dPct: null,
+    vaultSource: 'CME Official Daily Stocks',
   };
 }
 
@@ -306,6 +343,22 @@ async function fetchCftcMetalOi(metal) {
 }
 
 async function fetchVaultMirror(metal) {
+  const cmeUrl =
+    metal === 'gold'
+      ? 'https://www.cmegroup.com/delivery_reports/Gold_Stocks.xls'
+      : 'https://www.cmegroup.com/delivery_reports/Silver_stocks.xls';
+  try {
+    const res = await fetch(cmeUrl, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.ms-excel,*/*' },
+    });
+    if (res.ok) {
+      const parsed = parseCmeStocksBuffer(await res.arrayBuffer(), metal);
+      if (parsed) return parsed;
+    }
+  } catch {
+    // Fall back to public COMEX mirrors below
+  }
+
   const urls =
     metal === 'gold'
       ? ['https://thevaultreport.com/metals/gold', 'https://metalcharts.org/comex/gold']
@@ -347,7 +400,9 @@ export async function fetchComexPaperAndStocks({
   const gVault = gVaultRes.status === 'fulfilled' ? gVaultRes.value : null;
   const sVault = sVaultRes.status === 'fulfilled' ? sVaultRes.value : null;
 
-  const liveFetched = Boolean(gOi || sOi || gVault || sVault);
+  const oiLive = Boolean(gOi || sOi);
+  const vaultLive = Boolean(gVault || sVault);
+  const liveFetched = oiLive || vaultLive;
 
   const gold = computeComexSignal({
     metal: 'gold',
@@ -361,7 +416,11 @@ export async function fetchComexPaperAndStocks({
     registered30dPct: gVault?.registered30dPct ?? baseline.gold.registered30dPct,
     price5dPct: price5dGoldPct,
     date: gOi?.date || baseline.gold.date,
-    source: gOi ? 'CFTC Live OI + COMEX Vaults' : baseline.gold.source,
+    source: gOi
+      ? `CFTC Live OI + ${gVault?.vaultSource || 'Vault Baseline'}`
+      : gVault
+        ? gVault.vaultSource
+        : baseline.gold.source,
   });
 
   const silver = computeComexSignal({
@@ -376,13 +435,21 @@ export async function fetchComexPaperAndStocks({
     registered30dPct: sVault?.registered30dPct ?? baseline.silver.registered30dPct,
     price5dPct: price5dSilverPct,
     date: sOi?.date || baseline.silver.date,
-    source: sOi ? 'CFTC Live OI + COMEX Vaults' : baseline.silver.source,
+    source: sOi
+      ? `CFTC Live OI + ${sVault?.vaultSource || 'Vault Baseline'}`
+      : sVault
+        ? sVault.vaultSource
+        : baseline.silver.source,
   });
 
   return {
     updatedAt: new Date().toISOString(),
     liveFetched,
-    source: liveFetched ? 'CFTC COMEX Open Interest + Daily Vault Stocks' : baseline.source,
+    oiLive,
+    vaultLive,
+    source: liveFetched
+      ? `${oiLive ? 'Live CFTC OI' : 'Cached OI'} · ${vaultLive ? 'Live COMEX Vaults' : 'Cached Vaults'}`
+      : baseline.source,
     gold,
     silver,
   };

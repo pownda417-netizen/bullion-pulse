@@ -144,29 +144,67 @@ export function summarizeAccuracy(predictions = []) {
   };
 }
 
+function rsiAt(closes, endIdx, period = 14) {
+  if (endIdx < period + 1) return 50;
+  let g = 0;
+  let l = 0;
+  for (let k = endIdx - period + 1; k <= endIdx; k++) {
+    const diff = closes[k] - closes[k - 1];
+    if (diff >= 0) g += diff;
+    else l += Math.abs(diff);
+  }
+  if (l === 0) return g === 0 ? 50 : 90;
+  return 100 - 100 / (1 + g / l);
+}
+
 /**
  * Walk-forward 5-trading-day (7-calendar-day) historical backtest over the fetched 6-month series
- * using strictly past information at each step (no look-ahead bias!).
+ * using strictly past information at each step (no look-ahead bias!), benchmarking Pinball Loss
+ * skill against a Random Walk null model.
  */
-export function runWalkForwardBacktest({ gold = [], silver = [], dxy = [], gdx = [], sil = [] }) {
-  const backtestMetal = (closes, miners, dxySeries) => {
+export function runWalkForwardBacktest({
+  gold = [],
+  silver = [],
+  dxy = [],
+  tnx = [],
+  gdx = [],
+  sil = [],
+  copper = [],
+  gvz = [],
+}) {
+  const intervalLoss = (actual, low, mid, high) => {
+    const pb = (y, q, tau) => (y >= q ? tau * (y - q) : (tau - 1) * (y - q));
+    return pb(actual, low, 0.16) + pb(actual, mid, 0.5) + pb(actual, high, 0.84);
+  };
+
+  const backtestMetal = (closes, miners, peerMetal, isSilver) => {
     const n = closes.length;
     if (n < 30) return null;
     let total = 0;
     let dirHits = 0;
     let coneHits = 0;
     let errSum = 0;
+    let modelLossSum = 0;
+    let rwLossSum = 0;
 
     for (let i = 20; i < n - 5; i += 2) {
       const spot = closes[i];
       const sma10 = closes.slice(i - 10, i).reduce((a, b) => a + b, 0) / 10;
       const sma20 = closes.slice(i - 20, i).reduce((a, b) => a + b, 0) / 20;
-      const trend = clamp(((spot - sma10) / sma10) * 14 + ((sma10 - sma20) / sma20) * 10, -1, 1);
+      let trend = clamp(((spot - sma10) / sma10) * 14 + ((sma10 - sma20) / sma20) * 10, -1, 1);
+
+      const rsi = rsiAt(closes, i, 14);
+      if (rsi <= 22 && trend < 0) trend = trend * 0.45 + 0.14;
+      else if (rsi >= 78 && trend > 0) trend = trend * 0.45 - 0.14;
 
       let macro = 0;
-      if (dxySeries.length === n && i >= 5 && dxySeries[i - 5] > 0) {
-        const dxy5d = ((dxySeries[i] - dxySeries[i - 5]) / dxySeries[i - 5]) * 100;
-        macro = clamp(-dxy5d / 2.2, -1, 1);
+      if (dxy.length === n && i >= 5 && dxy[i - 5] > 0) {
+        const dxy5d = ((dxy[i] - dxy[i - 5]) / dxy[i - 5]) * 100;
+        macro += clamp(-dxy5d / 2.2, -1, 1) * 0.65;
+      }
+      if (tnx.length === n && i >= 5 && tnx[i - 5] > 0) {
+        const tnx5d = ((tnx[i] - tnx[i - 5]) / tnx[i - 5]) * 100;
+        macro += clamp(-tnx5d / 6.0, -1, 1) * 0.35;
       }
 
       let minerSig = 0;
@@ -176,24 +214,45 @@ export function runWalkForwardBacktest({ gold = [], silver = [], dxy = [], gdx =
         minerSig = clamp((mRet - sRet) / 9, -0.7, 0.7);
       }
 
-      const unit = clamp(trend * 0.45 + macro * 0.35 + minerSig * 0.2, -1, 1);
-
-      // Realized trailing 20d volatility
-      const rets = [];
-      for (let k = i - 19; k <= i; k++) {
-        if (closes[k - 1] > 0) rets.push((closes[k] - closes[k - 1]) / closes[k - 1]);
+      let extra = 0;
+      if (isSilver) {
+        if (copper.length === n && i >= 5 && copper[i - 5] > 0) {
+          const cu5d = ((copper[i] - copper[i - 5]) / copper[i - 5]) * 100;
+          extra += clamp(cu5d / 4.0, -0.8, 0.8) * 0.55;
+        }
+        if (peerMetal.length === n && peerMetal[i] > 0 && spot > 0) {
+          const ratio = peerMetal[i] / spot;
+          extra += clamp((ratio - 80) / 18, -0.7, 0.7) * 0.45;
+        }
       }
-      const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
-      const vol = clamp(
-        Math.sqrt(rets.reduce((a, r) => a + (r - mean) ** 2, 0) / Math.max(1, rets.length - 1)),
-        0.006,
-        0.04
-      );
+
+      const unit = isSilver
+        ? clamp(trend * 0.34 + macro * 0.28 + minerSig * 0.18 + extra * 0.20, -1, 1)
+        : clamp(trend * 0.40 + macro * 0.38 + minerSig * 0.22, -1, 1);
+
+      // EWMA trailing realized volatility
+      let ewmaVar = 0;
+      let prevRet = 0;
+      for (let k = Math.max(1, i - 25); k <= i; k++) {
+        if (closes[k - 1] > 0) {
+          const r = (closes[k] - closes[k - 1]) / closes[k - 1];
+          ewmaVar = ewmaVar === 0 ? r * r : 0.90 * ewmaVar + 0.10 * r * r;
+          prevRet = r;
+        }
+      }
+      let vol = clamp(Math.sqrt(ewmaVar || prevRet * prevRet || 0.0001), 0.006, 0.042);
+      if (!isSilver && gvz.length === n && gvz[i] > 5) {
+        const gvzDaily = (gvz[i] / 100) / Math.sqrt(252);
+        vol = clamp(vol * 0.65 + gvzDaily * 0.35, 0.006, 0.042);
+      }
 
       const sig5 = vol * Math.sqrt(5);
       const expPct = unit * sig5 * 0.72 * 100;
-      const bear = spot * (1 + (expPct / 100 - 1.15 * sig5));
-      const bull = spot * (1 + (expPct / 100 + 1.15 * sig5));
+      const halfBandPct = 1.15 * sig5 * 100;
+      const bearPct = expPct - halfBandPct;
+      const bullPct = expPct + halfBandPct;
+      const bear = spot * (1 + bearPct / 100);
+      const bull = spot * (1 + bullPct / 100);
       const futureSpot = closes[i + 5];
       const actualPct = ((futureSpot - spot) / spot) * 100;
 
@@ -201,19 +260,24 @@ export function runWalkForwardBacktest({ gold = [], silver = [], dxy = [], gdx =
       if ((expPct >= 0 && actualPct >= 0) || (expPct < 0 && actualPct < 0)) dirHits++;
       if (futureSpot >= bear && futureSpot <= bull) coneHits++;
       errSum += Math.abs(actualPct - expPct);
+      modelLossSum += intervalLoss(actualPct, bearPct, expPct, bullPct);
+      rwLossSum += intervalLoss(actualPct, -halfBandPct, 0, halfBandPct);
     }
 
     if (!total) return null;
+    const pinballSkillPct =
+      rwLossSum > 0 ? +(((1 - modelLossSum / rwLossSum) * 100)).toFixed(1) : 0;
     return {
       samples: total,
       dirHitPct: Math.round((dirHits / total) * 100),
       inConePct: Math.round((coneHits / total) * 100),
       avgErrPct: +(errSum / total).toFixed(2),
+      pinballSkillPct,
     };
   };
 
   return {
-    gold: backtestMetal(gold, gdx, dxy),
-    silver: backtestMetal(silver, sil, dxy),
+    gold: backtestMetal(gold, gdx, silver, false),
+    silver: backtestMetal(silver, sil, gold, true),
   };
 }

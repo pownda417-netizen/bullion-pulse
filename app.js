@@ -9,6 +9,47 @@ const ANON_FETCH_OPTS = {
   credentials: 'omit',
   referrerPolicy: 'no-referrer',
 };
+const RAW_DATA_BASE =
+  'https://raw.githubusercontent.com/pownda417-netizen/bullion-pulse/main/data/';
+
+async function fetchFreshRepoJson(fileName) {
+  const localFetch = async () => {
+    const res = await fetch(`./data/${fileName}`, ANON_FETCH_OPTS);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
+  const canPollRaw =
+    typeof window !== 'undefined' &&
+    (window.location.hostname.endsWith('github.io') ||
+      window.location.search.includes('liveRaw=1'));
+
+  if (!canPollRaw) return localFetch();
+
+  const rawFetch = async () => {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const res = await fetch(`${RAW_DATA_BASE}${fileName}?t=${Date.now()}`, {
+        ...ANON_FETCH_OPTS,
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`Raw HTTP ${res.status}`);
+      return await res.json();
+    } finally {
+      clearTimeout(tid);
+    }
+  };
+
+  const [locRes, rawRes] = await Promise.allSettled([localFetch(), rawFetch()]);
+  const loc = locRes.status === 'fulfilled' ? locRes.value : null;
+  const raw = rawRes.status === 'fulfilled' ? rawRes.value : null;
+  if (!loc && !raw) throw new Error(`Failed loading ${fileName}`);
+  if (!raw) return loc;
+  if (!loc) return raw;
+  const tLoc = Date.parse(loc.generatedAt || loc.updatedAt || 0) || 0;
+  const tRaw = Date.parse(raw.generatedAt || raw.updatedAt || 0) || 0;
+  return tRaw >= tLoc ? raw : loc;
+}
 
 const DEFAULT_SETTINGS = {
   goldThreshold: 1.5,
@@ -19,16 +60,41 @@ const DEFAULT_SETTINGS = {
   unit: 'oz', // 'oz' | 'g'
   theme: 'dark',
   selectedMetal: 'gold',
+  chartMode: 'gold', // 'gold' | 'silver' | 'ratio'
+  confirmMoves: false,
   showForecast: true,
   showFib: false,
+  showSma: false,
+  showRsi: false,
   chartTimeframe: '1d', // '1d' | '7d' | '1m' | '6m' | '1y' | '5y' | '10y' | 'all'
+  stack: {
+    goldOz: '',
+    goldCost: '',
+    silverOz: '',
+    silverCost: '',
+  },
+  targets: {
+    goldAbove: '',
+    goldBelow: '',
+    silverAbove: '',
+    silverBelow: '',
+    ratioAbove: '',
+  },
 };
 
 const state = {
-  settings: { ...DEFAULT_SETTINGS },
+  settings: {
+    ...DEFAULT_SETTINGS,
+    stack: { ...DEFAULT_SETTINGS.stack },
+    targets: { ...DEFAULT_SETTINGS.targets },
+  },
   quotes: {
     gold: { price: null, prevClose: null, chg: 0, pct: 0 },
     silver: { price: null, prevClose: null, chg: 0, pct: 0 },
+  },
+  liveMacro: {
+    platinum: null,
+    consensusNote: '',
   },
   history: {
     gold: [],
@@ -40,11 +106,18 @@ const state = {
   },
   timeframes: {},
   hoverCandleIdx: null,
+  chartGeom: null,
+  selectedMiner: null,
   alertLog: [],
   sessionAlerted: {
     gold: { day: '', dir: null, pct: 0 },
     silver: { day: '', dir: null, pct: 0 },
     shanghai: { day: '', dir: null, usd: 0 },
+    targets: {},
+  },
+  pendingAlert: {
+    gold: null,
+    silver: null,
   },
   mode: 'connecting', // 'live' | 'demo' | 'error'
   lastUpdated: null,
@@ -61,7 +134,15 @@ function loadPersistedState() {
     if (!raw) return;
     const parsed = JSON.parse(raw);
     if (parsed.settings) {
-      state.settings = { ...DEFAULT_SETTINGS, ...parsed.settings };
+      state.settings = {
+        ...DEFAULT_SETTINGS,
+        ...parsed.settings,
+        stack: { ...DEFAULT_SETTINGS.stack, ...(parsed.settings.stack || {}) },
+        targets: { ...DEFAULT_SETTINGS.targets, ...(parsed.settings.targets || {}) },
+      };
+      if (!parsed.settings.chartMode && parsed.settings.selectedMetal) {
+        state.settings.chartMode = parsed.settings.selectedMetal;
+      }
     }
     if (Array.isArray(parsed.alertLog)) {
       state.alertLog = parsed.alertLog.slice(0, 25);
@@ -71,7 +152,11 @@ function loadPersistedState() {
       state.history.silver = parsed.history.silver.slice(-60);
     }
     if (parsed.sessionAlerted) {
-      state.sessionAlerted = { ...state.sessionAlerted, ...parsed.sessionAlerted };
+      state.sessionAlerted = {
+        ...state.sessionAlerted,
+        ...parsed.sessionAlerted,
+        targets: { ...(parsed.sessionAlerted.targets || {}) },
+      };
     }
   } catch {
     // Ignore malformed storage
@@ -228,14 +313,48 @@ function buildFallbackDemoQuotes() {
   };
 }
 
-async function fetchSpotQuotes() {
+async function fetchLivePlatinumPrice() {
+  try {
+    const res = await fetch('https://api.gold-api.com/price/XPT', ANON_FETCH_OPTS);
+    if (!res.ok) return;
+    const xpt = await res.json();
+    if (typeof xpt?.price === 'number' && Number.isFinite(xpt.price) && xpt.price > 200) {
+      state.liveMacro.platinum = xpt.price;
+      renderMacroStrip();
+    }
+  } catch {
+    // Keep outlook macroSnapshot platinum
+  }
+}
+
+async function fetchSpotQuotes(checkQuorum = false) {
   const refreshBtn = document.getElementById('btn-refresh');
   refreshBtn?.classList.add('spinning');
 
   let result;
+  state.liveMacro.consensusNote = '';
   try {
-    result = await fetchFromGoldPriceOrg();
-    state.mode = 'live';
+    if (checkQuorum) {
+      const [gpRes, gaRes] = await Promise.allSettled([
+        fetchFromGoldPriceOrg(),
+        fetchFromGoldApiCom(),
+      ]);
+      if (gpRes.status === 'fulfilled') {
+        result = gpRes.value;
+        if (gaRes.status === 'fulfilled' && result.gold.price > 0) {
+          const spreadPct = Math.abs(result.gold.price - gaRes.value.gold.price) / result.gold.price * 100;
+          state.liveMacro.consensusNote = spreadPct <= 0.65 ? 'Quorum ✓' : `Spread ${spreadPct.toFixed(1)}%`;
+        }
+      } else if (gaRes.status === 'fulfilled') {
+        result = gaRes.value;
+      } else {
+        throw new Error('All live spot feeds failed');
+      }
+      state.mode = 'live';
+    } else {
+      result = await fetchFromGoldPriceOrg();
+      state.mode = 'live';
+    }
   } catch {
     try {
       result = await fetchFromGoldApiCom();
@@ -299,10 +418,69 @@ function applyQuotes(result) {
 
   evaluateAlerts('gold', result.gold, false);
   evaluateAlerts('silver', result.silver, false);
+  evaluateClientPriceTargets(result.gold.price, result.silver.price);
   savePersistedState();
 }
 
 /* ---------- Alert Evaluation & ntfy.sh ---------- */
+
+function maybeSendBrowserNotification(title, body) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    new Notification(title, { body, icon: './icons/icon-192.png' });
+  } catch {
+    // Ignore restricted environments
+  }
+}
+
+function evaluateClientPriceTargets(goldPrice, silverPrice) {
+  const t = state.settings.targets || {};
+  const ratio = silverPrice > 0 ? goldPrice / silverPrice : 0;
+  const rules = [
+    { id: 'goldAbove', label: 'Gold (XAU)', symbol: 'XAU', val: goldPrice, target: parseFloat(t.goldAbove), op: 'gte', fmt: (v) => formatMoney(v), dir: 'up' },
+    { id: 'goldBelow', label: 'Gold (XAU)', symbol: 'XAU', val: goldPrice, target: parseFloat(t.goldBelow), op: 'lte', fmt: (v) => formatMoney(v), dir: 'down' },
+    { id: 'silverAbove', label: 'Silver (XAG)', symbol: 'XAG', val: silverPrice, target: parseFloat(t.silverAbove), op: 'gte', fmt: (v) => formatMoney(v), dir: 'up' },
+    { id: 'silverBelow', label: 'Silver (XAG)', symbol: 'XAG', val: silverPrice, target: parseFloat(t.silverBelow), op: 'lte', fmt: (v) => formatMoney(v), dir: 'down' },
+    { id: 'ratioAbove', label: 'Au/Ag Ratio', symbol: 'RATIO', val: ratio, target: parseFloat(t.ratioAbove), op: 'gte', fmt: (v) => `${v.toFixed(1)}:1`, dir: 'up' },
+  ];
+  const today = todayKey();
+  if (!state.sessionAlerted.targets) state.sessionAlerted.targets = {};
+
+  for (const r of rules) {
+    if (!Number.isFinite(r.target) || r.target <= 0 || !Number.isFinite(r.val)) continue;
+    const hit = r.op === 'gte' ? r.val >= r.target : r.val <= r.target;
+    if (!hit) continue;
+    if (state.sessionAlerted.targets[r.id] === today) continue;
+    state.sessionAlerted.targets[r.id] = today;
+
+    const title = `${r.label} Target Hit (${r.op === 'gte' ? '≥' : '≤'} ${r.fmt(r.target)})`;
+    const body = `Live ${r.label}: ${r.fmt(r.val)}`;
+    showAlertBanner(title, body, r.dir);
+    maybeSendBrowserNotification(title, body);
+    state.alertLog.unshift({
+      id: Date.now() + Math.random(),
+      metal: r.symbol === 'XAG' ? 'silver' : 'gold',
+      symbol: r.symbol,
+      title,
+      body,
+      pct: 0,
+      badge: r.fmt(r.target),
+      dir: r.dir,
+      time: formatTime(new Date()),
+    });
+    state.alertLog = state.alertLog.slice(0, 25);
+    renderAlertLog();
+    if (state.settings.ntfyTopic.trim()) {
+      publishToNtfy({
+        topic: state.settings.ntfyTopic.trim(),
+        title,
+        message: body,
+        priority: 'high',
+        tags: r.dir === 'up' ? 'dart,coin' : 'warning,coin',
+      }).catch(() => {});
+    }
+  }
+}
 
 function directionMatches(pct, ruleDir) {
   if (ruleDir === 'up') return pct > 0;
@@ -314,7 +492,10 @@ function evaluateAlerts(metal, quote, isSimulated) {
   const threshold =
     metal === 'gold' ? state.settings.goldThreshold : state.settings.silverThreshold;
   const absPct = Math.abs(quote.pct);
-  if (absPct < threshold) return false;
+  if (absPct < threshold) {
+    state.pendingAlert[metal] = null;
+    return false;
+  }
   if (!directionMatches(quote.pct, state.settings.direction)) return false;
 
   const dir = quote.pct >= 0 ? 'up' : 'down';
@@ -324,6 +505,16 @@ function evaluateAlerts(metal, quote, isSimulated) {
   if (!isSimulated && prev.day === today && prev.dir === dir && absPct < prev.pct + 0.75) {
     return false;
   }
+
+  // Optional 2-check sustained confirmation filter to skip single-tick wick spikes
+  if (!isSimulated && state.settings.confirmMoves && absPct < threshold * 1.65) {
+    const pend = state.pendingAlert[metal];
+    if (!pend || pend.day !== today || pend.dir !== dir) {
+      state.pendingAlert[metal] = { day: today, dir };
+      return false;
+    }
+  }
+  state.pendingAlert[metal] = null;
 
   if (!isSimulated) {
     state.sessionAlerted[metal] = { day: today, dir, pct: absPct };
@@ -336,6 +527,7 @@ function evaluateAlerts(metal, quote, isSimulated) {
   const body = `Spot ${formatMoney(quote.price)}/oz (${formatSignedMoney(quote.chg)} vs prev close ${formatMoney(quote.prevClose)})`;
 
   showAlertBanner(title, body, dir);
+  if (!isSimulated) maybeSendBrowserNotification(title, body);
   state.alertLog.unshift({
     id: Date.now() + Math.random(),
     metal,
@@ -410,7 +602,8 @@ function renderStatus() {
   const timeStr = state.lastUpdated ? formatTime(state.lastUpdated) : '';
 
   if (state.mode === 'live') {
-    text.textContent = `Live spot · ${timeStr}`;
+    const qNote = state.liveMacro.consensusNote ? ` · ${state.liveMacro.consensusNote}` : '';
+    text.textContent = `Live spot · ${timeStr}${qNote}`;
   } else if (state.mode === 'demo') {
     dot.classList.add('demo');
     text.textContent = `Offline preview · ${timeStr}`;
@@ -723,6 +916,68 @@ function updateActive5mCandle(metal, price, prevClose) {
   }
 }
 
+function getRatioBarsForTimeframe(tf) {
+  const gBars = getCandlesForTimeframe('gold', tf);
+  const sBars = getCandlesForTimeframe('silver', tf);
+  const n = Math.min(gBars.length, sBars.length);
+  const gOff = gBars.length - n;
+  const sOff = sBars.length - n;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const g = gBars[gOff + i];
+    const s = sBars[sOff + i];
+    if (!g || !s || s.c <= 0 || s.o <= 0 || s.h <= 0 || s.l <= 0) continue;
+    const o = +(g.o / s.o).toFixed(2);
+    const c = +(g.c / s.c).toFixed(2);
+    const rH = +(g.h / s.h).toFixed(2);
+    const rL = +(g.l / s.l).toFixed(2);
+    out.push({
+      t: g.t || s.t,
+      o,
+      h: +Math.max(o, c, rH).toFixed(2),
+      l: +Math.max(1, Math.min(o, c, rL)).toFixed(2),
+      c,
+    });
+  }
+  return out;
+}
+
+function computeSmaSeries(bars, period) {
+  const out = new Array(bars.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < bars.length; i++) {
+    sum += bars[i].c;
+    if (i >= period) sum -= bars[i - period].c;
+    if (i >= period - 1) out[i] = sum / period;
+  }
+  return out;
+}
+
+function computeRsiSeries(bars, period = 14) {
+  const values = new Array(bars.length).fill(null);
+  if (bars.length <= period) return { values, latest: null };
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const chg = bars[i].c - bars[i - 1].c;
+    if (chg >= 0) avgGain += chg;
+    else avgLoss -= chg;
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  values[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  for (let i = period + 1; i < bars.length; i++) {
+    const chg = bars[i].c - bars[i - 1].c;
+    const gain = chg > 0 ? chg : 0;
+    const loss = chg < 0 ? -chg : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    values[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  const latest = values[bars.length - 1];
+  return { values, latest: latest != null ? +latest.toFixed(1) : null };
+}
+
 let histCandlesLoaded = false;
 let histCandlesLoading = null;
 
@@ -731,10 +986,9 @@ async function ensureHistoricalCandlesLoaded() {
   if (histCandlesLoading) return histCandlesLoading;
   histCandlesLoading = (async () => {
     try {
-      let res = await fetch('./data/candles_hist.json', ANON_FETCH_OPTS);
-      if (!res.ok) res = await fetch('./data/candles.json', ANON_FETCH_OPTS);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await fetchFreshRepoJson('candles_hist.json').catch(() =>
+        fetchFreshRepoJson('candles.json')
+      );
       if (data.timeframes && typeof data.timeframes === 'object') {
         state.timeframes = { ...(state.timeframes || {}), ...data.timeframes };
         histCandlesLoaded = true;
@@ -752,10 +1006,9 @@ async function ensureHistoricalCandlesLoaded() {
 async function fetchCandlesData() {
   try {
     // Lightweight 5m intraday payload (~70% smaller for 5-minute mobile refreshes)
-    let res = await fetch('./data/candles_1d.json', ANON_FETCH_OPTS);
-    if (!res.ok) res = await fetch('./data/candles.json', ANON_FETCH_OPTS);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const data = await fetchFreshRepoJson('candles_1d.json').catch(() =>
+      fetchFreshRepoJson('candles.json')
+    );
     if (data.timeframes && typeof data.timeframes === 'object') {
       state.timeframes = { ...(state.timeframes || {}), ...data.timeframes };
       if (Object.keys(data.timeframes).length > 1) histCandlesLoaded = true;
@@ -848,42 +1101,132 @@ function computeFibonacciLevels(bars) {
   };
 }
 
+function drawRsiPane(rsiData, candleAreaW, padLeft, stepX) {
+  const wrap = document.getElementById('rsi-pane-wrap');
+  const canvas = document.getElementById('rsi-chart');
+  const pill = document.getElementById('rsi-value-pill');
+  if (!wrap || !canvas) return;
+  wrap.hidden = false;
+
+  if (pill) {
+    const v = rsiData?.latest;
+    pill.textContent = v != null ? (v >= 70 ? `${v} OB` : v <= 30 ? `${v} OS` : String(v)) : 'Need >14 bars';
+    pill.className = `rsi-val-pill ${v >= 70 ? 'ob' : v <= 30 ? 'os' : ''}`;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const w = rect.width;
+  const h = rect.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const styles = getComputedStyle(document.documentElement);
+  const muted = styles.getPropertyValue('--text-subtle').trim() || '#777';
+  const grid = styles.getPropertyValue('--border').trim() || 'rgba(255,255,255,0.08)';
+  const yAt = (v) => 6 + (1 - v / 100) * (h - 12);
+
+  // Overbought (70), Midline (50), Oversold (30) guides
+  ctx.font = '500 9.5px "JetBrains Mono", monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  [70, 50, 30].forEach((lvl) => {
+    const y = yAt(lvl);
+    ctx.save();
+    ctx.setLineDash(lvl === 50 ? [2, 3] : [4, 3]);
+    ctx.strokeStyle = lvl === 70 ? 'rgba(239,68,68,0.4)' : lvl === 30 ? 'rgba(34,197,94,0.4)' : grid;
+    ctx.beginPath();
+    ctx.moveTo(padLeft, y);
+    ctx.lineTo(padLeft + candleAreaW, y);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = muted;
+    ctx.fillText(String(lvl), w - 4, y);
+  });
+
+  const vals = rsiData?.values || [];
+  ctx.save();
+  ctx.strokeStyle = '#F472B6';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < vals.length; i++) {
+    const v = vals[i];
+    if (v == null) continue;
+    const x = padLeft + i * stepX + stepX * 0.5;
+    const y = yAt(v);
+    if (!started) {
+      ctx.moveTo(x, y);
+      started = true;
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function renderChart() {
   const canvas = document.getElementById('intraday-chart');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const sel = state.settings.selectedMetal;
+  const chartMode = state.settings.chartMode || state.settings.selectedMetal || 'gold';
+  const isRatio = chartMode === 'ratio';
+  const sel = isRatio ? 'gold' : chartMode;
   const tf = CHART_TF_META[state.settings.chartTimeframe] ? state.settings.chartTimeframe : '1d';
   const meta = CHART_TF_META[tf];
   const quote = state.quotes[sel];
-  const bars = getCandlesForTimeframe(sel, tf);
+  const bars = isRatio ? getRatioBarsForTimeframe(tf) : getCandlesForTimeframe(sel, tf);
 
   const titleEl = document.getElementById('chart-title');
   if (titleEl) {
-    titleEl.textContent =
-      sel === 'gold'
+    titleEl.textContent = isRatio
+      ? `Gold / Silver Ratio (Au:Ag) · ${meta.label}`
+      : sel === 'gold'
         ? `Gold (XAU/USD) · ${meta.label}`
         : `Silver (XAG/USD) · ${meta.label}`;
   }
   updateCandleCountdown();
 
-  document.getElementById('chart-btn-gold')?.classList.toggle('active', sel === 'gold');
-  document.getElementById('chart-btn-silver')?.classList.toggle('active', sel === 'silver');
+  document.getElementById('chart-btn-gold')?.classList.toggle('active', chartMode === 'gold');
+  document.getElementById('chart-btn-silver')?.classList.toggle('active', chartMode === 'silver');
+  document.getElementById('chart-btn-ratio')?.classList.toggle('active', isRatio);
   document.querySelectorAll('#chart-tf-bar .tf-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tf === tf);
   });
+
   const fcBtn = document.getElementById('btn-toggle-forecast');
   if (fcBtn) {
     fcBtn.classList.toggle('active', !!state.settings.showForecast);
     fcBtn.setAttribute('aria-pressed', String(!!state.settings.showForecast));
+    fcBtn.disabled = isRatio;
+    fcBtn.style.opacity = isRatio ? '0.45' : '1';
   }
   const fibBtn = document.getElementById('btn-toggle-fib');
   if (fibBtn) {
     fibBtn.classList.toggle('active', !!state.settings.showFib);
     fibBtn.setAttribute('aria-pressed', String(!!state.settings.showFib));
   }
+  const smaBtn = document.getElementById('btn-toggle-sma');
+  if (smaBtn) {
+    smaBtn.classList.toggle('active', !!state.settings.showSma);
+    smaBtn.setAttribute('aria-pressed', String(!!state.settings.showSma));
+  }
+  const rsiBtn = document.getElementById('btn-toggle-rsi');
+  if (rsiBtn) {
+    rsiBtn.classList.toggle('active', !!state.settings.showRsi);
+    rsiBtn.setAttribute('aria-pressed', String(!!state.settings.showRsi));
+  }
   const fibLegend = document.getElementById('legend-fib');
   if (fibLegend) fibLegend.hidden = !state.settings.showFib;
+  const smaLegend = document.getElementById('legend-sma');
+  if (smaLegend) smaLegend.hidden = !state.settings.showSma;
+  const rsiWrap = document.getElementById('rsi-pane-wrap');
+  if (rsiWrap && !state.settings.showRsi) rsiWrap.hidden = true;
 
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
@@ -911,14 +1254,19 @@ function renderChart() {
 
   const converted = bars.map((b) => ({
     t: b.t,
-    o: convertUnit(b.o),
-    h: convertUnit(b.h),
-    l: convertUnit(b.l),
-    c: convertUnit(b.c),
+    o: isRatio ? b.o : convertUnit(b.o),
+    h: isRatio ? b.h : convertUnit(b.h),
+    l: isRatio ? b.l : convertUnit(b.l),
+    c: isRatio ? b.c : convertUnit(b.c),
   }));
   const firstOpen = converted[0].o;
   const lastClose = converted[converted.length - 1].c;
-  const refLineVal = tf === '1d' ? convertUnit(quote.prevClose ?? bars[0].o) : firstOpen;
+  const refLineVal = isRatio
+    ? (tf === '1d' && state.quotes.gold.prevClose && state.quotes.silver.prevClose
+        ? state.quotes.gold.prevClose / state.quotes.silver.prevClose
+        : firstOpen)
+    : (tf === '1d' ? convertUnit(quote.prevClose ?? bars[0].o) : firstOpen);
+  const fmtChartVal = (v, dec) => (isRatio ? `${Number(v).toFixed(1)}:1` : formatMoney(v, dec));
 
   // Period return badge
   const tfChgEl = document.getElementById('chart-tf-change');
@@ -930,11 +1278,14 @@ function renderChart() {
   }
 
   // Compute Jump-Diffusion fat-tail forecast cone scaled proportionally to the active timeframe
-  const showFc = !!state.settings.showForecast;
+  const showFc = !!state.settings.showForecast && !isRatio;
   const showFib = !!state.settings.showFib;
+  const showSma = !!state.settings.showSma;
   const fibCol = styles.getPropertyValue('--fib').trim() || '#A78BFA';
   const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
   const fibData = showFib ? computeFibonacciLevels(converted) : null;
+  const sma20 = showSma ? computeSmaSeries(converted, 20) : null;
+  const sma50 = showSma ? computeSmaSeries(converted, 50) : null;
   const outlookRes = computeInteractiveOutlook();
   const fcHorizon = tf === '1d' ? (outlookState.horizon === '30d' ? '1m' : '7d') : meta.fcHorizon;
   const fcLabel = tf === '1d' ? (outlookState.horizon === '30d' ? '+30d' : '+7d') : meta.fcLabel;
@@ -985,7 +1336,7 @@ function renderChart() {
     ctx.lineTo(padLeft + plotW, y);
     ctx.stroke();
     ctx.fillStyle = mutedCol;
-    ctx.fillText(formatMoney(val, val >= 500 ? 0 : 2), w - 2, y);
+    ctx.fillText(fmtChartVal(val, val >= 500 ? 0 : 2), w - 2, y);
   }
 
   // Reference baseline (Prev close on 1D, period open on longer ranges)
@@ -1050,19 +1401,33 @@ function renderChart() {
     const bodyH = Math.max(1.8, Math.abs(yC - yO));
     ctx.fillStyle = col;
     ctx.fillRect(cx - candleW / 2, top, candleW, bodyH);
+  });
 
-    // Active hover highlight
-    if (state.hoverCandleIdx === i) {
+  // Optional 20- & 50-period Simple Moving Averages
+  if (showSma) {
+    const drawSmaLine = (arr, color) => {
       ctx.save();
-      ctx.setLineDash([2, 3]);
-      ctx.strokeStyle = borderCol;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = desktopCanvas ? 1.8 : 1.4;
       ctx.beginPath();
-      ctx.moveTo(cx, padTop);
-      ctx.lineTo(cx, padTop + plotH);
+      let started = false;
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] == null) continue;
+        const x = xCandle(i);
+        const y = yAt(arr[i]);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
       ctx.stroke();
       ctx.restore();
-    }
-  });
+    };
+    if (sma20) drawSmaLine(sma20, '#38BDF8');
+    if (sma50) drawSmaLine(sma50, '#F59E0B');
+  }
 
   // Fibonacci level pills drawn after candles with priority collision avoidance
   if (fibData) {
@@ -1082,7 +1447,7 @@ function renderChart() {
       if (placedYs.some((py) => Math.abs(py - y) < minGap)) continue;
       placedYs.push(y);
       const decimals = lv.price >= 500 ? 0 : 2;
-      const txt = `${lv.label} ${formatMoney(lv.price, decimals)}`;
+      const txt = `${lv.label} ${fmtChartVal(lv.price, decimals)}`;
       const tw = ctx.measureText(txt).width;
       ctx.fillStyle = isLightTheme ? 'rgba(255, 255, 255, 0.85)' : 'rgba(13, 14, 17, 0.78)';
       ctx.fillRect(padLeft + 2, y - pillH / 2, tw + 8, pillH);
@@ -1205,18 +1570,113 @@ function renderChart() {
     ctx.fillText(`Now → ${fcLabel}`, (startX + endX) / 2, h - 2);
   }
 
-  // Update OHLC readout bar
+  // Optional RSI(14) oscillator sub-chart
+  let rsiData = null;
+  if (state.settings.showRsi) {
+    rsiData = computeRsiSeries(converted, 14);
+    drawRsiPane(rsiData, candleAreaW, padLeft, stepX);
+  }
+
+  state.chartGeom = {
+    w,
+    h,
+    dpr,
+    padLeft,
+    padTop,
+    plotW,
+    plotH,
+    candleAreaW,
+    stepX,
+    tf,
+    isRatio,
+    converted,
+    sma20,
+    sma50,
+    rsiValues: rsiData?.values || null,
+    xCandle,
+    yAt,
+    fmtChartVal,
+    borderCol,
+    baseCol,
+  };
+  renderCrosshairOverlay(state.hoverCandleIdx);
+}
+
+function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
+  const g = state.chartGeom;
+  const overlay = document.getElementById('chart-crosshair-overlay');
+  const tipEl = document.getElementById('chart-tooltip');
   const ohlcEl = document.getElementById('chart-ohlc');
+  if (!g || !g.converted?.length) {
+    if (tipEl) tipEl.hidden = true;
+    return;
+  }
+
+  const activeIdx = idx != null && g.converted[idx] ? idx : null;
+  const bar = g.converted[activeIdx != null ? activeIdx : g.converted.length - 1];
+  const tLabel = formatCandleTimestamp(bar.t, g.tf, false);
+  const dec = bar.c >= 500 ? 0 : 2;
   if (ohlcEl) {
-    const idx =
-      state.hoverCandleIdx != null && converted[state.hoverCandleIdx]
-        ? state.hoverCandleIdx
-        : converted.length - 1;
-    const bar = converted[idx];
-    const tLabel = formatCandleTimestamp(bar.t, tf, false);
-    const dec = bar.c >= 500 ? 0 : 2;
     ohlcEl.textContent =
-      `${tLabel}  O ${formatMoney(bar.o, dec)}  H ${formatMoney(bar.h, dec)}  L ${formatMoney(bar.l, dec)}  C ${formatMoney(bar.c, dec)}`;
+      `${tLabel}  O ${g.fmtChartVal(bar.o, dec)}  H ${g.fmtChartVal(bar.h, dec)}  L ${g.fmtChartVal(bar.l, dec)}  C ${g.fmtChartVal(bar.c, dec)}`;
+  }
+
+  if (overlay) {
+    const tw = Math.round(g.w * g.dpr);
+    const th = Math.round(g.h * g.dpr);
+    if (overlay.width !== tw || overlay.height !== th) {
+      overlay.width = tw;
+      overlay.height = th;
+    }
+    const octx = overlay.getContext('2d');
+    octx.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+    octx.clearRect(0, 0, g.w, g.h);
+
+    if (activeIdx != null) {
+      const cx = g.xCandle(activeIdx);
+      const cy = g.yAt(bar.c);
+      octx.save();
+      octx.setLineDash([2, 3]);
+      octx.strokeStyle = g.borderCol;
+      octx.lineWidth = 1;
+      octx.beginPath();
+      octx.moveTo(cx, g.padTop);
+      octx.lineTo(cx, g.padTop + g.plotH);
+      octx.moveTo(g.padLeft, cy);
+      octx.lineTo(g.padLeft + g.plotW, cy);
+      octx.stroke();
+
+      octx.setLineDash([]);
+      octx.beginPath();
+      octx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+      octx.fillStyle = g.baseCol;
+      octx.fill();
+      octx.restore();
+    }
+  }
+
+  if (tipEl) {
+    if (activeIdx == null) {
+      tipEl.hidden = true;
+      return;
+    }
+    const subParts = [];
+    const s20 = g.sma20?.[activeIdx];
+    const s50 = g.sma50?.[activeIdx];
+    const rVal = g.rsiValues?.[activeIdx];
+    if (s20 != null) subParts.push(`SMA20 ${g.fmtChartVal(s20, dec)}`);
+    if (s50 != null) subParts.push(`SMA50 ${g.fmtChartVal(s50, dec)}`);
+    if (rVal != null) subParts.push(`RSI ${Number(rVal).toFixed(1)}`);
+
+    tipEl.innerHTML =
+      `<div>${escapeHtml(tLabel)} · <strong>${escapeHtml(g.fmtChartVal(bar.c, dec))}</strong></div>` +
+      `<div class="tt-sub">O ${escapeHtml(g.fmtChartVal(bar.o, dec))} H ${escapeHtml(g.fmtChartVal(bar.h, dec))} L ${escapeHtml(g.fmtChartVal(bar.l, dec))}</div>` +
+      (subParts.length ? `<div class="tt-sub">${escapeHtml(subParts.join(' · '))}</div>` : '');
+    const cx = g.xCandle(activeIdx);
+    const onRightHalf = cx > g.w * 0.55;
+    tipEl.style.left = onRightHalf ? '10px' : 'auto';
+    tipEl.style.right = onRightHalf ? 'auto' : '70px';
+    tipEl.hidden = false;
   }
 }
 
@@ -1267,18 +1727,65 @@ function renderSettingsControls() {
     topicInput.value = state.settings.ntfyTopic;
   }
 
+  const stack = state.settings.stack || {};
+  const stackFieldMap = [
+    ['input-stack-gold-oz', stack.goldOz],
+    ['input-stack-gold-cost', stack.goldCost],
+    ['input-stack-silver-oz', stack.silverOz],
+    ['input-stack-silver-cost', stack.silverCost],
+  ];
+  for (const [id, val] of stackFieldMap) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = val ?? '';
+  }
+
+  const targets = state.settings.targets || {};
+  const targetFieldMap = [
+    ['input-target-gold-above', targets.goldAbove],
+    ['input-target-gold-below', targets.goldBelow],
+    ['input-target-silver-above', targets.silverAbove],
+    ['input-target-silver-below', targets.silverBelow],
+    ['input-target-ratio-above', targets.ratioAbove],
+  ];
+  for (const [id, val] of targetFieldMap) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = val ?? '';
+  }
+
+  const webNotifBtn = document.getElementById('btn-enable-web-notif');
+  if (webNotifBtn && typeof Notification !== 'undefined') {
+    if (Notification.permission === 'granted') {
+      webNotifBtn.textContent = 'Browser Notifications Enabled ✓';
+    } else if (Notification.permission === 'denied') {
+      webNotifBtn.textContent = 'Browser Notifications Blocked (Check Site Settings)';
+    } else {
+      webNotifBtn.textContent = 'Enable Browser Notifications';
+    }
+  }
+
+  const confirmChk = document.getElementById('chk-confirm-moves');
+  if (confirmChk) confirmChk.checked = !!state.settings.confirmMoves;
+
   document.getElementById('unit-oz')?.classList.toggle('active', state.settings.unit === 'oz');
   document.getElementById('unit-g')?.classList.toggle('active', state.settings.unit === 'g');
 
   if (snippet) {
     const t = state.settings.ntfyTopic.trim() || 'bullion-pulse-change-me';
+    const extraTargets = [];
+    if (state.settings.confirmMoves) extraTargets.push('CONFIRM_MOVES=true');
+    if (targets.goldAbove) extraTargets.push(`GOLD_ABOVE_USD=${targets.goldAbove}`);
+    if (targets.goldBelow) extraTargets.push(`GOLD_BELOW_USD=${targets.goldBelow}`);
+    if (targets.silverAbove) extraTargets.push(`SILVER_ABOVE_USD=${targets.silverAbove}`);
+    if (targets.silverBelow) extraTargets.push(`SILVER_BELOW_USD=${targets.silverBelow}`);
+    if (targets.ratioAbove) extraTargets.push(`RATIO_ABOVE=${targets.ratioAbove}`);
     snippet.textContent =
       `NTFY_TOPIC=${t}\n` +
       `GOLD_THRESHOLD_PCT=${Number(state.settings.goldThreshold).toFixed(1)}\n` +
       `SILVER_THRESHOLD_PCT=${Number(state.settings.silverThreshold).toFixed(2)}\n` +
       `SHANGHAI_PREMIUM_THRESHOLD_USD=${Number(state.settings.shanghaiThreshold).toFixed(0)}\n` +
       `ALERT_DIRECTION=${state.settings.direction}\n` +
-      `CATALYST_ALERTS=true`;
+      `CATALYST_ALERTS=true` +
+      (extraTargets.length ? `\n${extraTargets.join('\n')}` : '');
   }
 }
 
@@ -1605,8 +2112,7 @@ async function fetchComexData() {
 
   let base = comexState.data || outlookState.data?.comex || FALLBACK_COMEX;
   try {
-    const res = await fetch('./data/comex.json', ANON_FETCH_OPTS);
-    if (res.ok) base = await res.json();
+    base = await fetchFreshRepoJson('comex.json');
   } catch {
     // Keep prior or fallback
   }
@@ -1658,7 +2164,9 @@ function renderComexPanel() {
   const subEl = document.getElementById('comex-subtitle');
   if (subEl && !comexState.fetching) {
     const dt = comex.gold.date || (comex.updatedAt ? new Date(comex.updatedAt).toLocaleDateString() : 'Latest');
-    subEl.textContent = `${comex.liveFetched ? 'Live CFTC/COMEX' : 'COMEX Snapshot'} (${dt}) · Feeds every prediction`;
+    const oiBadge = comex.oiLive ? 'Live OI' : comex.liveFetched ? 'Live CFTC' : 'Cached OI';
+    const vaultBadge = comex.vaultLive ? 'Live Vaults' : 'Snapshot Vaults';
+    subEl.textContent = `${oiBadge} · ${vaultBadge} (${dt})`;
   }
 
   for (const metal of ['gold', 'silver']) {
@@ -1692,15 +2200,14 @@ function renderComexPanel() {
 
 async function fetchOutlookData() {
   try {
-    const res = await fetch('./data/outlook.json', ANON_FETCH_OPTS);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    outlookState.data = await res.json();
+    outlookState.data = await fetchFreshRepoJson('outlook.json');
     if (!comexState.data && outlookState.data?.comex) {
       comexState.data = outlookState.data.comex;
     }
   } catch {
     outlookState.data = FALLBACK_OUTLOOK;
   }
+  renderMacroStrip();
   renderOutlook();
   renderChart();
 }
@@ -2051,9 +2558,48 @@ function renderOutlook() {
       </div>`;
   }
 
+  const replayWrap = document.getElementById('sl-replay-wrap');
+  const recentHist = sl?.recentHistory || [];
+  if (replayWrap) {
+    if (recentHist.length) {
+      const slice = recentHist.slice(0, 6).reverse();
+      const maxAbs = Math.max(
+        1.0,
+        ...slice.flatMap((h) => [Math.abs(Number(h.goldPredPct) || 0), Math.abs(Number(h.goldActualPct) || 0)])
+      );
+      const colsHtml = slice
+        .map((h) => {
+          const p = Number(h.goldPredPct) || 0;
+          const a = Number(h.goldActualPct) || 0;
+          const pH = Math.round(clampNum((Math.abs(p) / maxAbs) * 38, 4, 38));
+          const aH = Math.round(clampNum((Math.abs(a) / maxAbs) * 38, 4, 38));
+          const actCls = a >= 0 ? 'act-up' : 'act-down';
+          const lbl = h.date ? h.date.slice(5) : '—';
+          const tip = `${lbl}: Pred ${p >= 0 ? '+' : ''}${p.toFixed(2)}% vs Actual ${a >= 0 ? '+' : ''}${a.toFixed(2)}%`;
+          return `
+            <div class="sl-replay-col" title="${escapeHtml(tip)}">
+              <div class="sl-replay-track">
+                <span class="sl-bar pred" style="height:${pH}px"></span>
+                <span class="sl-bar ${actCls}" style="height:${aH}px"></span>
+              </div>
+              <span>${escapeHtml(lbl)}</span>
+            </div>`;
+        })
+        .join('');
+      replayWrap.innerHTML = `
+        <div class="sl-replay-head">
+          <span>Pred (Gold) vs. Actual (Green/Red) · Au 1D</span>
+          <span>${slice.length}d Replay</span>
+        </div>
+        <div class="sl-replay-bars">${colsHtml}</div>`;
+      replayWrap.hidden = false;
+    } else {
+      replayWrap.hidden = true;
+    }
+  }
+
   if (accList) {
     const rows = [];
-    const recentHist = sl?.recentHistory || [];
     if (recentHist.length) {
       rows.push('<div class="sl-section-label">Recent 5:10 PM ET Post-Close Self-Corrections</div>');
       for (const h of recentHist.slice(0, 4)) {
@@ -2077,13 +2623,15 @@ function renderOutlook() {
       );
     }
     if (btGold) {
+      const sk = btGold.pinballSkillPct != null ? ` · ${btGold.pinballSkillPct >= 0 ? '+' : ''}${btGold.pinballSkillPct}% Skill` : '';
       rows.push(
-        `<div class="acc-row"><span>6m Walk-Fwd Gold (${btGold.samples})</span><span>${btGold.dirHitPct}% Dir · ${btGold.inConePct}% Cone</span></div>`
+        `<div class="acc-row"><span>6m Walk-Fwd Gold (${btGold.samples})</span><span>${btGold.dirHitPct}% Dir · ${btGold.inConePct}% Cone${sk}</span></div>`
       );
     }
     if (btSilver) {
+      const sk = btSilver.pinballSkillPct != null ? ` · ${btSilver.pinballSkillPct >= 0 ? '+' : ''}${btSilver.pinballSkillPct}% Skill` : '';
       rows.push(
-        `<div class="acc-row"><span>6m Walk-Fwd Silver (${btSilver.samples})</span><span>${btSilver.dirHitPct}% Dir · ${btSilver.inConePct}% Cone</span></div>`
+        `<div class="acc-row"><span>6m Walk-Fwd Silver (${btSilver.samples})</span><span>${btSilver.dirHitPct}% Dir · ${btSilver.inConePct}% Cone${sk}</span></div>`
       );
     }
     accList.innerHTML = rows.join('');
@@ -2126,6 +2674,109 @@ function renderOutlook() {
   renderComexPanel();
   renderInstitutionalPulse(res);
   renderJumpDiffusion(res);
+  renderStackTracker();
+}
+
+const MINER_PROFILES = {
+  NEM: 'World #1 gold producer · Q3 AISC \$1,963/oz; high sensitivity to gold margins & cost inflation.',
+  AEM: 'Low-cost Tier-1 Canadian/Australian gold senior · flagship margin leader in institutional portfolios.',
+  B: 'Barrick Mining (formerly GOLD) · preparing North American IPO; Nevada/Africa Tier-1 reserves, AISC ~\$1,911/oz.',
+  WPM: 'Precious metals streamer · fixed-cost royalty/stream model shields against mine OpEx inflation.',
+  FNV: 'Diversified royalty/streamer · low capex exposure to long-life gold & silver assets.',
+  PAAS: 'Major Americas silver/gold producer · returning \$300M+ to shareholders with high silver torque.',
+  HL: 'Largest US primary silver producer · tight AISC guidance and domestic supply beta.',
+  AG: 'First Majestic Silver · pure-play Mexican silver producer; highly leveraged to silver spot surges & supply strikes.',
+  CDE: 'Coeur Mining · expansion ramp across Rochester & Las Chispas silver-gold operations.',
+};
+
+function renderMinerDetailDrawer(outlookRes, leaders) {
+  const drawer = document.getElementById('sector-detail-drawer');
+  if (!drawer) return;
+  if (!state.selectedMiner) {
+    drawer.hidden = true;
+    drawer.innerHTML = '';
+    return;
+  }
+  const c = leaders.find((l) => l.symbol === state.selectedMiner);
+  if (!c) {
+    drawer.hidden = true;
+    return;
+  }
+
+  const pts =
+    Array.isArray(c.spark) && c.spark.length >= 2
+      ? c.spark.map(Number).filter(Number.isFinite)
+      : [Number(c.last || 0), Number(c.last || 0)];
+  const minV = Math.min(...pts);
+  const maxV = Math.max(...pts);
+  const span = Math.max(maxV - minV, maxV * 0.005, 0.01);
+  const w = 260;
+  const h = 54;
+  const padY = 6;
+  const coords = pts.map((v, i) => {
+    const x = pts.length > 1 ? (i / (pts.length - 1)) * (w - 8) + 4 : w / 2;
+    const y = h - padY - ((v - minV) / span) * (h - padY * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const lastCoord = coords[coords.length - 1].split(',');
+  const lineCol = c.metal === 'silver' ? '#C2CAD6' : '#E8C25D';
+  const fillCol = c.metal === 'silver' ? 'rgba(194,202,214,0.14)' : 'rgba(212,168,67,0.15)';
+  const areaPts = `4,${h - 2} ${coords.join(' ')} ${lastCoord[0]},${h - 2}`;
+
+  const p1 = Number(c.pct1d ?? 0);
+  const p5 = Number(c.pct5d ?? p1);
+  const hi14 = Number.isFinite(c.high14) ? c.high14 : maxV;
+  const lo14 = Number.isFinite(c.low14) ? c.low14 : minV;
+  const dec = c.last >= 100 ? 0 : 2;
+  const spotRef = c.metal === 'silver' ? 'XAG' : 'XAU';
+  const sectorRel =
+    c.metal === 'silver'
+      ? outlookRes?.base?.proSignals?.miners?.silVsSilver10dPct
+      : outlookRes?.base?.proSignals?.miners?.gdxVsGold10dPct;
+  const spreadLabel = sectorRel != null ? `${sectorRel >= 0 ? '+' : ''}${Number(sectorRel).toFixed(1)}% 10d ETF` : `${p5 >= 0 ? '+' : ''}${p5.toFixed(1)}% 5d`;
+
+  const headlines = outlookRes?.base?.headlines || [];
+  const nameKey = c.name.toLowerCase().split(' ')[0];
+  const symRx = new RegExp(`\\b${c.symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  const matchedHeadline = headlines.find(
+    (hl) => (hl.title && (symRx.test(hl.title) || (nameKey.length >= 4 && hl.title.toLowerCase().includes(nameKey))))
+  );
+  const noteText = matchedHeadline
+    ? `Latest Catalyst: ${matchedHeadline.title}`
+    : MINER_PROFILES[c.symbol] || `${c.name} (${c.symbol}) feeds Bullion Pulse's 9-miner sector breadth signal.`;
+
+  drawer.innerHTML = `
+    <div class="sector-detail-head">
+      <div class="sector-detail-title">
+        <span class="sector-sym ${c.metal}">${escapeHtml(c.symbol)}</span> · ${escapeHtml(c.name)} (${spotRef} Miner/Streamer)
+      </div>
+      <button type="button" class="sector-detail-close" id="btn-close-miner-drawer">Close ✕</button>
+    </div>
+    <div class="sector-detail-metrics">
+      <div class="sector-detail-box">
+        <span>Spot / 1D Move</span>
+        <strong>$${Number(c.last || 0).toFixed(dec)} (${p1 >= 0 ? '+' : ''}${p1.toFixed(1)}%)</strong>
+      </div>
+      <div class="sector-detail-box">
+        <span>5D Return</span>
+        <strong class="${p5 >= 0 ? 'up' : 'down'}">${p5 >= 0 ? '+' : '−'}${Math.abs(p5).toFixed(1)}%</strong>
+      </div>
+      <div class="sector-detail-box">
+        <span>14D Range (Low–High)</span>
+        <strong>$${lo14.toFixed(dec)} – $${hi14.toFixed(dec)}</strong>
+      </div>
+      <div class="sector-detail-box">
+        <span>vs ${spotRef} Sector Beta</span>
+        <strong>${escapeHtml(spreadLabel)}</strong>
+      </div>
+    </div>
+    <svg class="sector-spark-wrap" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(c.symbol)} 14-day price trend">
+      <polygon points="${areaPts}" fill="${fillCol}" />
+      <polyline points="${coords.join(' ')}" fill="none" stroke="${lineCol}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+    </svg>
+    <div class="sector-detail-note">${escapeHtml(noteText)}</div>
+  `;
+  drawer.hidden = false;
 }
 
 function renderSectorLeaders(outlookRes) {
@@ -2150,8 +2801,8 @@ function renderSectorLeaders(outlookRes) {
     const sBr = miners?.silverBreadthPct;
     subEl.textContent =
       gBr != null && sBr != null
-        ? `5d breadth: Gold miners ${gBr}% up · Silver miners ${sBr}% up`
-        : '9 producers & streamers · Feeds miner confirmation';
+        ? `5d breadth: Au ${gBr}% up · Ag ${sBr}% up · Tap any miner`
+        : '9 producers & streamers · Tap any company for 14d chart';
   }
 
   gridEl.innerHTML = leaders
@@ -2160,17 +2811,20 @@ function renderSectorLeaders(outlookRes) {
       const cls = p5 > 0.05 ? 'up' : p5 < -0.05 ? 'down' : '';
       const pctStr = `${p5 >= 0 ? '+' : '−'}${Math.abs(p5).toFixed(1)}%`;
       const lastStr = Number.isFinite(c.last) ? `$${Number(c.last).toFixed(c.last >= 100 ? 0 : 2)}` : '$—';
+      const isSel = state.selectedMiner === c.symbol;
       return `
-        <article class="sector-chip">
+        <button type="button" class="sector-chip${isSel ? ' selected' : ''}" data-symbol="${escapeHtml(c.symbol)}" aria-pressed="${isSel ? 'true' : 'false'}">
           <div class="sector-chip-top">
             <span class="sector-sym ${c.metal}">${escapeHtml(c.symbol)}</span>
             <span class="sector-pct ${cls}">${pctStr}</span>
           </div>
           <div class="sector-name">${escapeHtml(c.name)}</div>
           <div class="sector-last">${lastStr} (5d)</div>
-        </article>`;
+        </button>`;
     })
     .join('');
+
+  renderMinerDetailDrawer(outlookRes, leaders);
 }
 
 /* ---------- Institutional Pulse (Event Calendar, ^GVZ, ETF Flows, Copper/JPY, Basis) ---------- */
@@ -2181,6 +2835,17 @@ const CLIENT_FOMC_DATES = [
   '2027-01-27', '2027-03-17', '2027-04-28', '2027-06-16',
   '2027-07-28', '2027-09-22', '2027-11-03', '2027-12-15',
 ];
+
+const CLIENT_VERIFIED_CPI_DATES = {
+  '2026-01': '2026-01-13', '2026-02': '2026-02-13', '2026-03': '2026-03-11',
+  '2026-04': '2026-04-10', '2026-05': '2026-05-12', '2026-06': '2026-06-10',
+  '2026-07': '2026-07-14', '2026-08': '2026-08-12', '2026-09': '2026-09-11',
+  '2026-11': '2026-11-10', '2026-12': '2026-12-10',
+  '2027-01': '2027-01-13', '2027-02': '2027-02-11', '2027-03': '2027-03-10',
+  '2027-04': '2027-04-13', '2027-07': '2027-07-14', '2027-08': '2027-08-11',
+  '2027-09': '2027-09-14', '2027-10': '2027-10-14', '2027-11': '2027-11-10',
+  '2027-12': '2027-12-10',
+};
 
 function computeClientEventRisk(nowDate = new Date()) {
   const startUtc = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate());
@@ -2196,10 +2861,15 @@ function computeClientEventRisk(nowDate = new Date()) {
     const first = new Date(Date.UTC(y, m, 1));
     const nfp = new Date(Date.UTC(y, m, 1 + ((5 - first.getUTCDay() + 7) % 7)));
     events.push({ type: 'nfp', title: 'US Jobs Report (NFP)', date: iso(nfp) });
-    const cpi = new Date(Date.UTC(y, m, 12));
-    if (cpi.getUTCDay() === 6) cpi.setUTCDate(14);
-    else if (cpi.getUTCDay() === 0) cpi.setUTCDate(13);
-    events.push({ type: 'cpi', title: 'US CPI Inflation Print', date: iso(cpi) });
+    const ym = `${y}-${String(m + 1).padStart(2, '0')}`;
+    let cpiDate = CLIENT_VERIFIED_CPI_DATES[ym];
+    if (!cpiDate) {
+      const cpi = new Date(Date.UTC(y, m, 12));
+      if (cpi.getUTCDay() === 6) cpi.setUTCDate(14);
+      else if (cpi.getUTCDay() === 0) cpi.setUTCDate(13);
+      cpiDate = iso(cpi);
+    }
+    events.push({ type: 'cpi', title: 'US CPI Inflation Print', date: cpiDate });
     if (fndMonths.has(m)) {
       const fnd = new Date(Date.UTC(y, m + 1, 0));
       while (fnd.getUTCDay() === 0 || fnd.getUTCDay() === 6) fnd.setUTCDate(fnd.getUTCDate() - 1);
@@ -2935,13 +3605,12 @@ const FALLBACK_SHANGHAI = {
 
 async function fetchShanghaiData() {
   try {
-    const res = await fetch('./data/shanghai.json', { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    shanghaiState.data = await res.json();
+    shanghaiState.data = await fetchFreshRepoJson('shanghai.json');
   } catch {
     shanghaiState.data = outlookState.data?.shanghai || FALLBACK_SHANGHAI;
   }
   renderShanghai();
+  renderStackTracker();
 }
 
 function renderShanghai() {
@@ -3039,11 +3708,175 @@ function escapeHtml(str) {
     .replaceAll('"', '&quot;');
 }
 
+function renderMacroStrip() {
+  const snap = outlookState.data?.macroSnapshot || FALLBACK_OUTLOOK.macroSnapshot || {};
+  const setTile = (valId, chgId, valText, pctVal, liveLabel = null) => {
+    const vEl = document.getElementById(valId);
+    const cEl = document.getElementById(chgId);
+    if (vEl) vEl.textContent = valText;
+    if (cEl) {
+      if (pctVal != null && Number.isFinite(Number(pctVal))) {
+        const n = Number(pctVal);
+        cEl.textContent = `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(2)}% 5d`;
+        cEl.className = `macro-d ${n > 0.05 ? 'up' : n < -0.05 ? 'down' : ''}`;
+      } else if (liveLabel) {
+        cEl.textContent = liveLabel;
+        cEl.className = 'macro-d';
+      } else {
+        cEl.textContent = 'Snapshot';
+        cEl.className = 'macro-d';
+      }
+    }
+  };
+  const livePlat = state.liveMacro.platinum ?? snap.platinum;
+  setTile('macro-dxy', 'macro-dxy-chg', snap.dxy != null ? Number(snap.dxy).toFixed(2) : '—', snap.dxy5dPct);
+  setTile('macro-tnx', 'macro-tnx-chg', snap.tnx != null ? `${Number(snap.tnx).toFixed(2)}%` : '—', snap.tnx5dPct);
+  setTile('macro-copper', 'macro-copper-chg', snap.copper != null ? `$${Number(snap.copper).toFixed(2)}` : '—', snap.cu5dPct);
+  setTile(
+    'macro-platinum',
+    'macro-platinum-chg',
+    livePlat != null ? `$${Math.round(Number(livePlat)).toLocaleString('en-US')}` : '—',
+    snap.platinum5dPct,
+    state.liveMacro.platinum != null ? 'Live XPT' : null
+  );
+}
+
+function renderStackTracker() {
+  const totalEl = document.getElementById('stack-total-val');
+  if (!totalEl) return;
+  const dayEl = document.getElementById('stack-day-chg');
+  const pnlValEl = document.getElementById('stack-pnl-val');
+  const pnlPctEl = document.getElementById('stack-pnl-pct');
+  const splitEl = document.getElementById('stack-split-val');
+  const sgeEl = document.getElementById('stack-sge-val');
+  const scStripEl = document.getElementById('stack-scenario-strip');
+
+  const st = state.settings.stack || {};
+  const gOz = Math.max(0, parseFloat(st.goldOz) || 0);
+  const gCost = Math.max(0, parseFloat(st.goldCost) || 0);
+  const sOz = Math.max(0, parseFloat(st.silverOz) || 0);
+  const sCost = Math.max(0, parseFloat(st.silverCost) || 0);
+
+  if (gOz <= 0 && sOz <= 0) {
+    totalEl.textContent = '$0.00';
+    if (dayEl) {
+      dayEl.textContent = 'Enter oz above to track live';
+      dayEl.className = 'stack-stat-s';
+    }
+    if (pnlValEl) {
+      pnlValEl.textContent = '—';
+      pnlValEl.className = 'stack-stat-v';
+    }
+    if (pnlPctEl) pnlPctEl.textContent = 'Cost basis vs spot';
+    if (splitEl) splitEl.textContent = '—';
+    if (sgeEl) sgeEl.textContent = 'Shanghai physical est.';
+    if (scStripEl) scStripEl.hidden = true;
+    return;
+  }
+
+  const gSpot = state.quotes.gold.price || 0;
+  const sSpot = state.quotes.silver.price || 0;
+  const gVal = gOz * gSpot;
+  const sVal = sOz * sSpot;
+  const totalVal = gVal + sVal;
+  const dayChg = gOz * (state.quotes.gold.chg || 0) + sOz * (state.quotes.silver.chg || 0);
+  const prevTotal = totalVal - dayChg;
+  const dayPct = prevTotal > 0 ? (dayChg / prevTotal) * 100 : 0;
+
+  totalEl.textContent = totalVal > 0 ? formatMoney(totalVal) : '$—';
+  if (dayEl) {
+    if (totalVal > 0) {
+      dayEl.textContent = `Today: ${formatSignedMoney(dayChg)} (${formatSignedPct(dayPct)})`;
+      dayEl.className = `stack-stat-s ${dayChg > 0.01 ? 'up' : dayChg < -0.01 ? 'down' : ''}`;
+    } else {
+      dayEl.textContent = 'Waiting for live spot…';
+      dayEl.className = 'stack-stat-s';
+    }
+  }
+
+  let basisCost = 0;
+  let basisCurrent = 0;
+  if (gOz > 0 && gCost > 0) {
+    basisCost += gOz * gCost;
+    basisCurrent += gVal;
+  }
+  if (sOz > 0 && sCost > 0) {
+    basisCost += sOz * sCost;
+    basisCurrent += sVal;
+  }
+
+  if (pnlValEl && pnlPctEl) {
+    if (basisCost > 0 && basisCurrent > 0) {
+      const pnlUsd = basisCurrent - basisCost;
+      const pnlPct = (pnlUsd / basisCost) * 100;
+      pnlValEl.textContent = formatSignedMoney(pnlUsd);
+      pnlValEl.className = `stack-stat-v ${pnlUsd > 0.01 ? 'up' : pnlUsd < -0.01 ? 'down' : ''}`;
+      pnlPctEl.textContent = `${formatSignedPct(pnlPct)} on ${formatMoney(basisCost)}`;
+    } else {
+      pnlValEl.textContent = '—';
+      pnlValEl.className = 'stack-stat-v';
+      pnlPctEl.textContent = 'Add avg $/oz cost for P&L';
+    }
+  }
+
+  const gShare = totalVal > 0 ? Math.round((gVal / totalVal) * 100) : 0;
+  const sShare = totalVal > 0 ? 100 - gShare : 0;
+  if (splitEl) splitEl.textContent = totalVal > 0 ? `${gShare}% Au / ${sShare}% Ag` : '—';
+
+  const sge = shanghaiState.data || outlookState.data?.shanghai || FALLBACK_SHANGHAI;
+  const usdCny = sge?.usdCny || 7.24;
+  const gSgeOz = sge?.gold?.usdPerOz ?? ((sge?.gold?.cnyPerG || 635) * TROY_OZ_TO_GRAMS) / usdCny;
+  const sSgeOzRaw = sge?.silver?.usdPerOz ?? (((sge?.silver?.cnyPerKg || 8450) / 1000) * TROY_OZ_TO_GRAMS) / usdCny;
+  const sSgeOz = sSgeOzRaw / 1.13;
+  const sgeTotal = gOz * gSgeOz + sOz * sSgeOz;
+  const sgeDiff = sgeTotal - totalVal;
+  if (sgeEl) {
+    sgeEl.textContent =
+      totalVal > 0 ? `SGE Eq: ${formatMoney(sgeTotal)} (${formatSignedMoney(sgeDiff)})` : 'Shanghai physical est.';
+  }
+
+  if (scStripEl) {
+    if (totalVal > 0) {
+      const oRes = computeInteractiveOutlook();
+      const bearVal = gOz * oRes.gold.range.bear + sOz * oRes.silver.range.bear;
+      const baseVal = gOz * oRes.gold.range.base + sOz * oRes.silver.range.base;
+      const bullVal = gOz * oRes.gold.range.bull + sOz * oRes.silver.range.bull;
+      const hLbl = outlookState.horizon === '30d' ? '30D' : '7D';
+      const scCount = outlookState.activeScenarios.size;
+      const scTag = scCount > 0 ? `${scCount} What-If Scenario${scCount > 1 ? 's' : ''} Active` : `${hLbl} Probabilistic Cone`;
+      scStripEl.innerHTML = `
+        <div class="stack-sc-head">
+          <span>Projected Stack Valuation (${hLbl})</span>
+          <span>${escapeHtml(scTag)}</span>
+        </div>
+        <div class="stack-sc-grid">
+          <div class="stack-sc-box">
+            <span class="stack-sc-k">Bear (P10)</span>
+            <strong class="stack-sc-v down">${formatMoney(bearVal)}</strong>
+          </div>
+          <div class="stack-sc-box">
+            <span class="stack-sc-k">Base (P50)</span>
+            <strong class="stack-sc-v base">${formatMoney(baseVal)}</strong>
+          </div>
+          <div class="stack-sc-box">
+            <span class="stack-sc-k">Bull (P90)</span>
+            <strong class="stack-sc-v up">${formatMoney(bullVal)}</strong>
+          </div>
+        </div>`;
+      scStripEl.hidden = false;
+    } else {
+      scStripEl.hidden = true;
+    }
+  }
+}
+
 function renderAll() {
+  renderMacroStrip();
   renderStatus();
   renderMetalCard('gold');
   renderMetalCard('silver');
   renderStats();
+  renderStackTracker();
   renderShanghai();
   renderChart();
   renderSettingsControls();
@@ -3063,6 +3896,9 @@ function switchView(viewName) {
     if (active) btn.setAttribute('aria-current', 'page');
     else btn.removeAttribute('aria-current');
   });
+  if (window.scrollY > 20) {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
   if (viewName === 'markets') {
     requestAnimationFrame(renderChart);
   } else if (viewName === 'outlook') {
@@ -3071,9 +3907,12 @@ function switchView(viewName) {
 }
 
 function wireEvents() {
-  // Bottom nav
+  // Title-bar & bottom navigation
   document.querySelectorAll('.nav-btn').forEach((btn) => {
-    btn.addEventListener('click', () => switchView(btn.dataset.view));
+    btn.addEventListener('click', (e) => {
+      if (btn.tagName === 'A') e.preventDefault();
+      switchView(btn.dataset.view);
+    });
   });
 
   // Candlestick chart 1D–ALL timeframe selector (lazy-loads candles_hist.json once on 7D–ALL)
@@ -3181,47 +4020,64 @@ function wireEvents() {
     savePersistedState();
   });
 
-  // Interactive OHLC crosshair hover / touch drag on candlestick chart
+  document.getElementById('btn-toggle-sma')?.addEventListener('click', () => {
+    state.settings.showSma = !state.settings.showSma;
+    renderChart();
+    savePersistedState();
+  });
+
+  document.getElementById('btn-toggle-rsi')?.addEventListener('click', () => {
+    state.settings.showRsi = !state.settings.showRsi;
+    renderChart();
+    savePersistedState();
+  });
+
+  // Interactive 60fps dual-canvas OHLC crosshair hover / touch drag on candlestick chart
   const chartCanvas = document.getElementById('intraday-chart');
   if (chartCanvas) {
     const inspectPointer = (clientX) => {
+      const g = state.chartGeom;
       const rect = chartCanvas.getBoundingClientRect();
-      const plotW = rect.width - 66;
-      const candleAreaW = state.settings.showForecast ? plotW * 0.72 : plotW;
-      const relX = clientX - rect.left - 6;
-      const bars = getCandlesForTimeframe(
-        state.settings.selectedMetal,
-        state.settings.chartTimeframe || '1d'
-      );
-      if (!bars.length || relX < 0 || relX > candleAreaW) {
+      const plotW = g ? g.plotW : rect.width - 66;
+      const chartMode = state.settings.chartMode || state.settings.selectedMetal || 'gold';
+      const isRatio = chartMode === 'ratio';
+      const tf = state.settings.chartTimeframe || '1d';
+      const candleAreaW = g ? g.candleAreaW : (state.settings.showForecast && !isRatio ? plotW * 0.72 : plotW);
+      const padLeft = g ? g.padLeft : 6;
+      const relX = clientX - rect.left - padLeft;
+      const len = g?.converted?.length || (isRatio
+        ? getRatioBarsForTimeframe(tf).length
+        : getCandlesForTimeframe(state.settings.selectedMetal, tf).length);
+      if (!len || relX < 0 || relX > candleAreaW) {
         if (state.hoverCandleIdx !== null) {
           state.hoverCandleIdx = null;
-          renderChart();
+          renderCrosshairOverlay(null);
         }
         return;
       }
-      const idx = Math.max(0, Math.min(bars.length - 1, Math.floor((relX / candleAreaW) * bars.length)));
+      const idx = Math.max(0, Math.min(len - 1, Math.floor((relX / candleAreaW) * len)));
       if (state.hoverCandleIdx !== idx) {
         state.hoverCandleIdx = idx;
-        renderChart();
+        renderCrosshairOverlay(idx);
       }
     };
     chartCanvas.addEventListener('pointermove', (e) => inspectPointer(e.clientX));
     chartCanvas.addEventListener('pointerdown', (e) => inspectPointer(e.clientX));
     chartCanvas.addEventListener('pointerleave', () => {
       state.hoverCandleIdx = null;
-      renderChart();
+      renderCrosshairOverlay(null);
     });
   }
 
   // Refresh & Theme
   document.getElementById('btn-refresh')?.addEventListener('click', () => {
     navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {});
-    fetchSpotQuotes();
+    fetchSpotQuotes(true);
     fetchOutlookData();
     fetchShanghaiData();
     fetchCandlesData();
     fetchComexData();
+    fetchLivePlatinumPrice();
   });
   document.getElementById('btn-refresh-comex')?.addEventListener('click', () => {
     fetchComexData();
@@ -3251,16 +4107,25 @@ function wireEvents() {
     savePersistedState();
   });
 
-  // Metal selection
+  // Metal selection & Au/Ag Ratio chart mode
   ['gold', 'silver'].forEach((metal) => {
     const selectMetal = () => {
       state.settings.selectedMetal = metal;
+      state.settings.chartMode = metal;
       state.hoverCandleIdx = null;
       renderAll();
       savePersistedState();
     };
     document.getElementById(`card-${metal}`)?.addEventListener('click', selectMetal);
     document.getElementById(`chart-btn-${metal}`)?.addEventListener('click', selectMetal);
+  });
+
+  document.getElementById('chart-btn-ratio')?.addEventListener('click', () => {
+    state.settings.chartMode = 'ratio';
+    state.hoverCandleIdx = null;
+    if ((state.settings.chartTimeframe || '1d') !== '1d') ensureHistoricalCandlesLoaded();
+    renderChart();
+    savePersistedState();
   });
 
   // Alert Banner dismiss
@@ -3290,12 +4155,170 @@ function wireEvents() {
     renderSettingsControls();
     savePersistedState();
   });
+  document.getElementById('chk-confirm-moves')?.addEventListener('change', (e) => {
+    state.settings.confirmMoves = !!e.target.checked;
+    if (!state.settings.confirmMoves) {
+      state.pendingAlert = { gold: null, silver: null };
+    }
+    renderSettingsControls();
+    savePersistedState();
+  });
 
   // ntfy topic input
   document.getElementById('input-ntfy-topic')?.addEventListener('input', (e) => {
     state.settings.ntfyTopic = e.target.value.trim();
     renderSettingsControls();
     savePersistedState();
+  });
+
+  // Private My Bullion Stack inputs (stored 100% locally)
+  const stackInputs = [
+    ['input-stack-gold-oz', 'goldOz'],
+    ['input-stack-gold-cost', 'goldCost'],
+    ['input-stack-silver-oz', 'silverOz'],
+    ['input-stack-silver-cost', 'silverCost'],
+  ];
+  stackInputs.forEach(([id, key]) => {
+    document.getElementById(id)?.addEventListener('input', (e) => {
+      if (!state.settings.stack) state.settings.stack = { ...DEFAULT_SETTINGS.stack };
+      state.settings.stack[key] = e.target.value.trim();
+      renderStackTracker();
+      savePersistedState();
+    });
+  });
+
+  // Export & Import JSON Backup (protects Stack & Custom Alerts from cache clears)
+  document.getElementById('btn-export-backup')?.addEventListener('click', () => {
+    const payload = {
+      app: 'Bullion Pulse',
+      version: 17,
+      exportedAt: new Date().toISOString(),
+      settings: state.settings,
+      alertLog: state.alertLog.slice(0, 25),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bullion-pulse-backup-${todayKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  document.getElementById('btn-import-backup')?.addEventListener('click', () => {
+    document.getElementById('input-import-backup')?.click();
+  });
+
+  document.getElementById('input-import-backup')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (parsed && parsed.settings && typeof parsed.settings === 'object') {
+        state.settings = {
+          ...state.settings,
+          ...parsed.settings,
+          stack: { ...DEFAULT_SETTINGS.stack, ...(parsed.settings.stack || {}) },
+          targets: { ...DEFAULT_SETTINGS.targets, ...(parsed.settings.targets || {}) },
+        };
+        if (Array.isArray(parsed.alertLog)) {
+          state.alertLog = parsed.alertLog.slice(0, 25);
+        }
+        applyTheme(state.settings.theme);
+        renderAll();
+        savePersistedState();
+      }
+    } catch {
+      // Ignore malformed JSON backup file
+    } finally {
+      e.target.value = '';
+    }
+  });
+
+  // Custom Target Price Alert inputs (debounced evaluation so partial typing doesn't misfire)
+  const targetInputs = [
+    ['input-target-gold-above', 'goldAbove'],
+    ['input-target-gold-below', 'goldBelow'],
+    ['input-target-silver-above', 'silverAbove'],
+    ['input-target-silver-below', 'silverBelow'],
+    ['input-target-ratio-above', 'ratioAbove'],
+  ];
+  let targetEvalTimer = null;
+  targetInputs.forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const evaluateRule = () => {
+      if (state.sessionAlerted.targets) delete state.sessionAlerted.targets[key];
+      if (state.quotes.gold.price && state.quotes.silver.price) {
+        evaluateClientPriceTargets(state.quotes.gold.price, state.quotes.silver.price);
+        renderAlertLog();
+      }
+      savePersistedState();
+    };
+    el.addEventListener('input', (e) => {
+      if (!state.settings.targets) state.settings.targets = { ...DEFAULT_SETTINGS.targets };
+      state.settings.targets[key] = e.target.value.trim();
+      renderSettingsControls();
+      savePersistedState();
+      clearTimeout(targetEvalTimer);
+      targetEvalTimer = setTimeout(evaluateRule, 750);
+    });
+    el.addEventListener('change', () => {
+      clearTimeout(targetEvalTimer);
+      evaluateRule();
+    });
+  });
+
+  // Browser Web Notification API activation
+  document.getElementById('btn-enable-web-notif')?.addEventListener('click', async () => {
+    const feedback = document.getElementById('ntfy-feedback');
+    if (typeof Notification === 'undefined') {
+      if (feedback) {
+        feedback.className = 'feedback-note err';
+        feedback.textContent = 'Browser notifications are not supported on this browser — use ntfy.sh push above.';
+      }
+      return;
+    }
+    try {
+      const perm = await Notification.requestPermission();
+      renderSettingsControls();
+      if (perm === 'granted') {
+        maybeSendBrowserNotification(
+          'Bullion Pulse Browser Alerts Active',
+          'You will receive live alerts whenever daily moves or custom price targets hit.'
+        );
+        if (feedback) {
+          feedback.className = 'feedback-note ok';
+          feedback.textContent = 'Browser notifications enabled!';
+        }
+      } else if (feedback) {
+        feedback.className = 'feedback-note err';
+        feedback.textContent = 'Notification permission was denied in browser settings.';
+      }
+    } catch (err) {
+      if (feedback) {
+        feedback.className = 'feedback-note err';
+        feedback.textContent = `Could not enable browser alerts: ${err.message}`;
+      }
+    }
+  });
+
+  // Interactive Sector Bellwethers drill-down drawer
+  document.getElementById('sector-leaders-grid')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.sector-chip[data-symbol]');
+    if (!chip) return;
+    const sym = chip.dataset.symbol;
+    state.selectedMiner = state.selectedMiner === sym ? null : sym;
+    renderSectorLeaders(computeInteractiveOutlook());
+  });
+
+  document.getElementById('sector-detail-drawer')?.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-close-miner-drawer')) {
+      state.selectedMiner = null;
+      renderSectorLeaders(computeInteractiveOutlook());
+    }
   });
 
   // Send Test Push via ntfy.sh
@@ -3425,9 +4448,21 @@ function wireEvents() {
     } else {
       fetchSpotQuotes();
       fetchCandlesData();
+      refreshSlowFeeds(false);
       startPolling();
     }
   });
+}
+
+let lastSlowRefreshAt = Date.now();
+function refreshSlowFeeds(force = false) {
+  const now = Date.now();
+  if (!force && now - lastSlowRefreshAt < 60000) return;
+  lastSlowRefreshAt = now;
+  fetchOutlookData();
+  fetchShanghaiData();
+  fetchComexData();
+  fetchLivePlatinumPrice();
 }
 
 function startPolling() {
@@ -3435,7 +4470,10 @@ function startPolling() {
   if (state.candleRefreshTimer) clearInterval(state.candleRefreshTimer);
   if (state.countdownTimer) clearInterval(state.countdownTimer);
   state.refreshTimer = setInterval(fetchSpotQuotes, REFRESH_MS);
-  state.candleRefreshTimer = setInterval(fetchCandlesData, CANDLE_INTERVAL_MS);
+  state.candleRefreshTimer = setInterval(() => {
+    fetchCandlesData();
+    refreshSlowFeeds(true);
+  }, CANDLE_INTERVAL_MS);
   state.countdownTimer = setInterval(updateCandleCountdown, 1000);
   updateCandleCountdown();
 }
@@ -3469,6 +4507,7 @@ function init() {
   fetchShanghaiData();
   fetchCandlesData();
   fetchComexData();
+  fetchLivePlatinumPrice();
   startPolling();
   registerServiceWorker();
 }

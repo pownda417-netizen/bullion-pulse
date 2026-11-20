@@ -46,8 +46,24 @@ function lastBusinessDayOfMonth(year, monthIndex) {
   return d;
 }
 
+// Official BLS CPI release dates retrieved from bls.gov/schedule/news_release/cpi.htm
+const VERIFIED_CPI_DATES = {
+  '2026-01': '2026-01-13', '2026-02': '2026-02-13', '2026-03': '2026-03-11',
+  '2026-04': '2026-04-10', '2026-05': '2026-05-12', '2026-06': '2026-06-10',
+  '2026-07': '2026-07-14', '2026-08': '2026-08-12', '2026-09': '2026-09-11',
+  '2026-11': '2026-11-10', '2026-12': '2026-12-10',
+  '2027-01': '2027-01-13', '2027-02': '2027-02-11', '2027-03': '2027-03-10',
+  '2027-04': '2027-04-13', '2027-07': '2027-07-14', '2027-08': '2027-08-11',
+  '2027-09': '2027-09-14', '2027-10': '2027-10-14', '2027-11': '2027-11-10',
+  '2027-12': '2027-12-10',
+};
+
 function approxCpiReleaseDate(year, monthIndex) {
-  // US BLS CPI typically releases on the 12th–14th (nearest weekday >= 12th)
+  const ym = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+  if (VERIFIED_CPI_DATES[ym]) {
+    return new Date(`${VERIFIED_CPI_DATES[ym]}T00:00:00Z`);
+  }
+  // Fallback for unverified months: nearest weekday >= 12th
   const d = new Date(Date.UTC(year, monthIndex, 12));
   if (d.getUTCDay() === 6) d.setUTCDate(14);
   else if (d.getUTCDay() === 0) d.setUTCDate(13);
