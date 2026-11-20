@@ -223,7 +223,23 @@ async function fetchSpotBaseline(series) {
     });
     if (res.ok) {
       const parsed = parseGoldPriceOrg(await res.json());
-      return { spotGold: parsed.gold.price, spotSilver: parsed.silver.price };
+      if (parsed.gold.price > 0 && parsed.silver.price > 0) {
+        return { spotGold: parsed.gold.price, spotSilver: parsed.silver.price, source: 'goldprice.org' };
+      }
+    }
+  } catch {
+    // Fall through to gold-api.com spot feed
+  }
+  try {
+    const [xauRes, xagRes] = await Promise.all([
+      fetch('https://api.gold-api.com/price/XAU', { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } }),
+      fetch('https://api.gold-api.com/price/XAG', { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } }),
+    ]);
+    if (xauRes.ok && xagRes.ok) {
+      const [xau, xag] = await Promise.all([xauRes.json(), xagRes.json()]);
+      if (typeof xau?.price === 'number' && xau.price > 0 && typeof xag?.price === 'number' && xag.price > 0) {
+        return { spotGold: +xau.price.toFixed(2), spotSilver: +xag.price.toFixed(2), source: 'gold-api.com' };
+      }
     }
   } catch {
     // Fall back to latest Yahoo close
@@ -233,6 +249,7 @@ async function fetchSpotBaseline(series) {
   return {
     spotGold: gArr[gArr.length - 1] ?? 2685.0,
     spotSilver: sArr[sArr.length - 1] ?? 31.5,
+    source: 'yahoo-fallback',
   };
 }
 

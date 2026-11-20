@@ -258,6 +258,31 @@ async function fetchFromGoldPriceOrg() {
   };
 }
 
+function getCanonicalSpotPrices() {
+  const base = outlookState.data || FALLBACK_OUTLOOK;
+  const liveG =
+    typeof state.quotes.gold.price === 'number' && Number.isFinite(state.quotes.gold.price) && state.quotes.gold.price > 0
+      ? state.quotes.gold.price
+      : null;
+  const liveS =
+    typeof state.quotes.silver.price === 'number' && Number.isFinite(state.quotes.silver.price) && state.quotes.silver.price > 0
+      ? state.quotes.silver.price
+      : null;
+  const snapG =
+    typeof base?.gold?.spot === 'number' && Number.isFinite(base.gold.spot) && base.gold.spot > 0
+      ? base.gold.spot
+      : null;
+  const snapS =
+    typeof base?.silver?.spot === 'number' && Number.isFinite(base.silver.spot) && base.silver.spot > 0
+      ? base.silver.spot
+      : null;
+  return {
+    gold: liveG ?? snapG ?? 3521.5,
+    silver: liveS ?? snapS ?? 40.87,
+    isLive: liveG != null && liveS != null,
+  };
+}
+
 async function fetchFromGoldApiCom() {
   const [xauRes, xagRes] = await Promise.all([
     fetch('https://api.gold-api.com/price/XAU', { cache: 'no-store' }),
@@ -271,24 +296,36 @@ async function fetchFromGoldApiCom() {
     throw new Error('Unexpected gold-api.com payload');
   }
 
-  const prevGold = state.quotes.gold.prevClose ?? xau.price;
-  const prevSilver = state.quotes.silver.prevClose ?? xag.price;
+  const candlePrevG = state.candles.gold?.[0]?.o;
+  const candlePrevS = state.candles.silver?.[0]?.o;
+  const prevGold =
+    (state.quotes.gold.prevClose && state.quotes.gold.prevClose !== state.quotes.gold.price
+      ? state.quotes.gold.prevClose
+      : null) ??
+    (Number.isFinite(candlePrevG) && candlePrevG > 0 ? candlePrevG : null) ??
+    xau.price;
+  const prevSilver =
+    (state.quotes.silver.prevClose && state.quotes.silver.prevClose !== state.quotes.silver.price
+      ? state.quotes.silver.prevClose
+      : null) ??
+    (Number.isFinite(candlePrevS) && candlePrevS > 0 ? candlePrevS : null) ??
+    xag.price;
   const goldChg = xau.price - prevGold;
   const silverChg = xag.price - prevSilver;
 
   return {
     source: 'Gold-API Spot',
     gold: {
-      price: xau.price,
-      prevClose: prevGold,
-      chg: goldChg,
-      pct: prevGold ? (goldChg / prevGold) * 100 : 0,
+      price: +xau.price.toFixed(2),
+      prevClose: +prevGold.toFixed(2),
+      chg: +goldChg.toFixed(2),
+      pct: prevGold ? +((goldChg / prevGold) * 100).toFixed(2) : 0,
     },
     silver: {
-      price: xag.price,
-      prevClose: prevSilver,
-      chg: silverChg,
-      pct: prevSilver ? (silverChg / prevSilver) * 100 : 0,
+      price: +xag.price.toFixed(2),
+      prevClose: +prevSilver.toFixed(2),
+      chg: +silverChg.toFixed(2),
+      pct: prevSilver ? +((silverChg / prevSilver) * 100).toFixed(2) : 0,
     },
   };
 }
@@ -393,33 +430,17 @@ async function fetchLiveDxyIndex() {
 }
 
 async function fetchLiveFuturesQuotes() {
-  const fetchYahooLast = async (symbol) => {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 4000);
-    try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=5m&range=1d`;
-      const res = await fetch(url, { ...ANON_FETCH_OPTS, signal: ctrl.signal });
-      if (!res.ok) return null;
-      const json = await res.json();
-      const meta = json?.chart?.result?.[0]?.meta;
-      const price = Number(meta?.regularMarketPrice);
-      return Number.isFinite(price) && price > 0 ? price : null;
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(tid);
-    }
-  };
-
-  const [gc, si] = await Promise.all([fetchYahooLast('GC=F'), fetchYahooLast('SI=F')]);
-  if (gc != null || si != null) {
-    if (gc != null) state.futures.gold = gc;
-    if (si != null) state.futures.silver = si;
-    state.futures.liveFetched = true;
-    state.futures.source = 'Live COMEX GC=F / SI=F';
+  // COMEX GC=F / SI=F futures are refreshed server-side into outlook.json without browser CORS errors
+  const basis = outlookState.data?.institutionalSignals?.basis;
+  const gc = Number(basis?.gold?.futures);
+  const si = Number(basis?.silver?.futures);
+  if ((Number.isFinite(gc) && gc > 0) || (Number.isFinite(si) && si > 0)) {
+    if (Number.isFinite(gc) && gc > 0) state.futures.gold = gc;
+    if (Number.isFinite(si) && si > 0) state.futures.silver = si;
+    state.futures.liveFetched = false;
+    state.futures.source = 'COMEX GC=F / SI=F (Synced)';
     renderFuturesPanel();
     renderOutlook();
-    renderChart();
   }
 }
 
@@ -728,13 +749,15 @@ function renderMetalCard(metal) {
   if (unitEl) unitEl.textContent = unitSuffix;
   if (card) card.classList.toggle('selected', state.settings.selectedMetal === metal);
 
-  if (quote.price == null) return;
+  const canonical = getCanonicalSpotPrices();
+  const rawPrice = quote.price ?? canonical[metal];
+  if (rawPrice == null) return;
 
-  const displayPrice = convertUnit(quote.price);
-  const displayChg = convertUnit(quote.chg);
+  const displayPrice = convertUnit(rawPrice);
+  const displayChg = convertUnit(quote.chg || 0);
 
   priceEl.textContent = formatMoney(displayPrice, decimals);
-  chgEl.textContent = `${formatSignedMoney(displayChg, decimals)} today`;
+  chgEl.textContent = quote.price != null ? `${formatSignedMoney(displayChg, decimals)} today` : 'Syncing live tick…';
 
   pctEl.textContent = formatSignedPct(quote.pct);
   pctEl.classList.remove('up', 'down');
@@ -1113,9 +1136,25 @@ async function fetchCandlesData() {
     const s1d = data.timeframes?.['1d']?.silver || data.silver;
     if (Array.isArray(g1d) && g1d.length >= 4) {
       state.candles.gold = g1d.slice(-40);
+      if (state.quotes.gold.price != null && state.quotes.gold.prevClose === state.quotes.gold.price && state.candles.gold[0]?.o > 0) {
+        state.quotes.gold.prevClose = +state.candles.gold[0].o.toFixed(2);
+        state.quotes.gold.chg = +(state.quotes.gold.price - state.quotes.gold.prevClose).toFixed(2);
+        state.quotes.gold.pct = +((state.quotes.gold.chg / state.quotes.gold.prevClose) * 100).toFixed(2);
+        renderMetalCard('gold');
+        renderStats();
+        renderStackTracker();
+      }
     }
     if (Array.isArray(s1d) && s1d.length >= 4) {
       state.candles.silver = s1d.slice(-40);
+      if (state.quotes.silver.price != null && state.quotes.silver.prevClose === state.quotes.silver.price && state.candles.silver[0]?.o > 0) {
+        state.quotes.silver.prevClose = +state.candles.silver[0].o.toFixed(2);
+        state.quotes.silver.chg = +(state.quotes.silver.price - state.quotes.silver.prevClose).toFixed(2);
+        state.quotes.silver.pct = +((state.quotes.silver.chg / state.quotes.silver.prevClose) * 100).toFixed(2);
+        renderMetalCard('silver');
+        renderStats();
+        renderStackTracker();
+      }
     }
     if (state.quotes.gold.price) {
       updateActive5mCandle('gold', state.quotes.gold.price, state.quotes.gold.prevClose);
@@ -2526,6 +2565,8 @@ async function fetchOutlookData() {
     outlookState.data = FALLBACK_OUTLOOK;
   }
   renderMacroStrip();
+  renderMetalCard('gold');
+  renderMetalCard('silver');
   renderFuturesPanel();
   renderOutlook();
   renderStackTracker();
@@ -2835,8 +2876,9 @@ function computeClientDollarStrength(base, spotGold, spotSilver, gDailyVol, sDai
 
 function computeInteractiveOutlook() {
   const base = outlookState.data || FALLBACK_OUTLOOK;
-  const spotGold = state.quotes.gold.price || base.gold?.spot || 3542.81;
-  const spotSilver = state.quotes.silver.price || base.silver?.spot || 42.22;
+  const canonical = getCanonicalSpotPrices();
+  const spotGold = canonical.gold;
+  const spotSilver = canonical.silver;
 
   const drivers = (base.drivers || []).map((d) => ({ ...d }));
   const liveComex = comexState.data || base.comex || FALLBACK_COMEX;
@@ -2993,10 +3035,25 @@ function computeInteractiveOutlook() {
 
   const liveGLabel = signalFromScore(gScore).label.toLowerCase();
   const liveSLabel = signalFromScore(sScore).label.toLowerCase();
-  const syncedBaseNarrative = (base.narrative || '').replace(
-    /Anonymous model signals a [a-z ]+ tilt for Gold and [a-z ]+ tilt for Silver/i,
-    `Anonymous model signals a ${liveGLabel} tilt for Gold and ${liveSLabel} tilt for Silver`
-  );
+  const liveRatio = spotSilver > 0 ? spotGold / spotSilver : (base.goldSilverRatio || 85);
+  const gFx7d = dollarStrength?.impact7d?.goldUsdOz ?? 0;
+  let syncedBaseNarrative = (base.narrative || '')
+    .replace(
+      /Anonymous model signals a [a-z ]+ tilt for Gold and [a-z ]+ tilt for Silver/i,
+      `Anonymous model signals a ${liveGLabel} tilt for Gold and ${liveSLabel} tilt for Silver`
+    )
+    .replace(
+      /Regime decomposition: Gold [^.]+?\(\d+D\/\d+S\) and Silver [^.]+?\(\d+D\/\d+S\)\./i,
+      `Regime decomposition: Gold ${marketRegime.gold.label} (${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver ${marketRegime.silver.label} (${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S).`
+    )
+    .replace(
+      /US Dollar Index \(DXY [\d.]+, strength \d+\/100 · [^)]+\) implies [+\-−]?\$[\d.]+\/oz 7d FX cost impact on Gold\./i,
+      `US Dollar Index (DXY ${dollarStrength.dxy.toFixed(2)}, strength ${dollarStrength.score}/100 · ${dollarStrength.regime}) implies ${gFx7d >= 0 ? '+' : '−'}$${Math.abs(gFx7d).toFixed(2)}/oz 7d FX cost impact on Gold.`
+    )
+    .replace(
+      /Gold\/Silver ratio \([\d.]+:1\)/i,
+      `Gold/Silver ratio (${liveRatio.toFixed(1)}:1)`
+    );
 
   const narrative = activeNames.length
     ? `Simulated shock active (${activeNames.join(' + ')}): historical cross-market weights shift Gold to ${liveGLabel} (${gScore >= 0 ? '+' : ''}${gScore}, ${marketRegime.gold.label} ${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver to ${liveSLabel} (${sScore >= 0 ? '+' : ''}${sScore}, ${marketRegime.silver.label} ${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S) over the ${outlookState.horizon} window.`
@@ -3192,7 +3249,7 @@ function renderOutlook() {
     const bearEl = document.getElementById(`outlook-${metal}-bear`);
     const bullEl = document.getElementById(`outlook-${metal}-bull`);
 
-    if (spotEl) spotEl.textContent = `Spot ${formatMoney(convertUnit(m.spot))}`;
+    if (spotEl) spotEl.textContent = `Live Spot ${formatMoney(convertUnit(m.spot))}`;
     if (futEl && f) {
       const code = metal === 'gold' ? 'GC=F' : 'SI=F';
       const tag = f.isBackwardation ? ' BACKW ↑' : '';
@@ -4904,9 +4961,16 @@ function switchView(viewName) {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
   if (viewName === 'markets') {
+    renderMetalCard('gold');
+    renderMetalCard('silver');
+    renderFuturesPanel();
+    renderStats();
     requestAnimationFrame(renderChart);
   } else if (viewName === 'outlook') {
+    renderOutlook();
     requestAnimationFrame(() => renderJumpDiffusion());
+  } else if (viewName === 'stack') {
+    renderStackTracker();
   }
 }
 
