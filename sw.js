@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bullion-pulse-v11';
+const CACHE_NAME = 'bullion-pulse-v12';
 const APP_SHELL = [
   './',
   './index.html',

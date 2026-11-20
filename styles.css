@@ -27,6 +27,8 @@
   --down-soft: rgba(239, 68, 68, 0.14);
   --warn: #F59E0B;
   --warn-soft: rgba(245, 158, 11, 0.14);
+  --fib: #A78BFA;
+  --fib-soft: rgba(167, 139, 250, 0.14);
 
   --radius-sm: 10px;
   --radius-md: 16px;
@@ -65,6 +67,8 @@
   --down-soft: rgba(220, 38, 38, 0.12);
   --warn: #B45309;
   --warn-soft: rgba(180, 83, 9, 0.12);
+  --fib: #7C3AED;
+  --fib-soft: rgba(124, 58, 237, 0.12);
 }
 
 *, *::before, *::after {
@@ -535,10 +539,14 @@ body {
   height: 218px;
 }
 
+#panel-chart .panel-header {
+  flex-wrap: wrap;
+}
+
 .chart-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .chip-toggle {
@@ -548,7 +556,7 @@ body {
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 600;
-  padding: 5px 9px;
+  padding: 5px 8px;
   border-radius: 9px;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
@@ -558,6 +566,12 @@ body {
   background: var(--gold-soft);
   border-color: var(--gold);
   color: var(--gold-bright);
+}
+
+.chip-toggle.chip-fib.active {
+  background: var(--fib-soft);
+  border-color: var(--fib);
+  color: var(--fib);
 }
 
 .tf-bar {
@@ -668,7 +682,7 @@ body {
 .dot-up { background: var(--up); }
 .dot-down { background: var(--down); }
 
-.line-bull, .line-base, .line-bear {
+.line-bull, .line-base, .line-bear, .line-fib {
   width: 12px;
   height: 2px;
   border-radius: 2px;
@@ -677,6 +691,7 @@ body {
 .line-bull { background: var(--up); }
 .line-base { background: var(--gold); }
 .line-bear { background: var(--down); }
+.line-fib { background: var(--fib); }
 
 #intraday-chart {
   width: 100%;

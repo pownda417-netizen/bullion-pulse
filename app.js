@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',
   selectedMetal: 'gold',
   showForecast: true,
+  showFib: false,
   chartTimeframe: '1d', // '1d' | '7d' | '1m' | '6m' | '1y' | '5y' | '10y' | 'all'
 };
 
@@ -807,6 +808,46 @@ function updateCandleCountdown() {
   }
 }
 
+function computeFibonacciLevels(bars) {
+  if (!Array.isArray(bars) || bars.length < 2) return null;
+  let swingHigh = -Infinity;
+  let swingLow = Infinity;
+  let hiIdx = 0;
+  let loIdx = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (b.h > swingHigh) {
+      swingHigh = b.h;
+      hiIdx = i;
+    }
+    if (b.l < swingLow) {
+      swingLow = b.l;
+      loIdx = i;
+    }
+  }
+  const range = swingHigh - swingLow;
+  if (!(range > 0)) return null;
+  const isBounceFromLow = hiIdx < loIdx;
+  const ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+  const levels = ratios.map((r) => ({
+    ratio: r,
+    label: `${+(r * 100).toFixed(1)}%`,
+    price: isBounceFromLow ? swingLow + r * range : swingHigh - r * range,
+    isGolden: r === 0.618,
+    isPocketBound: r === 0.5 || r === 0.618,
+    isExtreme: r === 0 || r === 1,
+  }));
+  return {
+    swingHigh,
+    swingLow,
+    hiIdx,
+    loIdx,
+    range,
+    direction: isBounceFromLow ? 'bounce' : 'pullback',
+    levels,
+  };
+}
+
 function renderChart() {
   const canvas = document.getElementById('intraday-chart');
   if (!canvas) return;
@@ -836,6 +877,13 @@ function renderChart() {
     fcBtn.classList.toggle('active', !!state.settings.showForecast);
     fcBtn.setAttribute('aria-pressed', String(!!state.settings.showForecast));
   }
+  const fibBtn = document.getElementById('btn-toggle-fib');
+  if (fibBtn) {
+    fibBtn.classList.toggle('active', !!state.settings.showFib);
+    fibBtn.setAttribute('aria-pressed', String(!!state.settings.showFib));
+  }
+  const fibLegend = document.getElementById('legend-fib');
+  if (fibLegend) fibLegend.hidden = !state.settings.showFib;
 
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
@@ -883,6 +931,10 @@ function renderChart() {
 
   // Compute Jump-Diffusion fat-tail forecast cone scaled proportionally to the active timeframe
   const showFc = !!state.settings.showForecast;
+  const showFib = !!state.settings.showFib;
+  const fibCol = styles.getPropertyValue('--fib').trim() || '#A78BFA';
+  const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+  const fibData = showFib ? computeFibonacciLevels(converted) : null;
   const outlookRes = computeInteractiveOutlook();
   const fcHorizon = tf === '1d' ? (outlookState.horizon === '30d' ? '1m' : '7d') : meta.fcHorizon;
   const fcLabel = tf === '1d' ? (outlookState.horizon === '30d' ? '+30d' : '+7d') : meta.fcLabel;
@@ -947,6 +999,33 @@ function renderChart() {
   ctx.stroke();
   ctx.restore();
 
+  // Optional Fibonacci Retracement Overlay (Golden Pocket + lines behind candles)
+  if (fibData) {
+    const lv50 = fibData.levels.find((lv) => lv.ratio === 0.5);
+    const lv618 = fibData.levels.find((lv) => lv.ratio === 0.618);
+    if (lv50 && lv618) {
+      const yTopBand = Math.min(yAt(lv50.price), yAt(lv618.price));
+      const yBotBand = Math.max(yAt(lv50.price), yAt(lv618.price));
+      ctx.save();
+      ctx.fillStyle = isLightTheme ? 'rgba(124, 58, 237, 0.09)' : 'rgba(167, 139, 250, 0.10)';
+      ctx.fillRect(padLeft, yTopBand, candleAreaW, Math.max(2, yBotBand - yTopBand));
+      ctx.restore();
+    }
+    fibData.levels.forEach((lv) => {
+      const y = yAt(lv.price);
+      ctx.save();
+      ctx.strokeStyle = fibCol;
+      ctx.lineWidth = lv.isGolden ? 1.35 : lv.ratio === 0.5 ? 1.15 : 0.9;
+      ctx.globalAlpha = lv.isGolden ? 0.9 : lv.isPocketBound ? 0.72 : lv.isExtreme ? 0.4 : 0.55;
+      ctx.setLineDash(lv.isGolden ? [] : lv.isExtreme ? [2, 4] : [5, 3]);
+      ctx.beginPath();
+      ctx.moveTo(padLeft, y);
+      ctx.lineTo(padLeft + candleAreaW, y);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
   // Draw OHLC Candlesticks
   converted.forEach((b, i) => {
     const cx = xCandle(i);
@@ -983,6 +1062,34 @@ function renderChart() {
       ctx.restore();
     }
   });
+
+  // Fibonacci level pills drawn after candles with priority collision avoidance
+  if (fibData) {
+    const priorityOrder = [0.618, 0.5, 0.382, 0.236, 0.786, 1, 0];
+    const placedYs = [];
+    ctx.save();
+    ctx.font = '600 9px "JetBrains Mono", monospace';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    for (const ratio of priorityOrder) {
+      const lv = fibData.levels.find((item) => item.ratio === ratio);
+      if (!lv) continue;
+      const y = yAt(lv.price);
+      if (y < padTop + 7 || y > padTop + plotH - 7) continue;
+      if (placedYs.some((py) => Math.abs(py - y) < 14)) continue;
+      placedYs.push(y);
+      const decimals = lv.price >= 500 ? 0 : 2;
+      const txt = `${lv.label} ${formatMoney(lv.price, decimals)}`;
+      const tw = ctx.measureText(txt).width;
+      ctx.fillStyle = isLightTheme ? 'rgba(255, 255, 255, 0.85)' : 'rgba(13, 14, 17, 0.78)';
+      ctx.fillRect(padLeft + 2, y - 6.5, tw + 7, 13);
+      ctx.fillStyle = fibCol;
+      ctx.globalAlpha = lv.isPocketBound ? 1 : 0.85;
+      ctx.fillText(txt, padLeft + 5.5, y + 0.3);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
 
   // Bottom X-axis date labels across historical candlestick zone
   ctx.font = '500 9.5px "JetBrains Mono", monospace';
@@ -3058,9 +3165,15 @@ function wireEvents() {
     renderChart();
   });
 
-  // Forecast overlay toggle on candlestick chart
+  // Forecast & Fibonacci overlay toggles on candlestick chart
   document.getElementById('btn-toggle-forecast')?.addEventListener('click', () => {
     state.settings.showForecast = !state.settings.showForecast;
+    renderChart();
+    savePersistedState();
+  });
+
+  document.getElementById('btn-toggle-fib')?.addEventListener('click', () => {
+    state.settings.showFib = !state.settings.showFib;
     renderChart();
     savePersistedState();
   });
