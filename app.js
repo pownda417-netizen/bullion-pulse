@@ -4535,9 +4535,71 @@ let speechRunSeq = 0;
 let ttsWorker = null;
 let ttsWorkerBroken = false;
 let ttsReqSeq = 0;
-let activeAudioEl = null;
+let sharedAudioEl = null;
+let sharedAudioCtx = null;
+let activeAudioSource = null;
 let activeAudioUrl = null;
 const ttsPending = new Map();
+const SILENT_WAV_URI =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
+function unlockMobileAudioSync() {
+  // 1. Unlock a single persistent <audio> element synchronously inside the tap gesture.
+  //    Using <audio> plays on the media channel on iPhone (even if the physical Silent Switch is on!)
+  //    and stays unlocked across async WAV synthesis / downloads on iOS Safari & Android Chrome.
+  try {
+    if (!sharedAudioEl) {
+      sharedAudioEl = new Audio();
+      sharedAudioEl.playsInline = true;
+      sharedAudioEl.preload = 'auto';
+      sharedAudioEl.setAttribute('playsinline', '');
+      sharedAudioEl.setAttribute('webkit-playsinline', '');
+    }
+    sharedAudioEl.muted = false;
+    sharedAudioEl.volume = 1.0;
+    sharedAudioEl.src = SILENT_WAV_URI;
+    const p = sharedAudioEl.play();
+    if (p && typeof p.then === 'function') {
+      p.then(() => {
+        if (sharedAudioEl && sharedAudioEl.src === SILENT_WAV_URI) {
+          sharedAudioEl.pause();
+        }
+      }).catch(() => {});
+    }
+  } catch {}
+
+  // 2. Also unlock Web Audio API AudioContext synchronously as secondary mobile playback engine
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) {
+      if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+        sharedAudioCtx = new AC();
+      }
+      if (sharedAudioCtx.state === 'suspended') {
+        sharedAudioCtx.resume().catch(() => {});
+      }
+      const silent = sharedAudioCtx.createBuffer(1, 1, 22050);
+      const src = sharedAudioCtx.createBufferSource();
+      src.buffer = silent;
+      src.connect(sharedAudioCtx.destination);
+      src.start(0);
+    }
+  } catch {}
+
+  // 3. Prime mobile speechSynthesis synchronously inside the tap gesture so fallback speech
+  //    is also unlocked on iOS Safari & Android Chrome even after async worker waits
+  try {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.resume?.();
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+      if (isMobile && !window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+        const primer = new SpeechSynthesisUtterance('');
+        primer.volume = 0;
+        window.speechSynthesis.speak(primer);
+      }
+    }
+  } catch {}
+}
 
 const NEURAL_VOICES = [
   { id: 'en_US-lessac-medium', label: 'Lessac — Natural US Female (Recommended)' },
@@ -4552,7 +4614,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=32', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=34', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -4587,7 +4649,31 @@ function synthesizeNeuralChunk(text, voiceId, onProgress) {
   if (!worker) return Promise.reject(new Error('Neural worker unsupported'));
   return new Promise((resolve, reject) => {
     const id = ++ttsReqSeq;
-    ttsPending.set(id, { resolve, reject, onProgress });
+    let timer = null;
+    const bumpTimeout = (ms = 22000) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (ttsPending.has(id)) {
+          ttsPending.delete(id);
+          reject(new Error('Neural voice timed out'));
+        }
+      }, ms);
+    };
+    bumpTimeout(25000);
+    ttsPending.set(id, {
+      resolve: (buf) => {
+        clearTimeout(timer);
+        resolve(buf);
+      },
+      reject: (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+      onProgress: (pct) => {
+        bumpTimeout(25000);
+        onProgress?.(pct);
+      },
+    });
     worker.postMessage({ id, type: 'speak', text, voiceId });
   });
 }
@@ -4784,15 +4870,38 @@ function cleanTextForNaturalSpeech(rawText) {
     .trim();
 }
 
+function setListenButtonState(speaking) {
+  const btn = document.getElementById('btn-listen-brief');
+  const icon = document.getElementById('icon-listen');
+  if (btn) {
+    btn.classList.toggle('speaking', !!speaking);
+    btn.setAttribute('aria-pressed', speaking ? 'true' : 'false');
+    btn.title = speaking ? 'Stop market audio update' : 'Listen to spoken market update';
+  }
+  if (icon) {
+    icon.innerHTML = speaking
+      ? '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />'
+      : '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" />';
+  }
+}
+
 function stopAllSpeech() {
   speechRunSeq += 1;
   state.speechActive = false;
-  if (activeAudioEl) {
+  if (sharedAudioEl) {
     try {
-      activeAudioEl.pause();
-      activeAudioEl.src = '';
+      sharedAudioEl.onended = null;
+      sharedAudioEl.onerror = null;
+      sharedAudioEl.pause();
+      sharedAudioEl.currentTime = 0;
     } catch {}
-    activeAudioEl = null;
+  }
+  if (activeAudioSource) {
+    try {
+      activeAudioSource.onended = null;
+      activeAudioSource.stop();
+    } catch {}
+    activeAudioSource = null;
   }
   if (activeAudioUrl) {
     URL.revokeObjectURL(activeAudioUrl);
@@ -4801,62 +4910,141 @@ function stopAllSpeech() {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
-  const btn = document.getElementById('btn-listen-brief');
-  if (btn) {
-    btn.textContent = '🔊 Listen';
-    btn.classList.remove('speaking');
-  }
+  setListenButtonState(false);
+  const bar = document.getElementById('audio-brief-bar');
+  if (bar) bar.hidden = true;
 }
 
-function playWavBuffer(arrayBuffer, rate, runId) {
+function playViaAudioContext(arrayBuffer, rate, runId) {
   return new Promise((resolve, reject) => {
     if (runId !== speechRunSeq) {
       resolve(false);
       return;
     }
-    const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.playbackRate = clampNum(rate, 0.75, 1.35);
-    activeAudioEl = audio;
-    activeAudioUrl = url;
-    const cleanup = () => {
-      if (activeAudioUrl === url) {
-        URL.revokeObjectURL(url);
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) {
+        reject(new Error('No AudioContext'));
+        return;
+      }
+      if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+        sharedAudioCtx = new AC();
+      }
+      const startPlay = () => {
+        sharedAudioCtx.decodeAudioData(
+          arrayBuffer.slice(0),
+          (decoded) => {
+            if (runId !== speechRunSeq) {
+              resolve(false);
+              return;
+            }
+            const src = sharedAudioCtx.createBufferSource();
+            src.buffer = decoded;
+            src.playbackRate.value = clampNum(rate, 0.75, 1.35);
+            src.connect(sharedAudioCtx.destination);
+            activeAudioSource = src;
+            src.onended = () => {
+              if (activeAudioSource === src) activeAudioSource = null;
+              resolve(true);
+            };
+            src.start(0);
+          },
+          (err) => reject(err || new Error('Audio decode failed'))
+        );
+      };
+      if (sharedAudioCtx.state === 'suspended') {
+        sharedAudioCtx.resume().then(startPlay).catch(reject);
+      } else {
+        startPlay();
+      }
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function playWavBuffer(arrayBuffer, rate, runId) {
+  if (runId !== speechRunSeq) return false;
+
+  // Primary: persistent gesture-unlocked <audio> element (works on iOS even with Silent Switch ON!)
+  try {
+    await new Promise((resolve, reject) => {
+      if (runId !== speechRunSeq) {
+        resolve(false);
+        return;
+      }
+      if (!sharedAudioEl) {
+        sharedAudioEl = new Audio();
+        sharedAudioEl.playsInline = true;
+        sharedAudioEl.setAttribute('playsinline', '');
+        sharedAudioEl.setAttribute('webkit-playsinline', '');
+      }
+      if (activeAudioUrl) {
+        URL.revokeObjectURL(activeAudioUrl);
         activeAudioUrl = null;
       }
-      if (activeAudioEl === audio) activeAudioEl = null;
-    };
-    audio.onended = () => {
-      cleanup();
-      resolve(true);
-    };
-    audio.onerror = () => {
-      cleanup();
-      reject(new Error('Audio playback failed'));
-    };
-    audio.play().catch((err) => {
-      cleanup();
-      reject(err);
+      const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      activeAudioUrl = url;
+      const el = sharedAudioEl;
+      el.onended = null;
+      el.onerror = null;
+      el.src = url;
+      el.playbackRate = clampNum(rate, 0.75, 1.35);
+      el.muted = false;
+      el.volume = 1.0;
+
+      const cleanup = () => {
+        el.onended = null;
+        el.onerror = null;
+        if (activeAudioUrl === url) {
+          URL.revokeObjectURL(url);
+          activeAudioUrl = null;
+        }
+      };
+      el.onended = () => {
+        cleanup();
+        resolve(true);
+      };
+      el.onerror = () => {
+        cleanup();
+        reject(new Error('HTMLAudio playback failed'));
+      };
+      const playPromise = el.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch((err) => {
+          cleanup();
+          reject(err);
+        });
+      }
     });
-  });
+    return true;
+  } catch {
+    // Secondary fallback: unlocked Web Audio API AudioContext
+    return playViaAudioContext(arrayBuffer, rate, runId);
+  }
+}
+
+function setSpeechFeedback(el, isBriefBtn, text, tone = 'ok') {
+  if (!el) return;
+  if (!isBriefBtn) {
+    el.className = tone === 'err' ? 'feedback-note err' : 'feedback-note ok';
+  }
+  el.textContent = text;
 }
 
 function speakWithBrowserFallback(queue, voiceObj, rate, runId, isBriefBtn, feedbackEl, fallbackNote = null) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     stopAllSpeech();
-    if (feedbackEl) {
-      feedbackEl.className = 'feedback-note err';
-      feedbackEl.textContent = 'Audio playback unavailable in this browser.';
-    }
+    setSpeechFeedback(feedbackEl, isBriefBtn, 'Audio playback unavailable in this browser.', 'err');
     return;
   }
-  if (feedbackEl) {
-    const cleanVoice = voiceObj ? voiceObj.name.replace(/\s*-\s*English.*$/i, '') : 'Browser Voice';
-    feedbackEl.className = 'feedback-note ok';
-    feedbackEl.textContent = fallbackNote || `🎙 Speaking with ${cleanVoice}`;
+  const cleanVoice = voiceObj ? voiceObj.name.replace(/\s*-\s*English.*$/i, '') : 'Browser Voice';
+  setSpeechFeedback(feedbackEl, isBriefBtn, fallbackNote || `🎙 Speaking with ${cleanVoice}`, 'ok');
+  if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+    window.speechSynthesis.cancel();
   }
-  window.speechSynthesis.cancel();
+  window.speechSynthesis.resume?.();
   let idx = 0;
   const speakNext = () => {
     if (runId !== speechRunSeq) return;
@@ -4887,17 +5075,21 @@ function speakWithBrowserFallback(queue, voiceObj, rate, runId, isBriefBtn, feed
 }
 
 async function speakSentencesNaturally(sentences, { isBriefBtn = false, feedbackEl = null } = {}) {
-  const ranked = await ensureVoicesLoaded();
+  // CRITICAL for iOS Safari & Android Chrome: unlock audio synchronously BEFORE any await!
+  unlockMobileAudioSync();
+
+  const immediateVoices = getRankedEnglishVoices();
+  const ranked = immediateVoices.length > 0 ? immediateVoices : await ensureVoicesLoaded();
   populateVoiceSelector();
   const choice = resolveVoiceChoice(ranked);
   const rate = clampNum(parseFloat(state.settings.ttsRate) || 0.96, 0.75, 1.35);
 
   const runId = ++speechRunSeq;
   state.speechActive = true;
-  const btn = document.getElementById('btn-listen-brief');
-  if (isBriefBtn && btn) {
-    btn.textContent = '⏹ Stop';
-    btn.classList.add('speaking');
+  if (isBriefBtn) {
+    setListenButtonState(true);
+    const bar = document.getElementById('audio-brief-bar');
+    if (bar) bar.hidden = false;
   }
 
   const queue = sentences
@@ -4912,17 +5104,17 @@ async function speakSentencesNaturally(sentences, { isBriefBtn = false, feedback
   if (choice.engine === 'neural') {
     const shortName = choice.label.replace(/^AI Neural · /, '');
     try {
-      if (feedbackEl) {
-        feedbackEl.className = 'feedback-note ok';
-        feedbackEl.textContent = `🎙 Loading ${choice.label}…`;
-      }
+      setSpeechFeedback(feedbackEl, isBriefBtn, `🎙 Loading ${choice.label}…`, 'ok');
       const onProg = (pct) => {
-        if (runId !== speechRunSeq || !feedbackEl) return;
-        feedbackEl.className = 'feedback-note ok';
-        feedbackEl.textContent =
+        if (runId !== speechRunSeq) return;
+        setSpeechFeedback(
+          feedbackEl,
+          isBriefBtn,
           pct < 100
             ? `⬇ Downloading natural AI voice (${shortName}) ${pct}% — saved offline after this…`
-            : `🎙 Generating natural English audio (${shortName})…`;
+            : `🎙 Generating natural English audio (${shortName})…`,
+          'ok'
+        );
       };
 
       // Pipeline pre-generation: synthesize sentence i+1 while sentence i plays!
@@ -4935,17 +5127,13 @@ async function speakSentencesNaturally(sentences, { isBriefBtn = false, feedback
         if (i + 1 < queue.length) {
           nextPromise = synthesizeNeuralChunk(queue[i + 1], choice.voiceId, null);
         }
-        if (feedbackEl) {
-          feedbackEl.className = 'feedback-note ok';
-          feedbackEl.textContent = `🎙 Speaking with ${choice.label} (${i + 1}/${queue.length})`;
-        }
+        setSpeechFeedback(feedbackEl, isBriefBtn, `🎙 Speaking with ${choice.label} (${i + 1}/${queue.length})`, 'ok');
         await playWavBuffer(wavBuf, rate, runId);
       }
       if (runId === speechRunSeq) {
         stopAllSpeech();
-        if (feedbackEl) {
-          feedbackEl.className = 'feedback-note ok';
-          feedbackEl.textContent = `✓ Finished briefing (${choice.label})`;
+        if (!isBriefBtn) {
+          setSpeechFeedback(feedbackEl, false, `✓ Finished briefing (${choice.label})`, 'ok');
         }
       }
       return;
@@ -4971,12 +5159,17 @@ async function speakSentencesNaturally(sentences, { isBriefBtn = false, feedback
 }
 
 function toggleBriefingSpeech() {
-  const feedback = document.getElementById('share-card-feedback');
-  if (state.speechActive || activeAudioEl || (typeof window !== 'undefined' && window.speechSynthesis?.speaking)) {
+  const statusEl = document.getElementById('audio-brief-status');
+  const audioPlaying =
+    (sharedAudioEl && !sharedAudioEl.paused && sharedAudioEl.src && sharedAudioEl.src !== SILENT_WAV_URI) ||
+    !!activeAudioSource;
+  if (state.speechActive || audioPlaying || (typeof window !== 'undefined' && window.speechSynthesis?.speaking)) {
     stopAllSpeech();
-    if (feedback) feedback.textContent = '';
     return;
   }
+
+  // Unlock mobile audio synchronously right inside the user tap event!
+  unlockMobileAudioSync();
 
   const res = computeInteractiveOutlook();
   const gPct = state.quotes.gold.pct || 0;
@@ -4996,7 +5189,7 @@ function toggleBriefingSpeech() {
     ...narrativeSentences,
   ];
 
-  speakSentencesNaturally(sentences, { isBriefBtn: true, feedbackEl: feedback });
+  speakSentencesNaturally(sentences, { isBriefBtn: true, feedbackEl: statusEl });
 }
 
 function exportShareMarketCard() {
@@ -7792,6 +7985,9 @@ function wireEvents() {
   document.getElementById('btn-listen-brief')?.addEventListener('click', () => {
     toggleBriefingSpeech();
   });
+  document.getElementById('btn-stop-audio-bar')?.addEventListener('click', () => {
+    stopAllSpeech();
+  });
   document.getElementById('select-tts-voice')?.addEventListener('change', (e) => {
     state.settings.ttsVoice = e.target.value || 'auto';
     populateVoiceSelector();
@@ -7802,6 +7998,7 @@ function wireEvents() {
     savePersistedState();
   });
   document.getElementById('btn-test-voice')?.addEventListener('click', () => {
+    unlockMobileAudioSync();
     const fb = document.getElementById('voice-feedback');
     const c = getCanonicalSpotPrices();
     speakSentencesNaturally(

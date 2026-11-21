@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=32" />
+  <link rel="stylesheet" href="./styles.css?v=34" />
 </head>
 <body>
   <div class="app-shell">
@@ -69,14 +69,20 @@
       </nav>
 
       <div class="header-actions">
-        <button type="button" class="header-melt-btn" id="btn-header-melt" aria-label="Open My Bullion Stack" title="Total Stack Melt Value — click to open Stack">
-          <span class="header-melt-k">Melt</span>
+        <button type="button" class="header-melt-btn" id="btn-header-melt" aria-label="Open My Bullion Stack" title="Total Stack Value — click to open Stack">
           <strong class="header-melt-v" id="header-melt-val">$0.00</strong>
         </button>
         <button type="button" class="icon-btn" id="btn-privacy-toggle" aria-label="Hide or show my stack balance" aria-pressed="false" title="Privacy Mode — hide your stack amounts">
           <svg id="icon-privacy" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
             <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+        <button type="button" class="icon-btn" id="btn-listen-brief" aria-label="Listen to Bullion Pulse market update" aria-pressed="false" title="Listen to spoken market update">
+          <svg id="icon-listen" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
           </svg>
         </button>
         <button type="button" class="icon-btn" id="btn-refresh" aria-label="Refresh spot prices" title="Refresh spot prices">
@@ -110,6 +116,12 @@
           <div class="alert-banner-body" id="alert-banner-body"></div>
         </div>
         <button type="button" class="alert-dismiss" id="btn-dismiss-banner" aria-label="Dismiss alert">&times;</button>
+      </section>
+
+      <!-- Global Spoken Market Update Status Bar (Visible on Any Tab While Playing) -->
+      <section class="audio-brief-bar" id="audio-brief-bar" hidden role="status" aria-live="polite">
+        <span class="audio-brief-text" id="audio-brief-status">🎙 Loading market update…</span>
+        <button type="button" class="chip-toggle audio-brief-stop" id="btn-stop-audio-bar">⏹ Stop</button>
       </section>
 
       <!-- VIEW 1: MARKETS -->
@@ -553,7 +565,6 @@
           <div class="panel-header outlook-summary-head">
             <h2 class="panel-title">Today's Plain-English Summary</h2>
             <div class="outlook-summary-badges">
-              <button type="button" class="chip-toggle brief-action-btn" id="btn-listen-brief" title="Listen to a 25-second spoken market summary">🔊 Listen</button>
               <button type="button" class="chip-toggle brief-action-btn" id="btn-share-card" title="Download a clean shareable market snapshot image (never includes your private stack)">📷 Share Card</button>
               <span class="regime-pill neutral" id="outlook-regime-pill">Sideways / Calm</span>
               <span class="panel-subtitle" id="outlook-confidence">Agreement —%</span>
@@ -1619,6 +1630,6 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=32" defer></script>
+  <script src="./app.js?v=34" defer></script>
 </body>
 </html>
