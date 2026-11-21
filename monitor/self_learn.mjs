@@ -788,22 +788,47 @@ export function buildSeededLearnedState() {
   return state;
 }
 
-async function fetchSettledCloses() {
+export function parseGoldApiCloses(xauJson, xagJson) {
+  const gold = Number(xauJson?.price);
+  const silver = Number(xagJson?.price);
+  if (!Number.isFinite(gold) || gold <= 0 || !Number.isFinite(silver) || silver <= 0) {
+    throw new Error('Invalid gold-api.com close payload');
+  }
+  return { gold: +gold.toFixed(2), silver: +silver.toFixed(2), source: 'gold-api.com' };
+}
+
+export async function fetchSettledCloses(fetchImpl = fetch) {
   try {
-    const res = await fetch('https://data-asg.goldprice.org/dbXRates/USD', {
+    const res = await fetchImpl('https://data-asg.goldprice.org/dbXRates/USD', {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
     });
     if (res.ok) {
       const parsed = parseGoldPriceOrg(await res.json());
       if (parsed.gold?.price && parsed.silver?.price) {
-        return { gold: parsed.gold.price, silver: parsed.silver.price };
+        return { gold: parsed.gold.price, silver: parsed.silver.price, source: 'goldprice.org' };
       }
+    }
+  } catch {
+    // Fall through to gold-api.com spot feed
+  }
+  try {
+    const [xauRes, xagRes] = await Promise.all([
+      fetchImpl('https://api.gold-api.com/price/XAU', {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      }),
+      fetchImpl('https://api.gold-api.com/price/XAG', {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      }),
+    ]);
+    if (xauRes.ok && xagRes.ok) {
+      const [xauJson, xagJson] = await Promise.all([xauRes.json(), xagRes.json()]);
+      return parseGoldApiCloses(xauJson, xagJson);
     }
   } catch {
     // Fall back to Yahoo Futures settled close
   }
   const fetchLast = async (sym) => {
-    const res = await fetch(
+    const res = await fetchImpl(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=5d&interval=1d`,
       { headers: { 'User-Agent': USER_AGENT } }
     );
@@ -814,7 +839,7 @@ async function fetchSettledCloses() {
     return valid[valid.length - 1];
   };
   const [gold, silver] = await Promise.all([fetchLast('GC=F'), fetchLast('SI=F')]);
-  return { gold, silver };
+  return { gold, silver, source: 'yahoo-futures' };
 }
 
 async function main() {

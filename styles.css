@@ -3194,15 +3194,19 @@ button.sector-chip.selected {
 
   #view-markets > .toolbar-row,
   #view-markets > #panel-futures,
+  #view-markets > #panel-session-clock,
   #view-markets > #panel-chart,
   #view-markets > .stats-grid,
   #view-markets > #panel-shanghai,
-  #view-markets > #macro-ticker-strip {
+  #view-markets > #macro-ticker-strip,
+  #view-markets > #feed-health-strip {
     grid-column: 1 / -1;
   }
 
   #view-stack > .toolbar-row,
-  #view-stack > #panel-stack {
+  #view-stack > #panel-stack,
+  #view-stack > #panel-stack-lots,
+  #view-stack > #panel-ratio-swap {
     grid-column: 1 / -1;
   }
 
@@ -3514,7 +3518,17 @@ button.sector-chip.selected {
   #accuracy-breakdown {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 10px 12px;
+    align-items: stretch;
+  }
+
+  #accuracy-breakdown > .sl-section-label,
+  #accuracy-breakdown > .acc-row.full-span {
+    grid-column: 1 / -1;
+  }
+
+  #accuracy-breakdown > .sl-section-label:not(:first-child) {
+    margin-top: 6px;
   }
 
   #view-markets > #macro-ticker-strip,
@@ -3550,8 +3564,32 @@ button.sector-chip.selected {
   }
 
   .stack-readout-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .setup-quality-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .ratio-analytics-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .lot-form-grid {
+    grid-template-columns: 1.1fr 1.1fr 0.85fr 0.95fr 1.3fr auto;
+  }
+
+  .swap-inputs-grid,
+  .swap-results-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
+  }
+
+  .sl-canvas-wrap {
+    height: 175px;
   }
 
   .stack-stat {
@@ -3625,5 +3663,583 @@ button.sector-chip.selected {
   .icon-btn {
     width: 34px;
     height: 34px;
+  }
+}
+
+/* ---------- v24 Upgrades: Session Clock, Setup Quality, Ratio Valuation, Lot Ledger, Swap Calc, Accuracy Chart, Feed Health ---------- */
+
+/* Global Bullion Session Clock */
+.session-panel {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.session-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.session-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.session-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.session-next {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.session-risk-pill {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.session-risk-pill.peak {
+  background: var(--up-soft);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: var(--up);
+}
+
+.session-risk-pill.warn {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #F59E0B;
+}
+
+.session-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+
+.session-item.open {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.session-item.fix {
+  border-color: rgba(212, 168, 67, 0.55);
+  background: var(--gold-soft);
+}
+
+.session-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+  flex-shrink: 0;
+}
+
+.session-item.open .session-dot {
+  background: var(--up);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+
+.session-item.fix .session-dot {
+  background: var(--gold-bright);
+  box-shadow: 0 0 8px rgba(212, 168, 67, 0.7);
+}
+
+.session-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.session-meta strong {
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-meta span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-foot {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+@media (max-width: 520px) {
+  .session-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+/* Ratio Chart Banner */
+.chart-ratio-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chart-ratio-banner strong {
+  color: var(--gold-bright);
+  font-weight: 700;
+}
+
+.chart-ratio-banner strong.up { color: var(--up); }
+.chart-ratio-banner strong.gold { color: var(--gold-bright); }
+.chart-ratio-banner[hidden] { display: none; }
+
+/* Live Feed Health / Freshness Strip */
+.feed-health-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.fh-title {
+  font-family: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+  margin-right: 4px;
+}
+
+.fh-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.fh-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+}
+
+.fh-pill.live .fh-dot { background: var(--up); }
+.fh-pill.stale .fh-dot { background: #F59E0B; }
+
+/* Setup Quality / Actionability Card */
+.setup-quality-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.sq-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sq-card.bullish { border-color: rgba(34, 197, 94, 0.35); }
+.sq-card.bearish { border-color: rgba(239, 68, 68, 0.35); }
+.sq-card.hybrid { border-color: rgba(245, 158, 11, 0.42); }
+
+.sq-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sq-metal {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sq-metal.gold { color: var(--gold-bright); }
+.sq-metal.silver { color: var(--silver); }
+
+.sq-verdict {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sq-verdict.bullish { color: var(--up); }
+.sq-verdict.bearish { color: var(--down); }
+.sq-verdict.hybrid { color: #F59E0B; }
+
+.sq-summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.sq-levels {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-subtle);
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+/* Au / Ag Ratio Valuation Panel */
+.ratio-analytics-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ratio-metric-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ratio-k {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-subtle);
+}
+
+.ratio-v {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.ratio-v.up { color: var(--up); }
+.ratio-v.gold { color: var(--gold-bright); }
+
+.ratio-bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold), var(--surface-elevated) 50%, var(--up));
+  margin-bottom: 5px;
+}
+
+.ratio-bar-marker {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--text);
+  transform: translateX(-50%);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+}
+
+/* Jump-Diffusion Title + Skew Badge */
+.mc-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Visual Self-Learning Accuracy Replay Canvas */
+.sl-chart-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.sl-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.sl-chart-head .segmented button {
+  padding: 3px 8px;
+  font-size: 10.5px;
+}
+
+.sl-canvas-wrap {
+  position: relative;
+  height: 140px;
+  width: 100%;
+}
+
+#accuracy-replay-chart {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sl-chart-legend {
+  margin-top: 6px;
+}
+
+/* Stack Dealer Spread, Lot Ledger & Ratio Swap Calculator */
+.stack-spread-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  margin-bottom: 12px;
+}
+
+.stack-spread-field {
+  flex: 1;
+  min-width: 145px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.stack-lots-sync-pill {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  border: 1px solid var(--gold);
+  color: var(--gold-bright);
+  white-space: nowrap;
+}
+
+.stack-lots-sync-pill[hidden] { display: none; }
+
+.lot-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.lot-input {
+  width: 100%;
+  min-width: 0;
+  font-size: 12.5px;
+  padding: 8px 9px;
+}
+
+.lot-add-btn {
+  padding: 8px 14px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.lot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.lot-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lot-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lot-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lot-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lot-val-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+}
+
+.lot-val-box strong {
+  font-size: 13px;
+}
+
+.lot-val-box span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lot-val-box span.up { color: var(--up); }
+.lot-val-box span.down { color: var(--down); }
+
+.lot-del-btn {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 7px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.lot-del-btn:hover {
+  border-color: var(--down);
+  color: var(--down);
+}
+
+.swap-inputs-grid,
+.swap-results-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* Smart Regime & Quiet Hours Controls in Alerts */
+.smart-alert-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.quiet-hours-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.quiet-hours-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.quiet-hours-row.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+@media (min-width: 840px) {
+  .setup-quality-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .ratio-analytics-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .lot-form-grid {
+    grid-template-columns: 1.05fr 1.15fr 0.8fr 0.95fr 1.35fr auto;
+    align-items: center;
+  }
+
+  .swap-inputs-grid,
+  .swap-results-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .sl-canvas-wrap {
+    height: 175px;
   }
 }

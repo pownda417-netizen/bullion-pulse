@@ -2,12 +2,17 @@ import assert from 'node:assert/strict';
 import {
   evaluateMetalAlert,
   evaluatePriceTargets,
+  evaluateRegimeAlerts,
   evaluateShanghaiPremiumAlert,
+  fetchSpotPrices,
   formatNtfyPayload,
   formatShanghaiNtfyPayload,
+  isQuietHours,
+  parseGoldApiQuotes,
   parseGoldPriceOrg,
   parseYahooChart,
 } from './check_metals.mjs';
+import { fetchSettledCloses, parseGoldApiCloses } from './self_learn.mjs';
 import {
   aggregateCandles,
   buildSeededMultiTimeframeCandles,
@@ -304,4 +309,92 @@ const extremeInstant = evaluateMetalAlert({
 });
 assert.equal(extremeInstant.shouldAlert, true, 'Extreme spike >=1.65x threshold fires immediately');
 
-console.log('All 15 Bullion Pulse monitor, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');
+// 16. gold-api.com spot fallback (check_metals.mjs & self_learn.mjs) when goldprice.org returns 403
+const parsedGa = parseGoldApiQuotes(
+  { price: 3560.4, updatedAt: '2026-11-20T20:00:00Z' },
+  { price: 42.15, updatedAt: '2026-11-20T20:00:00Z' },
+  { gold: 3500.0, silver: 41.0 }
+);
+assert.equal(parsedGa.source, 'gold-api.com');
+assert.equal(parsedGa.gold.price, 3560.4);
+assert.ok(Math.abs(parsedGa.gold.pct - 1.7257) < 0.01);
+
+const mockFetch403 = async (url) => {
+  if (url.includes('goldprice.org')) return { ok: false, status: 403 };
+  if (url.includes('/price/XAU')) return { ok: true, json: async () => ({ price: 3545.25 }) };
+  if (url.includes('/price/XAG')) return { ok: true, json: async () => ({ price: 41.80 }) };
+  if (url.includes('GC=F')) return { ok: true, json: async () => ({ chart: { result: [{ meta: { chartPreviousClose: 3520 } }] } }) };
+  if (url.includes('SI=F')) return { ok: true, json: async () => ({ chart: { result: [{ meta: { chartPreviousClose: 41.2 } }] } }) };
+  return { ok: false, status: 404 };
+};
+const fallbackSpot = await fetchSpotPrices(mockFetch403);
+assert.equal(fallbackSpot.source, 'gold-api.com');
+assert.equal(fallbackSpot.gold.price, 3545.25);
+assert.equal(fallbackSpot.silver.prevClose, 41.2);
+
+const settledGa = parseGoldApiCloses({ price: 3550.1 }, { price: 42.3 });
+assert.equal(settledGa.gold, 3550.1);
+const settledFallback = await fetchSettledCloses(mockFetch403);
+assert.equal(settledFallback.source, 'gold-api.com');
+assert.equal(settledFallback.gold, 3545.25);
+
+// 17. ratioBelow target alert & same-day deduplication
+const ratioBelowHit = evaluatePriceTargets({
+  goldPrice: 3500,
+  silverPrice: 54.5,
+  ratio: 64.2,
+  targets: { ratioBelow: 68 },
+  prevTargetsState: {},
+  dayKey: '2026-11-20',
+});
+assert.equal(ratioBelowHit.triggered.length, 1);
+assert.equal(ratioBelowHit.triggered[0].id, 'ratioBelow');
+assert.match(ratioBelowHit.triggered[0].title, /Au\/Ag Ratio Target Hit \(≤ 68\.0:1\)/);
+
+// 18. Quiet Hours helper (overnight 22:00-07:00 ET wrap + daytime window)
+assert.equal(isQuietHours(new Date('2026-11-20T04:30:00Z'), 22, 7, 'America/New_York'), true); // 11:30 PM ET
+assert.equal(isQuietHours(new Date('2026-11-20T16:30:00Z'), 22, 7, 'America/New_York'), false); // 11:30 AM ET
+assert.equal(isQuietHours(new Date('2026-11-20T16:30:00Z'), 10, 14, 'America/New_York'), true); // daytime window
+assert.equal(isQuietHours(new Date('2026-11-20T04:30:00Z'), '', '', 'America/New_York'), false);
+
+// 19. Smart Regime Alerts (Backwardation Flip, Short Squeeze >= 65, DXY Shock >= 0.8%) + Deduplication
+const regimeRes = evaluateRegimeAlerts({
+  outlook: {
+    institutionalSignals: {
+      basis: {
+        gold: { spot: 3550, futures: 3570, basisUsd: 20, isBackwardation: false },
+        silver: { spot: 42.5, futures: 42.1, basisUsd: -0.4, isBackwardation: true },
+      },
+    },
+    marketRegime: {
+      gold: { discoveryScore: 40, squeezeScore: 42, label: 'Consolidation / Neutral', key: 'neutral' },
+      silver: { discoveryScore: 32, squeezeScore: 76, label: 'Short Squeeze', key: 'squeeze' },
+    },
+    dollarStrength: {
+      dxy: 105.4,
+      dxy5dPct: 1.25,
+      regime: 'Strong USD Headwind',
+      impact7d: { goldUsdOz: -28.4 },
+    },
+  },
+  prevRegimeState: {},
+  rules: { backwardation: true, shortSqueeze: true, dxyShock: true },
+  dayKey: '2026-11-20',
+});
+assert.equal(regimeRes.triggered.length, 3);
+assert.ok(regimeRes.triggered.some((a) => a.id === 'backw_silver'));
+assert.ok(regimeRes.triggered.some((a) => a.id === 'squeeze_silver'));
+assert.ok(regimeRes.triggered.some((a) => a.id === 'dxy_shock'));
+const regimeDup = evaluateRegimeAlerts({
+  outlook: {
+    institutionalSignals: { basis: { silver: { spot: 42.5, futures: 42.1, basisUsd: -0.4, isBackwardation: true } } },
+    marketRegime: { silver: { discoveryScore: 32, squeezeScore: 76, label: 'Short Squeeze', key: 'squeeze' } },
+    dollarStrength: { dxy: 105.4, dxy5dPct: 1.25 },
+  },
+  prevRegimeState: regimeRes.nextState,
+  rules: { backwardation: true, shortSqueeze: true, dxyShock: true },
+  dayKey: '2026-11-20',
+});
+assert.equal(regimeDup.triggered.length, 0, 'Regime alerts must deduplicate within the same day');
+
+console.log('All 19 Bullion Pulse monitor, gold-api fallback, Quiet Hours, Regime/Backwardation/DXY alerts, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');

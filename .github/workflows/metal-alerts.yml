@@ -47,9 +47,15 @@ jobs:
           SILVER_ABOVE_USD: ${{ vars.SILVER_ABOVE_USD }}
           SILVER_BELOW_USD: ${{ vars.SILVER_BELOW_USD }}
           RATIO_ABOVE: ${{ vars.RATIO_ABOVE }}
+          RATIO_BELOW: ${{ vars.RATIO_BELOW }}
           ALERT_DIRECTION: ${{ vars.ALERT_DIRECTION || 'both' }}
           ESCALATION_STEP_PCT: ${{ vars.ESCALATION_STEP_PCT || '1.0' }}
           CONFIRM_MOVES: ${{ vars.CONFIRM_MOVES || 'false' }}
+          QUIET_HOURS_START: ${{ vars.QUIET_HOURS_START }}
+          QUIET_HOURS_END: ${{ vars.QUIET_HOURS_END }}
+          ALERT_BACKWARDATION: ${{ vars.ALERT_BACKWARDATION || 'true' }}
+          ALERT_SHORT_SQUEEZE: ${{ vars.ALERT_SHORT_SQUEEZE || 'true' }}
+          ALERT_DXY_SHOCK: ${{ vars.ALERT_DXY_SHOCK || 'true' }}
           APP_URL: ${{ vars.APP_URL }}
         run: |
           if [ -z "$NTFY_TOPIC" ]; then

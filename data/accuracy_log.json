@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-21T02:32:01.302Z",
+  "updatedAt": "2026-11-21T02:17:14.555Z",
   "scorecard": {
     "live7d": {
       "count": 0,
@@ -71,52 +71,52 @@
     },
     {
       "id": "2026-11-21-gold",
-      "createdAt": "2026-11-21T02:32:01.302Z",
+      "createdAt": "2026-11-21T02:17:14.555Z",
       "metal": "gold",
       "spotAtForecast": 3539,
       "score": -31,
       "signal": "Bearish",
       "horizon7d": {
-        "bear": 3362.74,
-        "base": 3508.99,
-        "bull": 3655.24,
-        "bearPct": -4.98,
-        "expectedPct": -0.85,
-        "bullPct": 3.28
+        "bear": 3362.99,
+        "base": 3509.24,
+        "bull": 3655.49,
+        "bearPct": -4.97,
+        "expectedPct": -0.84,
+        "bullPct": 3.29
       },
       "horizon30d": {
-        "bear": 3177.78,
-        "base": 3477.5,
-        "bull": 3777.22,
-        "bearPct": -10.21,
-        "expectedPct": -1.74,
-        "bullPct": 6.73
+        "bear": 3178.29,
+        "base": 3478.01,
+        "bull": 3777.73,
+        "bearPct": -10.19,
+        "expectedPct": -1.72,
+        "bullPct": 6.75
       },
       "graded7d": null,
       "graded30d": null
     },
     {
       "id": "2026-11-21-silver",
-      "createdAt": "2026-11-21T02:32:01.302Z",
+      "createdAt": "2026-11-21T02:17:14.555Z",
       "metal": "silver",
       "spotAtForecast": 41.08,
       "score": -18,
       "signal": "Bearish",
       "horizon7d": {
-        "bear": 38.07,
+        "bear": 38.08,
         "base": 40.77,
         "bull": 43.46,
-        "bearPct": -7.32,
-        "expectedPct": -0.76,
+        "bearPct": -7.31,
+        "expectedPct": -0.75,
         "bullPct": 5.8
       },
       "horizon30d": {
         "bear": 34.92,
-        "base": 40.44,
-        "bull": 45.96,
-        "bearPct": -15,
-        "expectedPct": -1.56,
-        "bullPct": 11.88
+        "base": 40.45,
+        "bull": 45.97,
+        "bearPct": -14.98,
+        "expectedPct": -1.54,
+        "bullPct": 11.9
       },
       "graded7d": null,
       "graded30d": null

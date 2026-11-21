@@ -54,7 +54,8 @@ function quantile(sorted, q) {
 
 /**
  * Estimates jump intensity (jumps/day), jump mean skew, and jump volatility
- * from metal beta, macro VIX stress, and active catalyst intensity.
+ * from metal beta, macro VIX stress, active catalyst intensity, market regime
+ * (Short Squeeze vs. True Price Discovery), and RSI exhaustion.
  */
 export function estimateJumpParams({
   metal = 'gold',
@@ -65,27 +66,69 @@ export function estimateJumpParams({
   coneMultiplier = 1.0,
   lambdaMult = 1.0,
   sigmaJMult = 1.0,
+  regime = null,
+  rsi14 = null,
 }) {
   const isSilver = metal === 'silver';
   // Split total realized vol into continuous diffusion (~82%) + jump component
   const diffVol = clamp(dailyVol * 0.84 * clamp(coneMultiplier, 0.8, 1.45), 0.0045, 0.045);
 
+  const sqzScore = Number.isFinite(regime?.squeezeScore) ? regime.squeezeScore : 0;
+  const discScore = Number.isFinite(regime?.discoveryScore) ? regime.discoveryScore : 50;
+  const isBackwardation = Boolean(regime?.isBackwardation);
+  const exhaustionRisk =
+    sqzScore >= 65 && discScore < 45 && Number.isFinite(rsi14) && rsi14 >= 78;
+
   const vixBoost = clamp((vix - 16) / 35, 0, 0.08);
   const catBoost = clamp(catalystIntensity * 0.04, 0, 0.05);
+
+  let regimeLambdaBoost = 0;
+  let regimeSigmaMult = 1.0;
+  let regimeJumpSkew = 0;
+  let skewRegime = 'Balanced Tails';
+
+  if (exhaustionRisk) {
+    // Overextended short squeeze lacking structural discovery support -> elevated slam / pullback risk
+    regimeLambdaBoost = isSilver ? 0.032 : 0.022;
+    regimeSigmaMult = 1.18;
+    regimeJumpSkew = isSilver ? -0.012 : -0.007;
+    skewRegime = 'Squeeze Exhaustion / Slam Risk';
+  } else if (sqzScore >= 55 || isBackwardation) {
+    // Active Short Squeeze / Backwardation -> asymmetric fat right-tail upside skew
+    const sqzIntensity = clamp((sqzScore - 45) / 55, 0, 1) + (isBackwardation ? 0.25 : 0);
+    regimeLambdaBoost = clamp(sqzIntensity * (isSilver ? 0.034 : 0.021), 0, 0.045);
+    regimeSigmaMult = 1 + clamp(sqzIntensity * 0.13, 0, 0.16);
+    regimeJumpSkew = clamp(sqzIntensity * (isSilver ? 0.011 : 0.0065), 0, isSilver ? 0.014 : 0.0085);
+    skewRegime = isBackwardation
+      ? 'Right-Tail Squeeze (Backwardation)'
+      : 'Right-Tail Squeeze Skew';
+  } else if (discScore >= 58) {
+    // Structural Price Discovery -> steady gentle upside skew, contained jump shocks
+    regimeJumpSkew = isSilver ? 0.003 : 0.002;
+    regimeSigmaMult = 0.96;
+    skewRegime = 'Steady Structural Discovery';
+  }
+
   // Baseline ~0.045 jumps/day Gold (~1/mo), ~0.085 jumps/day Silver (~1.8/mo), self-calibrated by lambdaMult
-  const rawLambda = (isSilver ? 0.085 : 0.045) + vixBoost + catBoost;
-  const lambda = clamp(rawLambda * clamp(lambdaMult, 0.75, 1.45), 0.02, 0.28);
+  const rawLambda = (isSilver ? 0.085 : 0.045) + vixBoost + catBoost + regimeLambdaBoost;
+  const lambda = clamp(rawLambda * clamp(lambdaMult, 0.75, 1.45), 0.02, 0.30);
 
   // Jump size volatility: Silver jumps roughly 2x harder than Gold, self-calibrated by sigmaJMult
   const jumpSigma =
     (isSilver ? 0.042 : 0.022) *
     clamp(coneMultiplier, 0.8, 1.45) *
-    clamp(sigmaJMult, 0.75, 1.45);
-  // Gentle directional jump skew driven by active catalyst balance
-  const jumpMean = clamp(unitScore * (isSilver ? 0.012 : 0.007), -0.018, 0.018);
+    clamp(sigmaJMult, 0.75, 1.45) *
+    regimeSigmaMult;
+
+  // Directional jump skew driven by active catalyst balance + asymmetric regime skew
+  const baseJumpMean = unitScore * (isSilver ? 0.012 : 0.007);
+  const jumpMean = clamp(baseJumpMean + regimeJumpSkew, -0.024, 0.026);
 
   // Daily drift capped conservatively so Monte Carlo medians match macro reality
-  const dailyDrift = clamp(unitScore * dailyVol * 0.22, -0.008, 0.008);
+  let dailyDrift = clamp(unitScore * dailyVol * 0.22, -0.008, 0.008);
+  if (exhaustionRisk && dailyDrift > 0) {
+    dailyDrift = Math.min(dailyDrift * 0.35, 0.0005);
+  }
 
   return {
     diffVol: +diffVol.toFixed(5),
@@ -94,6 +137,9 @@ export function estimateJumpParams({
     jumpSigma: +jumpSigma.toFixed(5),
     dailyDrift: +dailyDrift.toFixed(5),
     expectedJumpsPerMonth: +(lambda * 21).toFixed(1),
+    skewRegime,
+    exhaustionRisk,
+    exhaustionLabel: exhaustionRisk ? 'Squeeze Exhaustion — Slam Risk' : null,
   };
 }
 

@@ -64,24 +64,104 @@ export function parseYahooChart(data, symbol, name) {
   return { symbol, name, price, prevClose, chg, pct };
 }
 
-async function fetchSpotPrices() {
+export function parseGoldApiQuotes(xauJson, xagJson, prevCloses = {}) {
+  const gPrice = Number(xauJson?.price);
+  const sPrice = Number(xagJson?.price);
+  if (!Number.isFinite(gPrice) || gPrice <= 0 || !Number.isFinite(sPrice) || sPrice <= 0) {
+    throw new Error('Invalid gold-api.com response');
+  }
+  const gPrev = Number.isFinite(Number(prevCloses.gold)) && Number(prevCloses.gold) > 0 ? Number(prevCloses.gold) : gPrice;
+  const sPrev = Number.isFinite(Number(prevCloses.silver)) && Number(prevCloses.silver) > 0 ? Number(prevCloses.silver) : sPrice;
+  const gChg = +(gPrice - gPrev).toFixed(2);
+  const sChg = +(sPrice - sPrev).toFixed(2);
+  return {
+    source: 'gold-api.com',
+    timestamp: xauJson?.updatedAt || new Date().toISOString(),
+    gold: {
+      symbol: 'XAU',
+      name: 'Gold',
+      price: +gPrice.toFixed(2),
+      prevClose: +gPrev.toFixed(2),
+      chg: gChg,
+      pct: gPrev > 0 ? +((gChg / gPrev) * 100).toFixed(4) : 0,
+    },
+    silver: {
+      symbol: 'XAG',
+      name: 'Silver',
+      price: +sPrice.toFixed(2),
+      prevClose: +sPrev.toFixed(2),
+      chg: sChg,
+      pct: sPrev > 0 ? +((sChg / sPrev) * 100).toFixed(4) : 0,
+    },
+  };
+}
+
+export async function fetchSpotPrices(fetchImpl = fetch) {
   // Primary: goldprice.org spot USD feed (XAU + XAG with daily % change)
   try {
-    const res = await fetch('https://data-asg.goldprice.org/dbXRates/USD', {
+    const res = await fetchImpl('https://data-asg.goldprice.org/dbXRates/USD', {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return parseGoldPriceOrg(await res.json());
   } catch (primaryErr) {
-    console.warn(`Primary feed failed (${primaryErr.message}), trying Yahoo Finance fallback…`);
+    console.warn(`Primary feed failed (${primaryErr.message}), trying gold-api.com spot fallback…`);
   }
 
-  // Fallback: Yahoo Finance COMEX continuous futures (GC=F & SI=F)
+  // Secondary: gold-api.com live XAU/XAG spot (using Yahoo chartPreviousClose or candles_1d session open for daily % change)
+  try {
+    const [xauRes, xagRes] = await Promise.all([
+      fetchImpl('https://api.gold-api.com/price/XAU', {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      }),
+      fetchImpl('https://api.gold-api.com/price/XAG', {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      }),
+    ]);
+    if (xauRes.ok && xagRes.ok) {
+      const [xauJson, xagJson] = await Promise.all([xauRes.json(), xagRes.json()]);
+      const prevCloses = {};
+      try {
+        const [gYRes, sYRes] = await Promise.all([
+          fetchImpl('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m', {
+            headers: { 'User-Agent': USER_AGENT },
+          }),
+          fetchImpl('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m', {
+            headers: { 'User-Agent': USER_AGENT },
+          }),
+        ]);
+        if (gYRes.ok) {
+          const gMeta = (await gYRes.json())?.chart?.result?.[0]?.meta;
+          prevCloses.gold = gMeta?.chartPreviousClose ?? gMeta?.previousClose;
+        }
+        if (sYRes.ok) {
+          const sMeta = (await sYRes.json())?.chart?.result?.[0]?.meta;
+          prevCloses.silver = sMeta?.chartPreviousClose ?? sMeta?.previousClose;
+        }
+      } catch {
+        // Optional prevClose enrichment failed; try local candles_1d.json
+      }
+      if (!prevCloses.gold || !prevCloses.silver) {
+        try {
+          const rawC = JSON.parse(await fs.readFile(path.resolve('data/candles_1d.json'), 'utf8'));
+          if (!prevCloses.gold && rawC?.gold?.[0]?.o > 0) prevCloses.gold = rawC.gold[0].o;
+          if (!prevCloses.silver && rawC?.silver?.[0]?.o > 0) prevCloses.silver = rawC.silver[0].o;
+        } catch {
+          // Optional local candles unavailable
+        }
+      }
+      return parseGoldApiQuotes(xauJson, xagJson, prevCloses);
+    }
+  } catch (secErr) {
+    console.warn(`gold-api.com fallback failed (${secErr.message}), trying Yahoo Finance…`);
+  }
+
+  // Final fallback: Yahoo Finance COMEX continuous futures (GC=F & SI=F)
   const [goldRes, silverRes] = await Promise.all([
-    fetch('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m', {
+    fetchImpl('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m', {
       headers: { 'User-Agent': USER_AGENT },
     }),
-    fetch('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m', {
+    fetchImpl('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m', {
       headers: { 'User-Agent': USER_AGENT },
     }),
   ]);
@@ -280,6 +360,7 @@ export function evaluatePriceTargets({
     { id: 'silverAbove', label: 'Silver (XAG)', symbol: 'XAG', val: silverPrice, target: Number(targets.silverAbove), op: 'gte', fmt: (v) => `$${v.toFixed(2)}/oz`, dir: 'up' },
     { id: 'silverBelow', label: 'Silver (XAG)', symbol: 'XAG', val: silverPrice, target: Number(targets.silverBelow), op: 'lte', fmt: (v) => `$${v.toFixed(2)}/oz`, dir: 'down' },
     { id: 'ratioAbove', label: 'Au/Ag Ratio', symbol: 'AU/AG', val: ratio, target: Number(targets.ratioAbove), op: 'gte', fmt: (v) => `${v.toFixed(1)}:1`, dir: 'up' },
+    { id: 'ratioBelow', label: 'Au/Ag Ratio', symbol: 'AU/AG', val: ratio, target: Number(targets.ratioBelow), op: 'lte', fmt: (v) => `${v.toFixed(1)}:1`, dir: 'down' },
   ];
   const triggered = [];
   const nextState = { ...(prevTargetsState || {}) };
@@ -297,6 +378,130 @@ export function evaluatePriceTargets({
       message: `${r.label} reached ${r.fmt(r.val)} (your target rule: ${r.op === 'gte' ? '≥' : '≤'} ${r.fmt(r.target)}).`,
     });
   }
+  return { triggered, nextState };
+}
+
+/**
+ * Checks whether `nowDate` falls inside the configured quiet hours window (e.g. 22 -> 7 ET).
+ * Supports overnight wrap-around windows (startHour > endHour) and daytime windows.
+ */
+export function isQuietHours(nowDate = new Date(), startHour = null, endHour = null, timeZone = 'America/New_York') {
+  if (startHour === null || startHour === '' || startHour === undefined) return false;
+  if (endHour === null || endHour === '' || endHour === undefined) return false;
+  const s = Number(startHour);
+  const e = Number(endHour);
+  if (!Number.isInteger(s) || !Number.isInteger(e) || s < 0 || s > 23 || e < 0 || e > 23 || s === e) {
+    return false;
+  }
+  const d = nowDate instanceof Date ? nowDate : new Date(nowDate);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const hourVal = Number(parts.find((p) => p.type === 'hour')?.value ?? d.getUTCHours()) % 24;
+  if (s < e) {
+    return hourVal >= s && hourVal < e;
+  }
+  // Overnight wrap (e.g. 22:00 through 07:00)
+  return hourVal >= s || hourVal < e;
+}
+
+/**
+ * Evaluates smart regime alerts (COMEX Backwardation flip, Short Squeeze >= 65, DXY Dollar Shock).
+ * Deduplicated once per dayKey per alert type.
+ */
+export function evaluateRegimeAlerts({
+  outlook = null,
+  prevRegimeState = {},
+  rules = {},
+  dayKey,
+}) {
+  const triggered = [];
+  const nextState = { ...(prevRegimeState || {}) };
+  if (!outlook) return { triggered, nextState };
+
+  const enableBackw = rules.backwardation !== false;
+  const enableSqueeze = rules.shortSqueeze !== false;
+  const enableDxy = rules.dxyShock !== false;
+  const dxyThresholdPct = Number.isFinite(Number(rules.dxyShockPct)) ? Number(rules.dxyShockPct) : 0.8;
+
+  // 1. COMEX Spot-to-Futures Backwardation Flip
+  if (enableBackw) {
+    const bg = outlook.institutionalSignals?.basis?.gold;
+    const bs = outlook.institutionalSignals?.basis?.silver;
+    const gBackw = Boolean(bg?.isBackwardation || (typeof bg?.basisUsd === 'number' && bg.basisUsd < 0));
+    const sBackw = Boolean(bs?.isBackwardation || (typeof bs?.basisUsd === 'number' && bs.basisUsd < 0));
+    if (gBackw && nextState.backw_gold !== dayKey) {
+      nextState.backw_gold = dayKey;
+      triggered.push({
+        id: 'backw_gold',
+        dir: 'up',
+        priority: 4,
+        tags: ['fire', 'coin'],
+        title: `COMEX Gold Backwardation Active (${bg.basisUsd.toFixed(2)}/oz)`,
+        message: `GC=F futures dropped below Gold Spot ($${bg.futures} vs $${bg.spot}). Downward-sloping curve lifts upside price discovery.`,
+      });
+    }
+    if (sBackw && nextState.backw_silver !== dayKey) {
+      nextState.backw_silver = dayKey;
+      triggered.push({
+        id: 'backw_silver',
+        dir: 'up',
+        priority: 4,
+        tags: ['fire', 'coin'],
+        title: `COMEX Silver Backwardation Active (${bs.basisUsd.toFixed(2)}/oz)`,
+        message: `SI=F futures dropped below Silver Spot ($${bs.futures} vs $${bs.spot}). Physical delivery tightness lifts upside price discovery.`,
+      });
+    }
+  }
+
+  // 2. Short Squeeze Alert (squeezeScore >= 65 or Short Squeeze / Hybrid label)
+  if (enableSqueeze) {
+    for (const metal of ['gold', 'silver']) {
+      const reg = outlook.marketRegime?.[metal] || outlook[metal]?.regime;
+      if (!reg) continue;
+      const isSqz =
+        (Number.isFinite(reg.squeezeScore) && reg.squeezeScore >= 65) ||
+        reg.key === 'squeeze' ||
+        reg.key === 'hybrid';
+      const stateKey = `squeeze_${metal}`;
+      if (isSqz && nextState[stateKey] !== dayKey) {
+        nextState[stateKey] = dayKey;
+        const mName = metal === 'gold' ? 'Gold' : 'Silver';
+        triggered.push({
+          id: stateKey,
+          dir: 'up',
+          priority: reg.squeezeScore >= 75 ? 5 : 4,
+          tags: ['zap', 'coin'],
+          title: `${mName} ${reg.label} Alert (${reg.discoveryScore}D/${reg.squeezeScore}S)`,
+          message: `Mechanical squeeze pressure on ${mName} reached ${reg.squeezeScore}/100 (Discovery ${reg.discoveryScore}/100). Elevated gamma/short-covering breakout risk.`,
+        });
+      }
+    }
+  }
+
+  // 3. US Dollar (DXY) Shock Alert
+  if (enableDxy) {
+    const ds = outlook.dollarStrength || outlook.macroSnapshot || null;
+    const dxy5d = Number(ds?.dxy5dPct);
+    const dxyLevel = Number(ds?.dxy);
+    if (Number.isFinite(dxy5d) && Math.abs(dxy5d) >= dxyThresholdPct && nextState.dxy_shock !== dayKey) {
+      nextState.dxy_shock = dayKey;
+      const usdUp = dxy5d > 0;
+      const gFx = outlook.dollarStrength?.impact7d?.goldUsdOz;
+      const fxNote = Number.isFinite(gFx) ? ` Est. 7d Gold FX impact: ${gFx >= 0 ? '+' : '-'}$${Math.abs(gFx).toFixed(2)}/oz.` : '';
+      triggered.push({
+        id: 'dxy_shock',
+        dir: usdUp ? 'down' : 'up',
+        priority: Math.abs(dxy5d) >= dxyThresholdPct * 2 ? 5 : 4,
+        tags: usdUp ? ['dollar', 'warning'] : ['dollar', 'chart_with_upwards_trend'],
+        title: `US Dollar (DXY) ${usdUp ? 'Surge' : 'Drop'} ${usdUp ? '+' : ''}${dxy5d.toFixed(2)}% (5d)`,
+        message: `DXY moved to ${Number.isFinite(dxyLevel) ? dxyLevel.toFixed(2) : '—'} (${outlook.dollarStrength?.regime || 'FX Shift'}).${fxNote}`,
+      });
+    }
+  }
+
   return { triggered, nextState };
 }
 
@@ -350,6 +555,9 @@ async function main() {
   const directionRule = (process.env.ALERT_DIRECTION || 'both').trim().toLowerCase();
   const escalationStep = parseFloat(process.env.ESCALATION_STEP_PCT || '1.0');
   const requireConfirmation = (process.env.CONFIRM_MOVES || '').trim().toLowerCase() === 'true';
+  const quietStart = process.env.QUIET_HOURS_START ?? '';
+  const quietEnd = process.env.QUIET_HOURS_END ?? '';
+  const quietActive = isQuietHours(new Date(), quietStart, quietEnd);
   const appUrl = (process.env.APP_URL || '').trim();
   const statePath = process.env.STATE_FILE || path.resolve('monitor/state.json');
 
@@ -443,6 +651,12 @@ async function main() {
       continue;
     }
 
+    const isExtremeMove = Math.abs(quote.pct) >= threshold * 2;
+    if (quietActive && !isExtremeMove) {
+      console.log(`  ${key}: suppressed by quiet hours (${quietStart}:00-${quietEnd}:00 ET; extreme ≥2x still breaks through)`);
+      continue;
+    }
+
     const payload = formatNtfyPayload({
       topic: ntfyTopic || 'dry-run-topic',
       quote,
@@ -476,6 +690,8 @@ async function main() {
 
     if (!sgeEval.shouldAlert) {
       console.log(`  SGE_AU_PREM: no alert (${sgeEval.reason})`);
+    } else if (quietActive && Math.abs(shanghai.gold.premiumUsdOz) < shanghaiPremThreshold * 1.75) {
+      console.log(`  SGE_AU_PREM: suppressed by quiet hours`);
     } else {
       const payload = formatShanghaiNtfyPayload({
         topic: ntfyTopic || 'dry-run-topic',
@@ -507,11 +723,16 @@ async function main() {
       silverAbove: process.env.SILVER_ABOVE_USD,
       silverBelow: process.env.SILVER_BELOW_USD,
       ratioAbove: process.env.RATIO_ABOVE,
+      ratioBelow: process.env.RATIO_BELOW,
     },
     prevTargetsState: alertState.TARGETS || {},
     dayKey,
   });
   for (const hit of tgtEval.triggered) {
+    if (quietActive) {
+      console.log(`  TARGET (${hit.id}): suppressed by quiet hours`);
+      continue;
+    }
     const payload = {
       topic: ntfyTopic || 'dry-run-topic',
       title: hit.title,
@@ -527,6 +748,48 @@ async function main() {
       console.log(`  TARGET (${hit.id}): alert sent -> ${payload.title}`);
       alertState.TARGETS = tgtEval.nextState;
       stateChanged = true;
+    }
+  }
+
+  // Evaluate Smart Regime Alerts (COMEX Backwardation, Short Squeeze, DXY Shock)
+  let outlookData = null;
+  try {
+    outlookData = JSON.parse(await fs.readFile(path.resolve('data/outlook.json'), 'utf8'));
+  } catch {
+    // Optional outlook snapshot not available
+  }
+  if (outlookData) {
+    const regimeEval = evaluateRegimeAlerts({
+      outlook: outlookData,
+      prevRegimeState: alertState.REGIME || {},
+      rules: {
+        backwardation: (process.env.ALERT_BACKWARDATION || 'true').toLowerCase() !== 'false',
+        shortSqueeze: (process.env.ALERT_SHORT_SQUEEZE || 'true').toLowerCase() !== 'false',
+        dxyShock: (process.env.ALERT_DXY_SHOCK || 'true').toLowerCase() !== 'false',
+      },
+      dayKey,
+    });
+    for (const hit of regimeEval.triggered) {
+      if (quietActive && hit.priority < 5) {
+        console.log(`  REGIME (${hit.id}): suppressed by quiet hours`);
+        continue;
+      }
+      const payload = {
+        topic: ntfyTopic || 'dry-run-topic',
+        title: hit.title,
+        message: hit.message,
+        priority: hit.priority || 4,
+        tags: hit.tags || ['zap', 'coin'],
+        ...(appUrl ? { click: appUrl } : {}),
+      };
+      if (dryRun) {
+        console.log(`  REGIME (${hit.id}): DRY RUN ->`, JSON.stringify(payload));
+      } else {
+        await sendNtfy(ntfyServer, payload, ntfyToken);
+        console.log(`  REGIME (${hit.id}): alert sent -> ${payload.title}`);
+        alertState.REGIME = regimeEval.nextState;
+        stateChanged = true;
+      }
     }
   }
 

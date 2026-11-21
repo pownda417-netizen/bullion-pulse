@@ -75,13 +75,27 @@ const DEFAULT_SETTINGS = {
     goldCost: '',
     silverOz: '',
     silverCost: '',
+    goldSpreadPct: -2.5,
+    silverSpreadPct: -6.0,
   },
+  stackLots: [],
   targets: {
     goldAbove: '',
     goldBelow: '',
     silverAbove: '',
     silverBelow: '',
     ratioAbove: '',
+    ratioBelow: '',
+  },
+  smartAlerts: {
+    backwardation: true,
+    shortSqueeze: true,
+    dxyShock: true,
+  },
+  quietHours: {
+    enabled: false,
+    start: 22,
+    end: 7,
   },
 };
 
@@ -89,7 +103,10 @@ const state = {
   settings: {
     ...DEFAULT_SETTINGS,
     stack: { ...DEFAULT_SETTINGS.stack },
+    stackLots: [],
     targets: { ...DEFAULT_SETTINGS.targets },
+    smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts },
+    quietHours: { ...DEFAULT_SETTINGS.quietHours },
   },
   quotes: {
     gold: { price: null, prevClose: null, chg: 0, pct: 0 },
@@ -106,6 +123,24 @@ const state = {
     silver: null,
     liveFetched: false,
     source: '',
+  },
+  feedHealth: {
+    spotAt: null,
+    spotSource: '',
+    dxyAt: null,
+    dxyLive: false,
+    futuresAt: null,
+    sgeAt: null,
+    comexAt: null,
+    comexLive: false,
+    outlookAt: null,
+  },
+  accuracyChartMetal: 'gold',
+  swapCalc: {
+    dir: 'g2s',
+    oz: 1,
+    targetRatio: 65,
+    frictionPct: 4.0,
   },
   history: {
     gold: [],
@@ -125,6 +160,7 @@ const state = {
     silver: { day: '', dir: null, pct: 0 },
     shanghai: { day: '', dir: null, usd: 0 },
     targets: {},
+    regime: {},
   },
   pendingAlert: {
     gold: null,
@@ -150,7 +186,10 @@ function loadPersistedState() {
         ...DEFAULT_SETTINGS,
         ...parsed.settings,
         stack: { ...DEFAULT_SETTINGS.stack, ...(parsed.settings.stack || {}) },
+        stackLots: Array.isArray(parsed.settings.stackLots) ? parsed.settings.stackLots.slice(0, 100) : [],
         targets: { ...DEFAULT_SETTINGS.targets, ...(parsed.settings.targets || {}) },
+        smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts, ...(parsed.settings.smartAlerts || {}) },
+        quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(parsed.settings.quietHours || {}) },
       };
       if (!parsed.settings.chartMode && parsed.settings.selectedMetal) {
         state.settings.chartMode = parsed.settings.selectedMetal;
@@ -168,6 +207,7 @@ function loadPersistedState() {
         ...state.sessionAlerted,
         ...parsed.sessionAlerted,
         targets: { ...(parsed.sessionAlerted.targets || {}) },
+        regime: { ...(parsed.sessionAlerted.regime || {}) },
       };
     }
   } catch {
@@ -225,6 +265,17 @@ function formatSignedPct(pct) {
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function formatOrdinal(n) {
+  const num = Math.round(Number(n) || 0);
+  const mod100 = num % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${num}th`;
+  const mod10 = num % 10;
+  if (mod10 === 1) return `${num}st`;
+  if (mod10 === 2) return `${num}nd`;
+  if (mod10 === 3) return `${num}rd`;
+  return `${num}th`;
 }
 
 function formatTime(date) {
@@ -424,7 +475,10 @@ async function fetchLiveDxyIndex() {
   if (hit) {
     state.liveMacro.dxy = hit.val;
     state.liveMacro.dxySource = hit.label;
+    state.feedHealth.dxyAt = Date.now();
+    state.feedHealth.dxyLive = true;
     renderMacroStrip();
+    renderFeedHealth();
     renderOutlook();
     renderStackTracker();
     renderChart();
@@ -441,7 +495,9 @@ async function fetchLiveFuturesQuotes() {
     if (Number.isFinite(si) && si > 0) state.futures.silver = si;
     state.futures.liveFetched = false;
     state.futures.source = 'COMEX GC=F / SI=F (Synced)';
+    state.feedHealth.futuresAt = Date.parse(outlookState.data?.generatedAt || 0) || Date.now();
     renderFuturesPanel();
+    renderFeedHealth();
     renderOutlook();
   }
 }
@@ -532,6 +588,8 @@ function applyQuotes(result) {
   state.quotes.gold = result.gold;
   state.quotes.silver = result.silver;
   state.lastUpdated = new Date();
+  state.feedHealth.spotAt = Date.now();
+  state.feedHealth.spotSource = result.source || 'Spot';
 
   seedHistoryIfEmpty('gold', result.gold);
   seedHistoryIfEmpty('silver', result.silver);
@@ -551,6 +609,7 @@ function applyQuotes(result) {
   evaluateAlerts('gold', result.gold, false);
   evaluateAlerts('silver', result.silver, false);
   evaluateClientPriceTargets(result.gold.price, result.silver.price);
+  evaluateClientRegimeAlerts();
   savePersistedState();
 }
 
@@ -565,6 +624,26 @@ function maybeSendBrowserNotification(title, body) {
   }
 }
 
+function isClientQuietHours(nowDate = new Date()) {
+  const qh = state.settings.quietHours;
+  if (!qh || !qh.enabled) return false;
+  const s = Number(qh.start);
+  const e = Number(qh.end);
+  if (!Number.isInteger(s) || !Number.isInteger(e) || s === e) return false;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour: '2-digit',
+      hour12: false,
+    }).formatToParts(nowDate);
+    const h = Number(parts.find((p) => p.type === 'hour')?.value ?? nowDate.getHours()) % 24;
+    return s < e ? h >= s && h < e : h >= s || h < e;
+  } catch {
+    const h = nowDate.getHours();
+    return s < e ? h >= s && h < e : h >= s || h < e;
+  }
+}
+
 function evaluateClientPriceTargets(goldPrice, silverPrice) {
   const t = state.settings.targets || {};
   const ratio = silverPrice > 0 ? goldPrice / silverPrice : 0;
@@ -574,15 +653,18 @@ function evaluateClientPriceTargets(goldPrice, silverPrice) {
     { id: 'silverAbove', label: 'Silver (XAG)', symbol: 'XAG', val: silverPrice, target: parseFloat(t.silverAbove), op: 'gte', fmt: (v) => formatMoney(v), dir: 'up' },
     { id: 'silverBelow', label: 'Silver (XAG)', symbol: 'XAG', val: silverPrice, target: parseFloat(t.silverBelow), op: 'lte', fmt: (v) => formatMoney(v), dir: 'down' },
     { id: 'ratioAbove', label: 'Au/Ag Ratio', symbol: 'RATIO', val: ratio, target: parseFloat(t.ratioAbove), op: 'gte', fmt: (v) => `${v.toFixed(1)}:1`, dir: 'up' },
+    { id: 'ratioBelow', label: 'Au/Ag Ratio', symbol: 'RATIO', val: ratio, target: parseFloat(t.ratioBelow), op: 'lte', fmt: (v) => `${v.toFixed(1)}:1`, dir: 'down' },
   ];
   const today = todayKey();
   if (!state.sessionAlerted.targets) state.sessionAlerted.targets = {};
+  const quietNow = isClientQuietHours();
 
   for (const r of rules) {
     if (!Number.isFinite(r.target) || r.target <= 0 || !Number.isFinite(r.val)) continue;
     const hit = r.op === 'gte' ? r.val >= r.target : r.val <= r.target;
     if (!hit) continue;
     if (state.sessionAlerted.targets[r.id] === today) continue;
+    if (quietNow) continue;
     state.sessionAlerted.targets[r.id] = today;
 
     const title = `${r.label} Target Hit (${r.op === 'gte' ? '≥' : '≤'} ${r.fmt(r.target)})`;
@@ -610,6 +692,104 @@ function evaluateClientPriceTargets(goldPrice, silverPrice) {
         priority: 'high',
         tags: r.dir === 'up' ? 'dart,coin' : 'warning,coin',
       }).catch(() => {});
+    }
+  }
+}
+
+let regimeAlertBaselineReady = false;
+
+function evaluateClientRegimeAlerts() {
+  if (!outlookState.data) return;
+  const rules = state.settings.smartAlerts || DEFAULT_SETTINGS.smartAlerts;
+  const quietNow = isClientQuietHours();
+  const today = todayKey();
+  if (!state.sessionAlerted.regime) state.sessionAlerted.regime = {};
+  const res = computeInteractiveOutlook();
+
+  // On cold page boot, record already-active snapshot regimes silently so opening the app doesn't spam a banner;
+  // live transitions during the session (or 24/7 GitHub Actions push alerts) fire immediately.
+  if (!regimeAlertBaselineReady) {
+    regimeAlertBaselineReady = true;
+    for (const metal of ['gold', 'silver']) {
+      if (res.futures?.[metal]?.isBackwardation) state.sessionAlerted.regime[`backw_${metal}`] = today;
+      const reg = res.marketRegime?.[metal];
+      if (reg && (reg.squeezeScore >= 65 || reg.key === 'squeeze' || reg.key === 'hybrid')) {
+        state.sessionAlerted.regime[`squeeze_${metal}`] = today;
+      }
+    }
+    const d5 = Number(res.dollarStrength?.dxy5dPct);
+    if (Number.isFinite(d5) && Math.abs(d5) >= 0.8) {
+      state.sessionAlerted.regime.dxy_shock = today;
+    }
+    return;
+  }
+
+  const triggerOne = (id, title, body, dir, badge, isExtreme = false) => {
+    if (state.sessionAlerted.regime[id] === today) return;
+    if (quietNow && !isExtreme) return;
+    state.sessionAlerted.regime[id] = today;
+    showAlertBanner(title, body, dir);
+    maybeSendBrowserNotification(title, body);
+    state.alertLog.unshift({
+      id: Date.now() + Math.random(),
+      metal: id.includes('silver') ? 'silver' : 'gold',
+      symbol: 'REGIME',
+      title,
+      body,
+      pct: 0,
+      badge,
+      dir,
+      time: formatTime(new Date()),
+    });
+    state.alertLog = state.alertLog.slice(0, 25);
+    renderAlertLog();
+  };
+
+  if (rules.backwardation) {
+    for (const metal of ['gold', 'silver']) {
+      const f = res.futures?.[metal];
+      if (f?.isBackwardation && f.basisUsd < 0) {
+        const mName = metal === 'gold' ? 'Gold' : 'Silver';
+        triggerOne(
+          `backw_${metal}`,
+          `COMEX ${mName} Backwardation (${formatSignedMoney(f.basisUsd)}/oz)`,
+          `Futures below Spot — downward-sloping physical tightness lifting price discovery.`,
+          'up',
+          'BACKW'
+        );
+      }
+    }
+  }
+
+  if (rules.shortSqueeze) {
+    for (const metal of ['gold', 'silver']) {
+      const reg = res.marketRegime?.[metal];
+      if (reg && (reg.squeezeScore >= 65 || reg.key === 'squeeze' || reg.key === 'hybrid')) {
+        const mName = metal === 'gold' ? 'Gold' : 'Silver';
+        triggerOne(
+          `squeeze_${metal}`,
+          `${mName} ${reg.label} (${reg.discoveryScore}D/${reg.squeezeScore}S)`,
+          `Elevated COMEX/COT/gamma short-covering pressure active.`,
+          'up',
+          `${reg.squeezeScore}S`,
+          reg.squeezeScore >= 80
+        );
+      }
+    }
+  }
+
+  if (rules.dxyShock) {
+    const d5 = Number(res.dollarStrength?.dxy5dPct);
+    if (Number.isFinite(d5) && Math.abs(d5) >= 0.8) {
+      const usdUp = d5 > 0;
+      triggerOne(
+        'dxy_shock',
+        `US Dollar (DXY) ${usdUp ? 'Surge' : 'Drop'} ${formatSignedPct(d5)} (5d)`,
+        `DXY ${res.dollarStrength.dxy.toFixed(2)} (${res.dollarStrength.regime}) shifting bullion FX cost.`,
+        usdUp ? 'down' : 'up',
+        `DXY ${formatSignedPct(d5)}`,
+        Math.abs(d5) >= 1.6
+      );
     }
   }
 }
@@ -647,6 +827,11 @@ function evaluateAlerts(metal, quote, isSimulated) {
     }
   }
   state.pendingAlert[metal] = null;
+
+  // Quiet Hours suppression (extreme >= 2x threshold shocks still break through)
+  if (!isSimulated && isClientQuietHours() && absPct < threshold * 2) {
+    return false;
+  }
 
   if (!isSimulated) {
     state.sessionAlerted[metal] = { day: today, dir, pct: absPct };
@@ -783,10 +968,10 @@ function renderMetalCard(metal) {
   const progress = Math.min(100, (absPct / threshold) * 100);
   const triggered = absPct >= threshold;
 
-  meterLabel.textContent = `Daily move vs ±${threshold.toFixed(metal === 'silver' ? 2 : 1)}% alert`;
+  meterLabel.textContent = `Today's move vs ±${threshold.toFixed(metal === 'silver' ? 2 : 1)}% alert`;
   meterStatus.textContent = triggered
     ? 'Alert triggered'
-    : `${Math.round(progress)}% of trigger`;
+    : `${Math.round(progress)}% toward alert`;
   meterFill.style.width = `${progress}%`;
   meterFill.classList.remove('triggered-up', 'triggered-down');
   if (triggered) {
@@ -807,7 +992,7 @@ function renderStats() {
 
   const sel = state.settings.selectedMetal;
   const q = state.quotes[sel];
-  closeLabelEl.textContent = sel === 'gold' ? 'XAU Prev Close' : 'XAG Prev Close';
+  closeLabelEl.textContent = sel === 'gold' ? 'Gold Yesterday' : 'Silver Yesterday';
   closeEl.textContent = q.prevClose ? formatMoney(convertUnit(q.prevClose)) : '$—';
 }
 
@@ -1193,19 +1378,172 @@ function formatCountdown(ms) {
   return `${m}:${s}`;
 }
 
+function formatRelativeAge(tsMs) {
+  if (!tsMs || !Number.isFinite(tsMs)) return '—';
+  const sec = Math.max(0, Math.floor((Date.now() - tsMs) / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 48) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
+}
+
+function renderFeedHealth() {
+  const fh = state.feedHealth;
+  const setPill = (id, label, ts, isLive, fallbackText = 'Saved') => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const age = ts ? formatRelativeAge(ts) : fallbackText;
+    const stale = ts ? Date.now() - ts > 6 * 3600 * 1000 : !isLive;
+    el.className = `fh-pill ${isLive ? 'live' : stale ? 'stale' : ''}`;
+    el.innerHTML = `<i class="fh-dot"></i>${escapeHtml(label)} ${escapeHtml(age)}`;
+  };
+  setPill('fh-spot', 'Spot', fh.spotAt, state.mode === 'live', 'Connecting');
+  setPill('fh-dxy', 'Dollar', fh.dxyAt, fh.dxyLive, 'Saved');
+  setPill('fh-futures', 'Futures', fh.futuresAt, fh.futuresAt != null && Date.now() - fh.futuresAt < 3 * 3600 * 1000, 'Synced');
+  setPill('fh-sge', 'China', fh.sgeAt, fh.sgeAt != null && Date.now() - fh.sgeAt < 6 * 3600 * 1000, 'Saved');
+  setPill('fh-comex', 'Vaults', fh.comexAt, fh.comexLive, 'Saved');
+  setPill('fh-outlook', 'Forecast', fh.outlookAt, fh.outlookAt != null && Date.now() - fh.outlookAt < 4 * 3600 * 1000, 'Synced');
+}
+
+function getTzClock(nowDate, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(nowDate);
+  const get = (t) => parts.find((p) => p.type === t)?.value || '';
+  const wdMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const h = Number(get('hour')) % 24;
+  const m = Number(get('minute')) || 0;
+  return { wd: wdMap[get('weekday')] ?? 1, h, m, mins: h * 60 + m };
+}
+
+function renderSessionClock(nowDate = new Date()) {
+  if (!document.getElementById('panel-session-clock')) return;
+  const ny = getTzClock(nowDate, 'America/New_York');
+  const lon = getTzClock(nowDate, 'Europe/London');
+  const sh = getTzClock(nowDate, 'Asia/Shanghai');
+
+  const isWeekend =
+    ny.wd === 6 ||
+    (ny.wd === 5 && ny.mins >= 17 * 60) ||
+    (ny.wd === 0 && ny.mins < 18 * 60);
+
+  const sgeDay = !isWeekend && sh.wd >= 1 && sh.wd <= 5 && sh.mins >= 9 * 60 && sh.mins < 15 * 60 + 30;
+  const sgeNightEvening = !isWeekend && sh.wd >= 1 && sh.wd <= 5 && sh.mins >= 20 * 60;
+  const sgeNightLate = !isWeekend && sh.wd >= 2 && sh.wd <= 6 && sh.mins < 2 * 60 + 30;
+  const sgeOpen = sgeDay || sgeNightEvening || sgeNightLate;
+
+  const lonWeekday = lon.wd >= 1 && lon.wd <= 5 && !isWeekend;
+  const lonOpen = lonWeekday && lon.mins >= 8 * 60 && lon.mins < 16 * 60 + 30;
+  const lonAmFix = lonWeekday && Math.abs(lon.mins - (10 * 60 + 30)) <= 15;
+  const lonPmFix = lonWeekday && Math.abs(lon.mins - 15 * 60) <= 15;
+
+  const comexMaint = !isWeekend && ny.mins >= 17 * 60 && ny.mins < 18 * 60;
+  const comexCore = !isWeekend && ny.wd >= 1 && ny.wd <= 5 && ny.mins >= 8 * 60 + 20 && ny.mins < 13 * 60 + 30;
+  const comexGlobex = !isWeekend && !comexMaint;
+
+  const setSess = (id, statusId, cls, txt) => {
+    const item = document.getElementById(id);
+    const st = document.getElementById(statusId);
+    if (item) item.className = `session-item ${cls}`;
+    if (st) st.textContent = txt;
+  };
+
+  setSess(
+    'sess-sge',
+    'sess-sge-status',
+    sgeOpen ? 'open' : '',
+    sgeDay ? 'OPEN · Day' : (sgeNightEvening || sgeNightLate) ? 'OPEN · Night' : 'Closed'
+  );
+  setSess(
+    'sess-london',
+    'sess-london-status',
+    lonAmFix || lonPmFix ? 'fix' : lonOpen ? 'open' : '',
+    lonAmFix ? 'Morning Price Fix' : lonPmFix ? 'Afternoon Price Fix' : lonOpen ? 'OPEN · Active' : 'Closed'
+  );
+  setSess(
+    'sess-comex',
+    'sess-comex-status',
+    comexCore ? 'fix' : comexGlobex ? 'open' : '',
+    comexCore ? 'OPEN · Busiest' : comexMaint ? 'Daily Break (5–6p)' : comexGlobex ? 'OPEN · After-Hours' : 'Weekend Closed'
+  );
+
+  const riskPill = document.getElementById('session-liquidity-pill');
+  const noteEl = document.getElementById('session-liquidity-note');
+  const nextEl = document.getElementById('session-next-countdown');
+
+  let riskLabel = 'Normal Activity';
+  let riskCls = '';
+  let note = 'Global trading is open with steady buyer and seller activity.';
+  let nextTxt = '';
+
+  if (isWeekend) {
+    riskLabel = 'Weekend Closed';
+    riskCls = '';
+    note = 'Major markets are closed for the weekend — trading reopens Sunday at 6:00 PM ET (prices can gap at open).';
+    nextTxt = 'Opens Sun 6:00 PM ET';
+  } else if (comexMaint) {
+    riskLabel = 'Quiet Hour · Jumpy Prices';
+    riskCls = 'warn';
+    const rem = 18 * 60 - ny.mins;
+    note = 'Daily 5:00–6:00 PM ET market break: trading is very light, so prices can briefly jump or dip more easily.';
+    nextTxt = `Reopens in ${rem}m`;
+  } else if (lonPmFix) {
+    riskLabel = 'London Price Fix · Active';
+    riskCls = 'peak';
+    note = 'London afternoon benchmark price is being set right now — big banks are active, so prices can move quickly.';
+    nextTxt = 'London Fix Active Now';
+  } else if (lonOpen && comexCore) {
+    riskLabel = 'Busiest Trading Hours';
+    riskCls = 'peak';
+    const remToPm = 15 * 60 - lon.mins;
+    note = 'Both London and New York are open right now — highest trading volume and most reliable pricing of the day.';
+    nextTxt = remToPm > 0 ? `London Fix in ${Math.floor(remToPm / 60)}h ${remToPm % 60}m` : 'NY main hours end 1:30 PM ET';
+  } else if (sgeOpen && !lonOpen && !comexCore) {
+    riskLabel = 'Asia Trading Active';
+    riskCls = '';
+    note = 'China (Shanghai) physical buyers are leading the market right now while US and Europe sleep.';
+    nextTxt = 'London opens 3:00 AM ET';
+  } else if (comexCore) {
+    riskLabel = 'US Main Hours';
+    riskCls = 'peak';
+    const rem = 13 * 60 + 30 - ny.mins;
+    note = 'New York main trading hours are open — US traders and funds are setting the pace.';
+    nextTxt = `US main hours end in ${Math.floor(rem / 60)}h ${rem % 60}m`;
+  } else {
+    const remMaint = ny.mins < 17 * 60 ? 17 * 60 - ny.mins : 24 * 60 - ny.mins + 8 * 60 + 20;
+    nextTxt = ny.mins < 17 * 60 ? `Daily break in ${Math.floor(remMaint / 60)}h ${remMaint % 60}m` : `NY main open in ${Math.floor(remMaint / 60)}h ${remMaint % 60}m`;
+  }
+
+  if (riskPill) {
+    riskPill.textContent = riskLabel;
+    riskPill.className = `session-risk-pill ${riskCls}`;
+  }
+  if (noteEl) noteEl.textContent = note;
+  if (nextEl) nextEl.textContent = nextTxt;
+}
+
 function updateCandleCountdown() {
   const el = document.getElementById('chart-subtitle');
-  if (!el) return;
-  const tf = state.settings.chartTimeframe || '1d';
-  const now = Date.now();
-  const nextTickAt = state.nextRefreshAt || now + REFRESH_MS;
-  const remaining = Math.max(0, nextTickAt - now);
-  if (tf === '1d') {
-    el.textContent = `5m OHLC candles · Next update in ${formatCountdown(remaining)}`;
-  } else {
-    const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
-    el.textContent = `${meta.subtitle} · Live update in ${formatCountdown(remaining)}`;
+  if (el) {
+    const tf = state.settings.chartTimeframe || '1d';
+    const now = Date.now();
+    const nextTickAt = state.nextRefreshAt || now + REFRESH_MS;
+    const remaining = Math.max(0, nextTickAt - now);
+    if (tf === '1d') {
+      el.textContent = `5-min price bars · Next live update in ${formatCountdown(remaining)}`;
+    } else {
+      const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
+      el.textContent = `${meta.subtitle} · Live update in ${formatCountdown(remaining)}`;
+    }
   }
+  renderSessionClock();
+  renderFeedHealth();
 }
 
 function computeFibonacciLevels(bars) {
@@ -1257,7 +1595,7 @@ function drawRsiPane(rsiData, candleAreaW, padLeft, stepX) {
 
   if (pill) {
     const v = rsiData?.latest;
-    pill.textContent = v != null ? (v >= 70 ? `${v} OB` : v <= 30 ? `${v} OS` : String(v)) : 'Need >14 bars';
+    pill.textContent = v != null ? (v >= 70 ? `${v} Overheated` : v <= 30 ? `${v} Oversold` : `${v} Normal`) : 'Need more bars';
     pill.className = `rsi-val-pill ${v >= 70 ? 'ob' : v <= 30 ? 'os' : ''}`;
   }
 
@@ -1390,6 +1728,18 @@ function computeShortSqueezeSeries(bars, regimeObj) {
   return out;
 }
 
+function friendlyRegimeLabel(label) {
+  const map = {
+    'True Price Discovery': 'Real Demand Rally',
+    'Discovery Bias': 'Real Demand Leaning',
+    'Short Squeeze': 'Short Squeeze',
+    'Squeeze Bias': 'Squeeze Building',
+    'Hybrid: Squeeze + Discovery': 'Squeeze + Real Demand',
+    'Consolidation / Neutral': 'Sideways / Calm',
+  };
+  return map[label] || label || 'Sideways / Calm';
+}
+
 function renderChart() {
   const canvas = document.getElementById('intraday-chart');
   if (!canvas) return;
@@ -1405,10 +1755,10 @@ function renderChart() {
   const titleEl = document.getElementById('chart-title');
   if (titleEl) {
     titleEl.textContent = isRatio
-      ? `Gold / Silver Ratio (Au:Ag) · ${meta.label}`
+      ? `Gold / Silver Ratio · ${meta.label}`
       : sel === 'gold'
-        ? `Gold (XAU/USD) · ${meta.label}`
-        : `Silver (XAG/USD) · ${meta.label}`;
+        ? `Gold · ${meta.label}`
+        : `Silver · ${meta.label}`;
   }
   updateCandleCountdown();
 
@@ -1531,16 +1881,41 @@ function renderChart() {
   const outlookRes = computeInteractiveOutlook();
   const activeRegime = outlookRes.marketRegime?.[sel] || outlookRes[sel]?.regime || null;
 
-  // Live metal regime badge on chart panel
+  // Live metal regime badge on chart panel (or Au/Ag Ratio Valuation banner in ratio mode)
   const chartRegimePill = document.getElementById('chart-regime-pill');
-  if (chartRegimePill) {
-    if (isRatio || !activeRegime) {
-      chartRegimePill.hidden = true;
-    } else {
-      const metalTag = sel === 'gold' ? 'Gold' : 'Silver';
+  const ratioBanner = document.getElementById('chart-ratio-banner');
+  const ratioStatsEl = document.getElementById('chart-ratio-stats');
+  const ratioSigEl = document.getElementById('chart-ratio-signal');
+  if (isRatio) {
+    const ra = outlookRes.ratioAnalytics;
+    if (chartRegimePill && ra) {
       chartRegimePill.hidden = false;
-      chartRegimePill.textContent = `${metalTag} ${activeRegime.label} (${activeRegime.discoveryScore}D/${activeRegime.squeezeScore}S)`;
-      chartRegimePill.className = `regime-pill ${activeRegime.key || 'neutral'}`;
+      chartRegimePill.textContent = `Higher than ${ra.percentile5y}% of past 5 yrs`;
+      chartRegimePill.className = `regime-pill ${ra.tone === 'bullish' ? 'discovery' : ra.tone === 'gold' ? 'hybrid' : 'neutral'}`;
+    } else if (chartRegimePill) {
+      chartRegimePill.hidden = true;
+    }
+    if (ratioBanner && ra) {
+      ratioBanner.hidden = false;
+      if (ratioStatsEl) {
+        ratioStatsEl.textContent = `${ra.regime} · 5-Yr Avg ${ra.mean5y}:1 (Higher than ${ra.percentile5y}% of past 5 yrs)`;
+      }
+      if (ratioSigEl) {
+        ratioSigEl.textContent = ra.swapBias;
+        ratioSigEl.className = ra.tone === 'bullish' ? 'up' : ra.tone === 'gold' ? 'gold' : '';
+      }
+    }
+  } else {
+    if (ratioBanner) ratioBanner.hidden = true;
+    if (chartRegimePill) {
+      if (!activeRegime) {
+        chartRegimePill.hidden = true;
+      } else {
+        const metalTag = sel === 'gold' ? 'Gold' : 'Silver';
+        chartRegimePill.hidden = false;
+        chartRegimePill.textContent = `${metalTag}: ${friendlyRegimeLabel(activeRegime.label)} (Demand ${activeRegime.discoveryScore} · Squeeze ${activeRegime.squeezeScore})`;
+        chartRegimePill.className = `regime-pill ${activeRegime.key || 'neutral'}`;
+      }
     }
   }
 
@@ -1976,7 +2351,7 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
   const dec = bar.c >= 500 ? 0 : 2;
   if (ohlcEl) {
     ohlcEl.textContent =
-      `${tLabel}  O ${g.fmtChartVal(bar.o, dec)}  H ${g.fmtChartVal(bar.h, dec)}  L ${g.fmtChartVal(bar.l, dec)}  C ${g.fmtChartVal(bar.c, dec)}`;
+      `${tLabel} · Open ${g.fmtChartVal(bar.o, dec)} · High ${g.fmtChartVal(bar.h, dec)} · Low ${g.fmtChartVal(bar.l, dec)} · Close ${g.fmtChartVal(bar.c, dec)}`;
   }
 
   if (overlay) {
@@ -2022,23 +2397,23 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
     const discVal = g.discoverySeries?.[activeIdx];
     const sqzVal = g.squeezeSeries?.[activeIdx];
     if (discVal != null) {
-      regimeParts.push(`<span class="tt-disc">Disc ${escapeHtml(g.fmtChartVal(discVal, dec))}</span>`);
+      regimeParts.push(`<span class="tt-disc">Fair Value ${escapeHtml(g.fmtChartVal(discVal, dec))}</span>`);
     }
     if (sqzVal != null) {
-      regimeParts.push(`<span class="tt-sqz">Sqz ${escapeHtml(g.fmtChartVal(sqzVal, dec))}</span>`);
+      regimeParts.push(`<span class="tt-sqz">Squeeze ${escapeHtml(g.fmtChartVal(sqzVal, dec))}</span>`);
     }
 
     const subParts = [];
     const s20 = g.sma20?.[activeIdx];
     const s50 = g.sma50?.[activeIdx];
     const rVal = g.rsiValues?.[activeIdx];
-    if (s20 != null) subParts.push(`SMA20 ${g.fmtChartVal(s20, dec)}`);
-    if (s50 != null) subParts.push(`SMA50 ${g.fmtChartVal(s50, dec)}`);
-    if (rVal != null) subParts.push(`RSI ${Number(rVal).toFixed(1)}`);
+    if (s20 != null) subParts.push(`20-Avg ${g.fmtChartVal(s20, dec)}`);
+    if (s50 != null) subParts.push(`50-Avg ${g.fmtChartVal(s50, dec)}`);
+    if (rVal != null) subParts.push(`Momentum ${Number(rVal).toFixed(0)}`);
 
     tipEl.innerHTML =
       `<div>${escapeHtml(tLabel)} · <strong>${escapeHtml(g.fmtChartVal(bar.c, dec))}</strong></div>` +
-      `<div class="tt-sub">O ${escapeHtml(g.fmtChartVal(bar.o, dec))} H ${escapeHtml(g.fmtChartVal(bar.h, dec))} L ${escapeHtml(g.fmtChartVal(bar.l, dec))}</div>` +
+      `<div class="tt-sub">Open ${escapeHtml(g.fmtChartVal(bar.o, dec))} · High ${escapeHtml(g.fmtChartVal(bar.h, dec))} · Low ${escapeHtml(g.fmtChartVal(bar.l, dec))}</div>` +
       (regimeParts.length ? `<div class="tt-sub">${regimeParts.join(' · ')}</div>` : '') +
       (subParts.length ? `<div class="tt-sub">${escapeHtml(subParts.join(' · '))}</div>` : '');
     const cx = g.xCandle(activeIdx);
@@ -2102,6 +2477,8 @@ function renderSettingsControls() {
     ['input-stack-gold-cost', stack.goldCost],
     ['input-stack-silver-oz', stack.silverOz],
     ['input-stack-silver-cost', stack.silverCost],
+    ['input-stack-gold-spread', stack.goldSpreadPct ?? -2.5],
+    ['input-stack-silver-spread', stack.silverSpreadPct ?? -6.0],
   ];
   for (const [id, val] of stackFieldMap) {
     const el = document.getElementById(id);
@@ -2115,11 +2492,30 @@ function renderSettingsControls() {
     ['input-target-silver-above', targets.silverAbove],
     ['input-target-silver-below', targets.silverBelow],
     ['input-target-ratio-above', targets.ratioAbove],
+    ['input-target-ratio-below', targets.ratioBelow],
   ];
   for (const [id, val] of targetFieldMap) {
     const el = document.getElementById(id);
     if (el && document.activeElement !== el) el.value = val ?? '';
   }
+
+  const sa = state.settings.smartAlerts || DEFAULT_SETTINGS.smartAlerts;
+  const chkBackw = document.getElementById('chk-alert-backwardation');
+  const chkSqz = document.getElementById('chk-alert-squeeze');
+  const chkDxy = document.getElementById('chk-alert-dxy');
+  if (chkBackw) chkBackw.checked = sa.backwardation !== false;
+  if (chkSqz) chkSqz.checked = sa.shortSqueeze !== false;
+  if (chkDxy) chkDxy.checked = sa.dxyShock !== false;
+
+  const qh = state.settings.quietHours || DEFAULT_SETTINGS.quietHours;
+  const chkQuiet = document.getElementById('chk-quiet-hours');
+  const selQuietStart = document.getElementById('select-quiet-start');
+  const selQuietEnd = document.getElementById('select-quiet-end');
+  const quietRow = document.getElementById('quiet-hours-controls');
+  if (chkQuiet) chkQuiet.checked = !!qh.enabled;
+  if (selQuietStart) selQuietStart.value = String(qh.start ?? 22);
+  if (selQuietEnd) selQuietEnd.value = String(qh.end ?? 7);
+  if (quietRow) quietRow.classList.toggle('disabled', !qh.enabled);
 
   const webNotifBtn = document.getElementById('btn-enable-web-notif');
   if (webNotifBtn && typeof Notification !== 'undefined') {
@@ -2147,6 +2543,14 @@ function renderSettingsControls() {
     if (targets.silverAbove) extraTargets.push(`SILVER_ABOVE_USD=${targets.silverAbove}`);
     if (targets.silverBelow) extraTargets.push(`SILVER_BELOW_USD=${targets.silverBelow}`);
     if (targets.ratioAbove) extraTargets.push(`RATIO_ABOVE=${targets.ratioAbove}`);
+    if (targets.ratioBelow) extraTargets.push(`RATIO_BELOW=${targets.ratioBelow}`);
+    extraTargets.push(`ALERT_BACKWARDATION=${sa.backwardation !== false}`);
+    extraTargets.push(`ALERT_SHORT_SQUEEZE=${sa.shortSqueeze !== false}`);
+    extraTargets.push(`ALERT_DXY_SHOCK=${sa.dxyShock !== false}`);
+    if (qh.enabled) {
+      extraTargets.push(`QUIET_HOURS_START=${qh.start}`);
+      extraTargets.push(`QUIET_HOURS_END=${qh.end}`);
+    }
     snippet.textContent =
       `NTFY_TOPIC=${t}\n` +
       `GOLD_THRESHOLD_PCT=${Number(state.settings.goldThreshold).toFixed(1)}\n` +
@@ -2161,16 +2565,28 @@ function renderSettingsControls() {
 /* ---------- Outlook, Historical Patterns & What-If Simulator ---------- */
 
 const OUTLOOK_SCENARIOS = [
-  { id: 'hot_cpi', label: 'Hot CPI Inflation', driver: 'inflation', goldDelta: 0.65, silverDelta: 0.72 },
+  { id: 'hot_cpi', label: 'High Inflation', driver: 'inflation', goldDelta: 0.65, silverDelta: 0.72 },
   { id: 'war_escalation', label: 'War Escalation', driver: 'geopolitics', goldDelta: 0.85, silverDelta: 0.50 },
-  { id: 'fed_rate_cut', label: 'Fed Rate Cut / Weak USD', driver: 'rates_usd', goldDelta: 0.75, silverDelta: 0.80 },
-  { id: 'hawkish_usd', label: 'Hawkish Fed / USD Surge', driver: 'rates_usd', goldDelta: -0.75, silverDelta: -0.82 },
-  { id: 'stock_crash', label: 'Stock Market −5% Shock', driver: 'equities', goldDelta: 0.45, silverDelta: -0.25 },
-  { id: 'mine_strike', label: 'Silver Mine Strike', driver: 'mining_supply', goldDelta: 0.25, silverDelta: 0.90 },
-  { id: 'cb_buying', label: 'Central Bank Buying', driver: 'central_banks', goldDelta: 0.70, silverDelta: 0.35 },
-  { id: 'shanghai_premium', label: 'Shanghai Premium Surge (+$40)', driver: 'shanghai_sge', goldDelta: 0.75, silverDelta: 0.80 },
-  { id: 'comex_squeeze', label: 'COMEX Delivery Squeeze (OI Spike)', driver: 'comex_paper', goldDelta: 0.65, silverDelta: 0.88 },
+  { id: 'fed_rate_cut', label: 'Fed Cuts Rates', driver: 'rates_usd', goldDelta: 0.75, silverDelta: 0.80 },
+  { id: 'hawkish_usd', label: 'Fed Raises Rates / Strong Dollar', driver: 'rates_usd', goldDelta: -0.75, silverDelta: -0.82 },
+  { id: 'stock_crash', label: 'Stock Market Drop (−5%)', driver: 'equities', goldDelta: 0.45, silverDelta: -0.25 },
+  { id: 'mine_strike', label: 'Silver Mine Shortage', driver: 'mining_supply', goldDelta: 0.25, silverDelta: 0.90 },
+  { id: 'cb_buying', label: 'Central Banks Buying Gold', driver: 'central_banks', goldDelta: 0.70, silverDelta: 0.35 },
+  { id: 'shanghai_premium', label: 'High China Demand (+$40)', driver: 'shanghai_sge', goldDelta: 0.75, silverDelta: 0.80 },
+  { id: 'comex_squeeze', label: 'Vault Supply Squeeze', driver: 'comex_paper', goldDelta: 0.65, silverDelta: 0.88 },
 ];
+
+const DRIVER_FRIENDLY_LABELS = {
+  inflation: 'Inflation & Cost of Living',
+  geopolitics: 'World Conflicts & Risk',
+  rates_usd: 'Interest Rates & US Dollar',
+  equities: 'Stock Market Mood',
+  mining_supply: 'Mine Supply & Industry',
+  central_banks: 'Central Banks & Funds',
+  shanghai_sge: 'China Physical Demand',
+  positioning_miners: 'Big Traders & Mining Stocks',
+  comex_paper: 'Paper Contracts vs. Vaults',
+};
 
 const DRIVER_WEIGHTS = {
   inflation: { gold: 0.16, silver: 0.13 },
@@ -2518,10 +2934,13 @@ async function fetchComexData() {
 
   comexState.data = base;
   comexState.fetching = false;
+  state.feedHealth.comexAt = liveCftc ? Date.now() : Date.parse(base?.updatedAt || 0) || Date.now();
+  state.feedHealth.comexLive = Boolean(liveCftc || base?.oiLive);
   if (btnEl) btnEl.textContent = 'Fetch Fresh';
   if (subEl && liveCftc) {
     subEl.textContent = `Live CFTC OI synced · ${formatTime(new Date())}`;
   }
+  renderFeedHealth();
   renderOutlook();
   renderChart();
 }
@@ -2533,9 +2952,7 @@ function renderComexPanel() {
   const subEl = document.getElementById('comex-subtitle');
   if (subEl && !comexState.fetching) {
     const dt = comex.gold.date || (comex.updatedAt ? new Date(comex.updatedAt).toLocaleDateString() : 'Latest');
-    const oiBadge = comex.oiLive ? 'Live OI' : comex.liveFetched ? 'Live CFTC' : 'Cached OI';
-    const vaultBadge = comex.vaultLive ? 'Live Vaults' : 'Snapshot Vaults';
-    subEl.textContent = `${oiBadge} · ${vaultBadge} (${dt})`;
+    subEl.textContent = `Paper promises per 1 oz in US exchange vaults · Updated ${dt}`;
   }
 
   for (const metal of ['gold', 'silver']) {
@@ -2551,18 +2968,19 @@ function renderComexPanel() {
       const chg = m.oiChangeContracts
         ? ` (${m.oiChangeContracts >= 0 ? '+' : ''}${m.oiChangeContracts.toLocaleString('en-US')})`
         : '';
-      oiEl.textContent = `${m.openInterestContracts.toLocaleString('en-US')} ${m.contractCode}${chg}`;
+      oiEl.textContent = `${m.openInterestContracts.toLocaleString('en-US')} open contracts${chg}`;
     }
     if (ozEl) {
-      ozEl.textContent = `${m.paperMoz.toFixed(1)}M paper · ${m.registeredMoz.toFixed(1)}M reg oz`;
+      ozEl.textContent = `${m.paperMoz.toFixed(1)}M paper oz · ${m.registeredMoz.toFixed(1)}M vault oz`;
     }
     if (barEl) {
       const cap = metal === 'silver' ? 8.5 : 5.0;
       barEl.style.width = `${clampNum((m.paperToRegisteredRatio / cap) * 100, 12, 100)}%`;
     }
     if (regEl) {
-      const dr = m.registered30dPct != null ? ` · Reg ${m.registered30dPct >= 0 ? '+' : ''}${m.registered30dPct}% 30d` : '';
-      regEl.textContent = `${m.regime}${dr}`;
+      const dr = m.registered30dPct != null ? ` · Vaults ${m.registered30dPct >= 0 ? '+' : ''}${m.registered30dPct}% (30d)` : '';
+      const friendlyStatus = m.regime?.includes('Squeeze') ? 'Tight Vault Supply' : m.regime?.includes('Elevated') ? 'High Paper Claims' : m.regime?.includes('Ample') ? 'Plentiful Vault Supply' : 'Normal Vault Level';
+      regEl.textContent = `${friendlyStatus}${dr}`;
     }
   }
 }
@@ -2573,16 +2991,25 @@ async function fetchOutlookData() {
     if (!comexState.data && outlookState.data?.comex) {
       comexState.data = outlookState.data.comex;
     }
+    const genTs = Date.parse(outlookState.data?.generatedAt || 0) || Date.now();
+    state.feedHealth.outlookAt = genTs;
+    if (!state.feedHealth.futuresAt) state.feedHealth.futuresAt = genTs;
+    if (!state.feedHealth.comexAt && outlookState.data?.comex) {
+      state.feedHealth.comexAt = Date.parse(outlookState.data.comex.updatedAt || 0) || genTs;
+      state.feedHealth.comexLive = Boolean(outlookState.data.comex.oiLive);
+    }
   } catch {
     outlookState.data = FALLBACK_OUTLOOK;
   }
   renderMacroStrip();
+  renderFeedHealth();
   renderMetalCard('gold');
   renderMetalCard('silver');
   renderFuturesPanel();
   renderOutlook();
   renderStackTracker();
   renderChart();
+  evaluateClientRegimeAlerts();
 }
 
 function clampNum(v, lo, hi) {
@@ -2590,11 +3017,11 @@ function clampNum(v, lo, hi) {
 }
 
 function signalFromScore(score) {
-  if (score >= 45) return { label: 'Strong Bullish', cls: 'bullish' };
-  if (score >= 16) return { label: 'Bullish', cls: 'bullish' };
-  if (score <= -45) return { label: 'Strong Bearish', cls: 'bearish' };
-  if (score <= -16) return { label: 'Bearish', cls: 'bearish' };
-  return { label: 'Neutral', cls: '' };
+  if (score >= 45) return { label: 'Strong Up', cls: 'bullish' };
+  if (score >= 16) return { label: 'Leaning Up', cls: 'bullish' };
+  if (score <= -45) return { label: 'Strong Down', cls: 'bearish' };
+  if (score <= -16) return { label: 'Leaning Down', cls: 'bearish' };
+  return { label: 'Balanced', cls: '' };
 }
 
 function classifyRegimeClientLabel(discoveryScore, squeezeScore) {
@@ -2841,14 +3268,14 @@ function computeClientDollarStrength(base, spotGold, spotSilver, gDailyVol, sDai
 
   const regime =
     score >= 72
-      ? 'Strong USD Headwind'
+      ? 'Strong Dollar (Hurts Metals)'
       : score >= 58
-        ? 'Firm USD'
+        ? 'Firm Dollar'
         : score <= 28
-          ? 'Weak USD Tailwind'
+          ? 'Weak Dollar (Helps Metals)'
           : score <= 42
-            ? 'Soft USD'
-            : 'Balanced USD';
+            ? 'Soft Dollar'
+            : 'Normal Dollar';
 
   const goldVsDxyCorr = ds.goldVsDxyCorr ?? snap.goldVsDxyCorr ?? -0.45;
   const silverVsDxyCorr = ds.silverVsDxyCorr ?? snap.silverVsDxyCorr ?? -0.40;
@@ -2883,6 +3310,134 @@ function computeClientDollarStrength(base, spotGold, spotSilver, gDailyVol, sDai
     liveDeltaPct: +liveDeltaPct.toFixed(2),
     impact7d: calcImpact(5),
     impact30d: calcImpact(21),
+  };
+}
+
+const CLIENT_RATIO_5Y_ANCHOR = [
+  66.2, 68.5, 67.1, 69.8, 70.4, 72.1, 74.5, 76.2, 78.4, 79.1, 77.6, 80.2,
+  82.5, 84.1, 86.3, 88.9, 91.2, 93.4, 89.7, 85.4, 83.2, 81.8, 79.5, 78.1,
+  80.6, 82.9, 84.8, 86.1, 88.2, 90.5, 87.6, 85.0, 83.7, 82.1, 84.3, 86.7,
+  88.4, 87.2, 84.9, 81.5, 79.2, 77.8, 80.1, 82.4, 85.6, 89.1, 91.8, 94.2,
+  90.4, 87.1, 84.2, 81.0, 76.5, 72.8, 68.4, 61.5, 52.0, 64.5, 75.8, 84.5,
+];
+
+function computeClientRatioAnalytics(liveRatio, base) {
+  const current = Number.isFinite(liveRatio) && liveRatio > 0 ? liveRatio : (base?.goldSilverRatio || 82);
+  const sample = CLIENT_RATIO_5Y_ANCHOR;
+  const mean = base?.ratioAnalytics?.mean5y ?? (sample.reduce((a, b) => a + b, 0) / sample.length);
+  const variance = sample.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (sample.length - 1);
+  const std = base?.ratioAnalytics?.std5y ?? Math.max(2.5, Math.sqrt(variance));
+  const zScore = (current - mean) / std;
+  const below = sample.filter((v) => v <= current).length;
+  const percentile5y = Math.round(clampNum((below / sample.length) * 100, 1, 99));
+
+  let regime = 'Fairly Priced';
+  let swapBias = 'Fairly Priced';
+  let tone = 'neutral';
+  if (zScore >= 1.15 || current >= 90) {
+    regime = 'Silver Looks Very Cheap vs. Gold';
+    swapBias = 'Silver Cheaper (Gold → Silver)';
+    tone = 'bullish';
+  } else if (zScore >= 0.45 || current >= 85) {
+    regime = 'Silver Looks Cheap vs. Gold';
+    swapBias = 'Silver Cheaper (Gold → Silver)';
+    tone = 'bullish';
+  } else if (zScore <= -1.15 || current <= 66) {
+    regime = 'Gold Looks Very Cheap vs. Silver';
+    swapBias = 'Gold Cheaper (Silver → Gold)';
+    tone = 'gold';
+  } else if (zScore <= -0.45 || current <= 73) {
+    regime = 'Gold Looks Cheap vs. Silver';
+    swapBias = 'Gold Cheaper (Silver → Gold)';
+    tone = 'gold';
+  }
+
+  return {
+    current: +current.toFixed(2),
+    mean5y: +Number(mean).toFixed(1),
+    std5y: +Number(std).toFixed(1),
+    zScore: +zScore.toFixed(2),
+    percentile5y,
+    regime,
+    swapBias,
+    tone,
+  };
+}
+
+function computeClientSetupQuality({ metal, spot, regime, rsi14, dailyVol, dollarStrength, basis, unitScore }) {
+  const isSilver = metal === 'silver';
+  const discScore = Number.isFinite(regime?.discoveryScore) ? regime.discoveryScore : 45;
+  const sqzScore = Number.isFinite(regime?.squeezeScore) ? regime.squeezeScore : 30;
+  const isBackw = Boolean(regime?.isBackwardation || basis?.isBackwardation || (basis?.basisUsd ?? 1) < 0);
+  const dxyScore = Number.isFinite(dollarStrength?.score) ? dollarStrength.score : 50;
+  const hasRsi = Number.isFinite(rsi14);
+
+  // Anchor support/resistance to 1M/6M candle Fibonacci Golden Pocket when available
+  let support = spot * (1 - clampNum(dailyVol * 2.3, 0.018, 0.085));
+  let resistance = spot * (1 + clampNum(dailyVol * 2.5, 0.02, 0.095));
+  const bars = state.timeframes?.['1m']?.[metal] || state.timeframes?.['6m']?.[metal] || state.candles?.[metal];
+  const fib = Array.isArray(bars) && bars.length >= 6 ? computeFibonacciLevels(bars) : null;
+  if (fib && fib.swingHigh > fib.swingLow) {
+    const lv50 = fib.levels.find((l) => l.ratio === 0.5)?.price;
+    const lv618 = fib.levels.find((l) => l.ratio === 0.618)?.price;
+    const lv382 = fib.levels.find((l) => l.ratio === 0.382)?.price;
+    const belowC = [fib.swingLow, lv618, lv50, lv382].filter((v) => Number.isFinite(v) && v < spot * 0.996);
+    const aboveC = [fib.swingHigh, lv382, lv50, lv618].filter((v) => Number.isFinite(v) && v > spot * 1.004);
+    if (belowC.length) support = Math.max(...belowC);
+    if (aboveC.length) resistance = Math.min(...aboveC);
+  }
+
+  let label = 'Sideways — No Rush';
+  let score = 52;
+  let tone = 'neutral';
+  let summary = 'Forces are mixed right now — no need to chase; wait for dips near the floor price or a clear breakout.';
+  const exhaustionRisk = sqzScore >= 65 && discScore < 45 && hasRsi && rsi14 >= 78;
+
+  if (exhaustionRisk) {
+    label = 'Overheated — Drop Risk';
+    score = Math.round(clampNum(34 - (rsi14 - 78) * 1.1, 18, 36));
+    tone = 'bearish';
+    summary = `Prices jumped fast from short-sellers covering without strong real-world demand behind it — high risk of a sudden drop.`;
+  } else if (sqzScore >= 60 && ((hasRsi && rsi14 >= 66) || discScore < 48)) {
+    label = 'Squeeze Active — Wait for Dips';
+    score = Math.round(clampNum(58 + (isBackw ? 8 : 0) + (discScore - 40) * 0.2, 48, 74));
+    tone = 'hybrid';
+    summary = `${isBackw ? 'Tight physical supply and heavy' : 'Heavy'} short-squeeze pressure can cause sharp jumps, but avoid chasing big spikes — look for pullbacks toward the floor price.`;
+  } else if ((hasRsi && rsi14 <= 36) || (discScore >= 52 && unitScore >= 0.10 && (!hasRsi || rsi14 <= 56))) {
+    label = 'Good Dip-Buy Zone';
+    const rsiBonus = hasRsi && rsi14 <= 36 ? clampNum((38 - rsi14) * 0.85, 0, 18) : 0;
+    score = Math.round(clampNum(70 + rsiBonus + (discScore - 50) * 0.35 + (isBackw ? 6 : 0), 66, 94));
+    tone = 'bullish';
+    summary =
+      hasRsi && rsi14 <= 36
+        ? `Prices have pulled back enough that buyers often step in here${isBackw ? ', backed by tight physical supply' : ''}. Good area to slowly add near the floor price.`
+        : `Steady real-world buying supports adding gradually without chasing overheated prices.`;
+  } else if (discScore >= 58 && unitScore >= 0.14) {
+    label = 'Healthy Uptrend';
+    score = Math.round(clampNum(72 + (discScore - 58) * 0.45 + (isBackw ? 5 : 0), 70, 92));
+    tone = 'bullish';
+    summary = `Real physical and economic demand is driving a steady climb — favors holding what you own and buying small dips.`;
+  } else if ((unitScore <= -0.20 && dxyScore >= 60) || (discScore < 40 && unitScore <= -0.18)) {
+    label = 'Dollar Headwind — Be Patient';
+    score = Math.round(clampNum(32 - Math.max(0, dxyScore - 60) * 0.4 + unitScore * 18, 16, 42));
+    tone = 'bearish';
+    summary = `A strong US Dollar and softer demand are weighing on prices right now — be patient and wait for prices to settle near the floor.`;
+  } else if (isBackw && unitScore >= -0.05) {
+    label = 'Tight Supply — Watch Breakout';
+    score = Math.round(clampNum(64 + (sqzScore - 40) * 0.25, 58, 78));
+    tone = 'bullish';
+    summary = `Futures cost less than today's spot price, signaling tight ${isSilver ? 'silver' : 'gold'} supply — prices could push higher.`;
+  }
+
+  return {
+    metal,
+    label,
+    score,
+    tone,
+    summary,
+    support,
+    resistance,
+    rsi14: hasRsi ? +rsi14.toFixed(1) : null,
   };
 }
 
@@ -3048,28 +3603,84 @@ function computeInteractiveOutlook() {
   const liveGLabel = signalFromScore(gScore).label.toLowerCase();
   const liveSLabel = signalFromScore(sScore).label.toLowerCase();
   const liveRatio = spotSilver > 0 ? spotGold / spotSilver : (base.goldSilverRatio || 85);
+  const ratioAnalytics = computeClientRatioAnalytics(liveRatio, base);
   const gFx7d = dollarStrength?.impact7d?.goldUsdOz ?? 0;
-  let syncedBaseNarrative = (base.narrative || '')
-    .replace(
-      /Anonymous model signals a [a-z ]+ tilt for Gold and [a-z ]+ tilt for Silver/i,
-      `Anonymous model signals a ${liveGLabel} tilt for Gold and ${liveSLabel} tilt for Silver`
-    )
-    .replace(
-      /Regime decomposition: Gold [^.]+?\(\d+D\/\d+S\) and Silver [^.]+?\(\d+D\/\d+S\)\./i,
-      `Regime decomposition: Gold ${marketRegime.gold.label} (${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver ${marketRegime.silver.label} (${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S).`
-    )
-    .replace(
-      /US Dollar Index \(DXY [\d.]+, strength \d+\/100 · [^)]+\) implies [+\-−]?\$[\d.]+\/oz 7d FX cost impact on Gold\./i,
-      `US Dollar Index (DXY ${dollarStrength.dxy.toFixed(2)}, strength ${dollarStrength.score}/100 · ${dollarStrength.regime}) implies ${gFx7d >= 0 ? '+' : '−'}$${Math.abs(gFx7d).toFixed(2)}/oz 7d FX cost impact on Gold.`
-    )
-    .replace(
-      /Gold\/Silver ratio \([\d.]+:1\)/i,
-      `Gold/Silver ratio (${liveRatio.toFixed(1)}:1)`
+
+  const topTwoDrivers = [...drivers]
+    .filter((d) => Math.abs(d.gold) >= 0.1 || Math.abs(d.silver) >= 0.1)
+    .sort((a, b) => Math.abs(b.gold) + Math.abs(b.silver) - (Math.abs(a.gold) + Math.abs(a.silver)))
+    .slice(0, 2)
+    .map((d) => DRIVER_FRIENDLY_LABELS[d.id] || d.label);
+
+  const plainParts = [];
+  const headlineCt = (base.headlines || []).length;
+  plainParts.push(
+    `Right now, Gold looks ${liveGLabel} and Silver looks ${liveSLabel}${headlineCt ? ` across ${headlineCt} recent news stories` : ''}.`
+  );
+  if (topTwoDrivers.length) {
+    plainParts.push(`Biggest factors today: ${topTwoDrivers.join(' and ')}.`);
+  }
+  plainParts.push(
+    `Gold is in a "${friendlyRegimeLabel(marketRegime.gold.label)}" phase and Silver is in "${friendlyRegimeLabel(marketRegime.silver.label)}".`
+  );
+  if (dollarStrength?.dxy != null) {
+    const dirWord = gFx7d > 0.5 ? 'helping lift Gold by about' : gFx7d < -0.5 ? 'putting downward pressure on Gold of about' : 'having almost no effect on Gold';
+    const amtStr = Math.abs(gFx7d) > 0.5 ? ` ${gFx7d >= 0 ? '+' : '−'}$${Math.abs(gFx7d).toFixed(2)}/oz over the next week` : '';
+    const dxyAdj =
+      dollarStrength.score >= 72
+        ? 'strong'
+        : dollarStrength.score >= 58
+          ? 'firm'
+          : dollarStrength.score <= 28
+            ? 'weak'
+            : dollarStrength.score <= 42
+              ? 'soft'
+              : 'steady';
+    plainParts.push(
+      `The US Dollar is ${dxyAdj} (strength ${dollarStrength.score}/100), ${dirWord}${amtStr}.`
     );
+  }
+  if (futures.gold?.isBackwardation || futures.silver?.isBackwardation) {
+    const which = futures.gold?.isBackwardation && futures.silver?.isBackwardation ? 'Gold and Silver' : futures.silver?.isBackwardation ? 'Silver' : 'Gold';
+    plainParts.push(
+      `${which} futures are cheaper than today's spot price (backwardation), signaling tight physical supply that tends to push prices up.`
+    );
+  }
+  if (ratioAnalytics.tone !== 'neutral') {
+    plainParts.push(
+      `At ${liveRatio.toFixed(1)} oz of silver per oz of gold, ${ratioAnalytics.regime.toLowerCase()} (higher than ${ratioAnalytics.percentile5y}% of the past 5 years).`
+    );
+  }
+  const syncedBaseNarrative = plainParts.join(' ');
 
   const narrative = activeNames.length
-    ? `Simulated shock active (${activeNames.join(' + ')}): historical cross-market weights shift Gold to ${liveGLabel} (${gScore >= 0 ? '+' : ''}${gScore}, ${marketRegime.gold.label} ${marketRegime.gold.discoveryScore}D/${marketRegime.gold.squeezeScore}S) and Silver to ${liveSLabel} (${sScore >= 0 ? '+' : ''}${sScore}, ${marketRegime.silver.label} ${marketRegime.silver.discoveryScore}D/${marketRegime.silver.squeezeScore}S) over the ${outlookState.horizon} window.`
+    ? `What-If Test active (${activeNames.join(' + ')}): Based on past market reactions, this shifts Gold to "${signalFromScore(gScore).label}" and Silver to "${signalFromScore(sScore).label}" over the next ${outlookState.horizon === '30d' ? '30 days' : '7 days'}.`
     : syncedBaseNarrative;
+
+  const gRsi14 = base?.macroSnapshot?.goldRsi14 ?? null;
+  const sRsi14 = base?.macroSnapshot?.silverRsi14 ?? null;
+  const setupQuality = {
+    gold: computeClientSetupQuality({
+      metal: 'gold',
+      spot: spotGold,
+      regime: marketRegime.gold,
+      rsi14: gRsi14,
+      dailyVol: gDailyVol,
+      dollarStrength,
+      basis: futures.gold,
+      unitScore: gUnit,
+    }),
+    silver: computeClientSetupQuality({
+      metal: 'silver',
+      spot: spotSilver,
+      regime: marketRegime.silver,
+      rsi14: sRsi14,
+      dailyVol: sDailyVol,
+      dollarStrength,
+      basis: futures.silver,
+      unitScore: sUnit,
+    }),
+  };
 
   return {
     base,
@@ -3080,9 +3691,12 @@ function computeInteractiveOutlook() {
     futures,
     dollarStrength,
     marketRegime,
+    ratioAnalytics,
+    setupQuality,
     gold: {
       spot: spotGold,
       dailyVol: gDailyVol,
+      rsi14: gRsi14,
       unit: gUnit,
       score: gScore,
       signal: signalFromScore(gScore),
@@ -3092,6 +3706,7 @@ function computeInteractiveOutlook() {
     silver: {
       spot: spotSilver,
       dailyVol: sDailyVol,
+      rsi14: sRsi14,
       unit: sUnit,
       score: sScore,
       signal: signalFromScore(sScore),
@@ -3125,18 +3740,21 @@ function renderFuturesPanel(outlookRes = null) {
     if (basisEl) {
       const sign = dispBasis > 0 ? '+' : dispBasis < 0 ? '−' : '';
       const pctSign = data.basisPct > 0 ? '+' : data.basisPct < 0 ? '−' : '';
-      basisEl.textContent = `Basis ${sign}$${Math.abs(dispBasis).toFixed(2)}/${uLbl} (${pctSign}${Math.abs(data.basisPct).toFixed(2)}%)`;
+      basisEl.textContent = `Diff vs Spot: ${sign}$${Math.abs(dispBasis).toFixed(2)}/${uLbl} (${pctSign}${Math.abs(data.basisPct).toFixed(2)}%)`;
       basisEl.className = `futures-basis ${data.isBackwardation ? 'up' : data.basisPct > 1.15 ? 'down' : ''}`;
     }
     if (curveEl) {
       if (data.isBackwardation) {
-        curveEl.textContent = 'BACKWARDATION ↑';
+        curveEl.textContent = 'Shortage (Backwardation) ↑';
         curveEl.className = 'futures-curve-pill backw';
       } else if (data.state === 'Compressed EFP') {
-        curveEl.textContent = 'Compressed EFP';
+        curveEl.textContent = 'Tight Supply';
         curveEl.className = 'futures-curve-pill tight';
+      } else if (data.basisPct > 1.15) {
+        curveEl.textContent = 'Plentiful Supply';
+        curveEl.className = 'futures-curve-pill';
       } else {
-        curveEl.textContent = data.state;
+        curveEl.textContent = 'Normal';
         curveEl.className = 'futures-curve-pill';
       }
     }
@@ -3144,12 +3762,12 @@ function renderFuturesPanel(outlookRes = null) {
     if (boostEl) {
       if (data.isBackwardation) {
         const liftPts = Math.round((data.priceDiscoveryBoost || 0) * 100);
-        boostEl.textContent = `Downward-sloping curve (Fut < Spot) · +${liftPts} pts upward price-discovery lift active`;
+        boostEl.textContent = `Futures cost less than today's price — tight physical supply lifts forecasts (+${liftPts} pts)`;
       } else if (data.state === 'Compressed EFP') {
         const liftPts = Math.round((data.priceDiscoveryBoost || 0) * 100);
-        boostEl.textContent = `Tight EFP spread near parity · +${liftPts} pts mild discovery support`;
+        boostEl.textContent = `Futures nearly match today's spot — physical supply is tightening (+${liftPts} pts)`;
       } else {
-        boostEl.textContent = `${data.curveSlope || 'Upward-sloping contango curve'} · Spot ${formatMoney(convertUnit(data.spot))}`;
+        boostEl.textContent = `Normal pricing (futures cost slightly more than today's spot of ${formatMoney(convertUnit(data.spot))})`;
       }
     }
   };
@@ -3161,10 +3779,16 @@ function renderFuturesPanel(outlookRes = null) {
   const badgeEl = document.getElementById('futures-status-badge');
   const anyBackw = !!(fut.gold?.isBackwardation || fut.silver?.isBackwardation);
   if (subEl) {
-    subEl.textContent = `${fut.source} · ${anyBackw ? 'Backwardation active → lifting predictions' : 'Spot vs. COMEX curve synced into predictions'}`;
+    subEl.textContent = anyBackw
+      ? 'Supply shortage active (futures below spot) — lifting price forecasts'
+      : 'Futures vs. today\'s price — included automatically in forecasts';
   }
   if (badgeEl) {
-    badgeEl.textContent = anyBackw ? 'Backwardation ↑' : fut.gold?.state === 'Compressed EFP' || fut.silver?.state === 'Compressed EFP' ? 'Tight EFP' : 'Contango';
+    badgeEl.textContent = anyBackw
+      ? 'Supply Shortage ↑'
+      : fut.gold?.state === 'Compressed EFP' || fut.silver?.state === 'Compressed EFP'
+        ? 'Tight Supply'
+        : 'Normal Market';
     badgeEl.className = `signal-pill ${anyBackw ? 'bullish' : ''}`;
   }
 }
@@ -3190,7 +3814,7 @@ function renderDollarStrength(res) {
   if (idxEl) idxEl.textContent = ds.dxy != null ? ds.dxy.toFixed(2) : '—';
   if (movesEl) {
     const f = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`;
-    movesEl.textContent = `5d ${f(ds.dxy5dPct)} · 20d ${f(ds.dxy20dPct)} · vs 20d SMA ${f(ds.dxyVsSma20Pct)}`;
+    movesEl.textContent = `Past 5d ${f(ds.dxy5dPct)} · Past 20d ${f(ds.dxy20dPct)} · vs 20-day avg ${f(ds.dxyVsSma20Pct)}`;
   }
   if (scoreEl) scoreEl.textContent = `${ds.score} / 100`;
   if (badgeEl) {
@@ -3198,7 +3822,7 @@ function renderDollarStrength(res) {
     badgeEl.className = `signal-pill ${ds.score <= 42 ? 'bullish' : ds.score >= 58 ? 'bearish' : ''}`;
   }
   if (subEl) {
-    subEl.textContent = `${ds.source} · Inverse USD strength driver in ${hLbl} bullion forecasts`;
+    subEl.textContent = `Stronger US Dollar usually pushes Gold & Silver down; weaker Dollar lifts them (${hLbl} effect)`;
   }
   if (fillEl) {
     fillEl.style.left = `${clampNum(ds.score, 2, 98)}%`;
@@ -3218,23 +3842,233 @@ function renderDollarStrength(res) {
     return `${sign}$${Math.abs(val).toFixed(isG ? 3 : 2)}/${uLbl} (${pSign}${Math.abs(pct).toFixed(2)}%)`;
   };
 
-  if (gLblEl) gLblEl.textContent = `Gold ${hLbl} FX Cost Impact`;
+  if (gLblEl) gLblEl.textContent = `Gold ${hLbl} Dollar Effect`;
   if (gValEl && imp) {
     gValEl.textContent = fmtFx(imp.goldUsdOz, imp.goldPct);
     gValEl.className = `dxy-impact-v ${imp.goldUsdOz > 0.005 ? 'up' : imp.goldUsdOz < -0.005 ? 'down' : ''}`;
   }
   if (gCorrEl) {
-    gCorrEl.textContent = `60d Au/DXY Corr ${ds.goldVsDxyCorr != null ? Number(ds.goldVsDxyCorr).toFixed(2) : '—'}`;
+    const cG = ds.goldVsDxyCorr;
+    gCorrEl.textContent = cG != null && cG < -0.25 ? 'Moves strongly opposite the Dollar' : 'Moves partly opposite the Dollar';
   }
 
-  if (sLblEl) sLblEl.textContent = `Silver ${hLbl} FX Cost Impact`;
+  if (sLblEl) sLblEl.textContent = `Silver ${hLbl} Dollar Effect`;
   if (sValEl && imp) {
     sValEl.textContent = fmtFx(imp.silverUsdOz, imp.silverPct);
     sValEl.className = `dxy-impact-v ${imp.silverUsdOz > 0.001 ? 'up' : imp.silverUsdOz < -0.001 ? 'down' : ''}`;
   }
   if (sCorrEl) {
-    sCorrEl.textContent = `60d Ag/DXY Corr ${ds.silverVsDxyCorr != null ? Number(ds.silverVsDxyCorr).toFixed(2) : '—'}`;
+    const cS = ds.silverVsDxyCorr;
+    sCorrEl.textContent = cS != null && cS < -0.25 ? 'Moves strongly opposite the Dollar' : 'Moves partly opposite the Dollar';
   }
+}
+
+function renderSetupQuality(res) {
+  if (!document.getElementById('panel-setup-quality') || !res?.setupQuality) return;
+  const isG = state.settings.unit === 'g';
+  const uLbl = isG ? 'g' : 'oz';
+  for (const metal of ['gold', 'silver']) {
+    const sq = res.setupQuality[metal];
+    if (!sq) continue;
+    const card = document.getElementById(`sq-card-${metal}`);
+    const scoreEl = document.getElementById(`setup-${metal}-score`);
+    const labelEl = document.getElementById(`setup-${metal}-label`);
+    const sumEl = document.getElementById(`setup-${metal}-summary`);
+    const lvlEl = document.getElementById(`setup-${metal}-levels`);
+    if (card) card.className = `sq-card ${sq.tone}`;
+    if (scoreEl) {
+      scoreEl.textContent = `${sq.score} / 100`;
+      scoreEl.className = `signal-pill ${sq.tone === 'bullish' ? 'bullish' : sq.tone === 'bearish' ? 'bearish' : ''}`;
+    }
+    if (labelEl) {
+      labelEl.textContent = sq.label;
+      labelEl.className = `sq-verdict ${sq.tone}`;
+    }
+    if (sumEl) sumEl.textContent = sq.summary;
+    if (lvlEl) {
+      const dec = metal === 'gold' && !isG ? 0 : 2;
+      const rsiPart = sq.rsi14 != null ? ` · Momentum ${Math.round(sq.rsi14)}` : '';
+      lvlEl.textContent = `Floor ${formatMoney(convertUnit(sq.support), dec)}/${uLbl} · Ceiling ${formatMoney(convertUnit(sq.resistance), dec)}/${uLbl}${rsiPart}`;
+    }
+  }
+}
+
+function renderRatioAnalytics(res) {
+  if (!document.getElementById('panel-ratio-analytics') || !res?.ratioAnalytics) return;
+  const ra = res.ratioAnalytics;
+  const liveEl = document.getElementById('ratio-live-val');
+  const zEl = document.getElementById('ratio-zscore-val');
+  const pctEl = document.getElementById('ratio-pct-val');
+  const swapEl = document.getElementById('ratio-swap-val');
+  const markerEl = document.getElementById('ratio-pct-marker');
+  const meanEl = document.getElementById('ratio-mean-label');
+  const subEl = document.getElementById('ratio-panel-subtitle');
+
+  if (liveEl) liveEl.textContent = `${ra.current.toFixed(1)} : 1`;
+  if (zEl) {
+    const diffPts = +(ra.current - ra.mean5y).toFixed(1);
+    zEl.textContent = Math.abs(diffPts) < 1.5 ? 'Near Avg' : `${diffPts > 0 ? '+' : '−'}${Math.abs(diffPts).toFixed(1)} vs Avg`;
+    zEl.className = `ratio-v ${ra.tone === 'bullish' ? 'up' : ra.tone === 'gold' ? 'gold' : ''}`;
+  }
+  if (pctEl) pctEl.textContent = `Top ${100 - ra.percentile5y}% (${formatOrdinal(ra.percentile5y)})`;
+  if (swapEl) {
+    swapEl.textContent = ra.swapBias;
+    swapEl.className = `ratio-v ${ra.tone === 'bullish' ? 'up' : ra.tone === 'gold' ? 'gold' : ''}`;
+  }
+  if (markerEl) markerEl.style.left = `${clampNum(ra.percentile5y, 2, 98)}%`;
+  if (meanEl) meanEl.textContent = `5-Yr Average ${ra.mean5y}:1`;
+  if (subEl) subEl.textContent = `${ra.regime} · Higher than ${ra.percentile5y}% of the past 5 years`;
+}
+
+function renderAccuracyReplayChart(res) {
+  const canvas = document.getElementById('accuracy-replay-chart');
+  if (!canvas) return;
+  const metal = state.accuracyChartMetal === 'silver' ? 'silver' : 'gold';
+  document.getElementById('acc-chart-gold')?.classList.toggle('active', metal === 'gold');
+  document.getElementById('acc-chart-silver')?.classList.toggle('active', metal === 'silver');
+
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const w = rect.width;
+  const h = rect.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const sl = res?.base?.selfLearning;
+  const rawHist = (sl?.recentHistory || []).slice(0, 12).reverse();
+  const coneMult = Number(sl?.coneMultiplier || res?.base?.coneMultiplier || 1.0);
+  const halfConeBase = (metal === 'silver' ? 2.05 : 1.05) * coneMult;
+
+  const points = rawHist.length >= 2
+    ? rawHist.map((row) => ({
+        label: row.date ? row.date.slice(5) : '—',
+        pred: Number(metal === 'silver' ? row.silverPredPct : row.goldPredPct) || 0,
+        actual: Number(metal === 'silver' ? row.silverActualPct : row.goldActualPct) || 0,
+        inCone: Boolean(metal === 'silver' ? row.inConeSilver : row.inConeGold),
+        half: halfConeBase,
+      }))
+    : [
+        { label: 'D-4', pred: -0.35, actual: -0.42, inCone: true, half: halfConeBase },
+        { label: 'D-3', pred: -0.40, actual: -0.55, inCone: true, half: halfConeBase },
+        { label: 'D-2', pred: -0.25, actual: 0.31, inCone: true, half: halfConeBase },
+        { label: 'D-1', pred: -0.55, actual: -0.82, inCone: true, half: halfConeBase },
+        { label: 'Now', pred: -0.45, actual: -0.58, inCone: true, half: halfConeBase },
+      ];
+
+  const styles = getComputedStyle(document.documentElement);
+  const upCol = styles.getPropertyValue('--up').trim() || '#22C55E';
+  const downCol = styles.getPropertyValue('--down').trim() || '#EF4444';
+  const baseCol = metal === 'gold'
+    ? styles.getPropertyValue('--gold').trim() || '#D4A843'
+    : styles.getPropertyValue('--silver').trim() || '#C2CAD6';
+  const mutedCol = styles.getPropertyValue('--text-subtle').trim() || '#777';
+  const gridCol = styles.getPropertyValue('--border').trim() || 'rgba(255,255,255,0.08)';
+
+  let minV = Math.min(0, ...points.flatMap((p) => [p.pred - p.half, p.actual]));
+  let maxV = Math.max(0, ...points.flatMap((p) => [p.pred + p.half, p.actual]));
+  const span = Math.max(1.0, maxV - minV);
+  minV -= span * 0.14;
+  maxV += span * 0.14;
+
+  const padL = 8;
+  const padR = 40;
+  const padT = 10;
+  const padB = 20;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+  const xAt = (i) => padL + (points.length > 1 ? (i / (points.length - 1)) * plotW : plotW / 2);
+  const yAt = (v) => padT + (1 - (v - minV) / (maxV - minV)) * plotH;
+
+  // Grid + 0% axis
+  ctx.font = '500 9.5px "JetBrains Mono", monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  [maxV, 0, minV].forEach((val, idx) => {
+    const y = yAt(val);
+    ctx.save();
+    ctx.strokeStyle = idx === 1 ? 'rgba(255,255,255,0.18)' : gridCol;
+    if (idx === 1) ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + plotW, y);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = mutedCol;
+    ctx.fillText(`${val >= 0 ? '+' : ''}${val.toFixed(1)}%`, w - 2, y);
+  });
+
+  // Shaded P10-P90 predicted cone
+  ctx.save();
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = xAt(i);
+    const y = yAt(p.pred + p.half);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  for (let i = points.length - 1; i >= 0; i--) {
+    ctx.lineTo(xAt(i), yAt(points[i].pred - points[i].half));
+  }
+  ctx.closePath();
+  ctx.fillStyle = metal === 'gold' ? 'rgba(212, 168, 67, 0.16)' : 'rgba(194, 202, 214, 0.16)';
+  ctx.fill();
+  ctx.restore();
+
+  // Predicted Base Line (dashed)
+  ctx.save();
+  ctx.strokeStyle = baseCol;
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([5, 3]);
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = xAt(i);
+    const y = yAt(p.pred);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.restore();
+
+  // Actual realized path & dots (green = inside cone, red = breach)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = xAt(i);
+    const y = yAt(p.actual);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.restore();
+
+  points.forEach((p, i) => {
+    const x = xAt(i);
+    const y = yAt(p.actual);
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = p.inCone ? upCol : downCol;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(13,14,17,0.85)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  });
+
+  // X-axis date labels
+  ctx.font = '500 9.5px "JetBrains Mono", monospace';
+  ctx.fillStyle = mutedCol;
+  ctx.textBaseline = 'bottom';
+  points.forEach((p, i) => {
+    if (points.length > 6 && i % 2 !== 0 && i !== points.length - 1) return;
+    ctx.textAlign = i === 0 ? 'left' : i === points.length - 1 ? 'right' : 'center';
+    ctx.fillText(p.label, xAt(i), h - 2);
+  });
 }
 
 function renderOutlook() {
@@ -3247,7 +4081,7 @@ function renderOutlook() {
   document.getElementById('horizon-30d')?.classList.toggle('active', outlookState.horizon === '30d');
 
   // Render Gold & Silver probabilistic cards (with Markets-synced Spot + Futures Curve header)
-  const hTargetTitle = outlookState.horizon === '30d' ? '30-Day Base Target' : '7-Day Base Target';
+  const hTargetTitle = outlookState.horizon === '30d' ? '30-Day Expected Price' : '7-Day Expected Price';
   for (const metal of ['gold', 'silver']) {
     const m = res[metal];
     const f = res.futures?.[metal];
@@ -3261,26 +4095,27 @@ function renderOutlook() {
     const bearEl = document.getElementById(`outlook-${metal}-bear`);
     const bullEl = document.getElementById(`outlook-${metal}-bull`);
 
-    if (spotEl) spotEl.textContent = `Live Spot ${formatMoney(convertUnit(m.spot))}`;
+    if (spotEl) spotEl.textContent = `Spot ${formatMoney(convertUnit(m.spot))}`;
     if (futEl && f) {
-      const code = metal === 'gold' ? 'GC=F' : 'SI=F';
-      const tag = f.isBackwardation ? ' BACKW ↑' : '';
-      futEl.textContent = `${code} ${formatMoney(convertUnit(f.futures))}${tag}`;
+      const tag = f.isBackwardation ? ' · Shortage ↑' : '';
+      futEl.textContent = `Futures ${formatMoney(convertUnit(f.futures))}${tag}`;
     }
     if (targetLblEl) targetLblEl.textContent = hTargetTitle;
 
     sigEl.textContent = m.signal.label;
     sigEl.className = `signal-pill ${m.signal.cls}`;
     baseEl.textContent = formatMoney(convertUnit(m.range.base));
-    driftEl.textContent = `${formatSignedPct(m.range.expectedPct)} · Score ${m.score >= 0 ? '+' : ''}${m.score}`;
+    driftEl.textContent = `${formatSignedPct(m.range.expectedPct)} · Signal ${m.score >= 0 ? '+' : ''}${m.score}`;
     driftEl.className = `forecast-drift ${m.range.expectedPct >= 0.05 ? 'up' : m.range.expectedPct <= -0.05 ? 'down' : ''}`;
     markerEl.style.left = `${m.range.markerPct}%`;
-    bearEl.textContent = `Bear ${formatMoney(convertUnit(m.range.bear), 0)}`;
-    bullEl.textContent = `Bull ${formatMoney(convertUnit(m.range.bull), 0)}`;
+    bearEl.textContent = `Low ${formatMoney(convertUnit(m.range.bear), 0)}`;
+    bullEl.textContent = `High ${formatMoney(convertUnit(m.range.bull), 0)}`;
   }
 
-  document.getElementById('outlook-confidence').textContent = `Confidence ${res.base.confidence || 62}%`;
+  document.getElementById('outlook-confidence').textContent = `Signal Agreement ${res.base.confidence || 62}%`;
   document.getElementById('outlook-narrative').textContent = res.narrative;
+  renderSetupQuality(res);
+  renderRatioAnalytics(res);
   renderDollarStrength(res);
 
   const outlookRegimePill = document.getElementById('outlook-regime-pill');
@@ -3295,7 +4130,7 @@ function renderOutlook() {
           : gR.key === 'discovery' || sR.key === 'discovery'
             ? 'discovery'
             : 'neutral';
-    outlookRegimePill.textContent = `Au ${gR.label} (${gR.discoveryScore}D/${gR.squeezeScore}S) · Ag ${sR.label} (${sR.discoveryScore}D/${sR.squeezeScore}S)`;
+    outlookRegimePill.textContent = `Gold: ${friendlyRegimeLabel(gR.label)} · Silver: ${friendlyRegimeLabel(sR.label)}`;
     outlookRegimePill.className = `regime-pill ${dominantKey}`;
   }
 
@@ -3321,10 +4156,10 @@ function renderOutlook() {
         return `
           <div class="driver-row">
             <div class="driver-row-head">
-              <span>${escapeHtml(d.label)}</span>
+              <span>${escapeHtml(DRIVER_FRIENDLY_LABELS[d.id] || d.label)}</span>
               <span class="driver-scores">
-                <span style="color:var(--gold-bright)">Au ${fmt(d.gold)}</span>
-                <span style="color:var(--silver)">Ag ${fmt(d.silver)}</span>
+                <span style="color:var(--gold-bright)">Gold ${fmt(d.gold)}</span>
+                <span style="color:var(--silver)">Silver ${fmt(d.silver)}</span>
               </span>
             </div>
             <div class="driver-bar-track">
@@ -3367,12 +4202,13 @@ function renderOutlook() {
     const ry = ps.realYields;
     if (ry?.realYield10yPct != null) {
       const bps = ry.realDelta5dBps ?? 0;
-      ryEl.textContent = `${ry.realYield10yPct.toFixed(2)}% (${bps >= 0 ? '+' : ''}${bps}bp)`;
+      const moveTxt = bps <= -4 ? 'Falling (helps prices)' : bps >= 4 ? 'Rising (pressures prices)' : 'Steady';
+      ryEl.textContent = `${ry.realYield10yPct.toFixed(2)}%`;
       ryEl.style.color = bps <= -4 ? 'var(--up)' : bps >= 4 ? 'var(--down)' : 'var(--text)';
-      rySub.textContent = `10Y Breakeven ${ry.breakeven10yPct != null ? ry.breakeven10yPct.toFixed(2) + '%' : '—'} · ${ry.regime || 'FRED TIPS'}`;
+      rySub.textContent = `${moveTxt} · 5d ${bps >= 0 ? '+' : ''}${bps} bps`;
     } else {
-      ryEl.textContent = '1.88% (−11bp)';
-      rySub.textContent = 'FRED DFII10 · Breakeven 2.34%';
+      ryEl.textContent = '1.88%';
+      rySub.textContent = 'Lower rates help Gold & Silver';
     }
   }
 
@@ -3382,11 +4218,11 @@ function renderOutlook() {
     const cg = ps.cot?.gold;
     const cs = ps.cot?.silver;
     if (cg || cs) {
-      cotEl.textContent = `Au ${cg?.percentile52w ?? '—'}% · Ag ${cs?.percentile52w ?? '—'}%`;
-      cotSub.textContent = cs?.regime || cg?.regime || '52w Managed Money pct';
+      cotEl.textContent = `Gold ${cg?.percentile52w ?? '—'}% · Silver ${cs?.percentile52w ?? '—'}%`;
+      cotSub.textContent = (cs?.percentile52w ?? 50) <= 30 ? 'Silver uncrowded (room to bounce)' : (cg?.percentile52w ?? 50) >= 80 ? 'Gold crowded with buyers' : 'Normal trader activity';
     } else {
-      cotEl.textContent = 'Au 62% · Ag 24%';
-      cotSub.textContent = 'Silver washed-out bounce setup';
+      cotEl.textContent = 'Gold 62% · Silver 24%';
+      cotSub.textContent = 'Silver uncrowded (room to bounce)';
     }
   }
 
@@ -3398,10 +4234,10 @@ function renderOutlook() {
       const gRel = mn.gdxVsGold10dPct;
       const sRel = mn.silVsSilver10dPct;
       minEl.textContent = `${gRel >= 0 ? '+' : ''}${gRel ?? '—'}% / ${sRel >= 0 ? '+' : ''}${sRel ?? '—'}%`;
-      minSub.textContent = mn.regime || '10d relative vs spot';
+      minSub.textContent = mn.regime?.includes('Leading') ? 'Miners beating spot (positive)' : mn.regime?.includes('Lag') ? 'Miners trailing spot (caution)' : 'Miners moving in line with spot';
     } else {
       minEl.textContent = '-1.8% / -2.4%';
-      minSub.textContent = 'Miners Lagging (Pressure)';
+      minSub.textContent = 'Miners trailing spot (caution)';
     }
   }
 
@@ -3418,59 +4254,55 @@ function renderOutlook() {
     const conePct =
       sl?.summary?.rollingInConePct ??
       (live7?.count >= 4 ? live7.inConePct : btGold?.inConePct ?? 78);
-    const mult = (sl?.coneMultiplier || res.base.coneMultiplier || 1).toFixed(2);
-    accEl.textContent = `${dirPct}% Dir`;
-    accSub.textContent = `${conePct}% in cone · ${mult}× width`;
+    accEl.textContent = `${dirPct}% Right`;
+    accSub.textContent = `${conePct}% landed inside forecast range`;
   }
 
-  // Walk-Forward & Daily 5:10 PM ET Self-Learning Panel
+  // Daily 5:10 PM ET Self-Check & Accuracy Panel
   const accList = document.getElementById('accuracy-breakdown');
   const accMeta = document.getElementById('accuracy-meta');
   const slBadge = document.getElementById('sl-status-badge');
   const slStrip = document.getElementById('sl-summary-strip');
 
   const activeConeMult = (sl?.coneMultiplier || res.base.coneMultiplier || acc.coneMultiplier || 1.0).toFixed(2);
-  const activeRegime = sl?.activeRegime === 'stress' ? 'Stress' : 'Calm';
-  const horizonsLbl = (sl?.summary?.horizonsActive || ['1D', '5D']).join('+');
+  const activeRegime = sl?.activeRegime === 'stress' ? 'Busy Market' : 'Calm Market';
   if (accMeta) {
-    const lastDay = sl?.lastLearnedDay ? `Calibrated ${sl.lastLearnedDay}` : 'First run after close';
-    accMeta.textContent = `5:10 PM ET · ${horizonsLbl} Huber · Holiday-safe · ${lastDay}`;
+    const lastDay = sl?.lastLearnedDay ? `Last checked ${sl.lastLearnedDay}` : 'First check after market close';
+    accMeta.textContent = `Grades itself every weekday at 5:10 PM ET · ${lastDay}`;
   }
   if (slBadge) {
     const cycles = sl?.totalCycles ?? 0;
-    slBadge.textContent = cycles > 0 ? `${activeRegime} · ${cycles}d` : 'Armed · 5:10 PM ET';
+    slBadge.textContent = cycles > 0 ? `${cycles} days checked` : 'Ready · 5:10 PM ET';
     slBadge.className = `signal-pill ${sl?.championChallenger?.rollbackActive ? 'bearish' : cycles > 0 ? 'bullish' : ''}`;
   }
   if (slStrip) {
     const boosted = sl?.summary?.topBoostedDriver
-      ? `${sl.summary.topBoostedDriver.label} (+${sl.summary.topBoostedDriver.avgDeltaPct}%)`
-      : 'COMEX Paper (+0.18%)';
+      ? `${DRIVER_FRIENDLY_LABELS[sl.summary.topBoostedDriver.id] || sl.summary.topBoostedDriver.label} (+${sl.summary.topBoostedDriver.avgDeltaPct}%)`
+      : 'Vault Supply (+0.18%)';
     const trimmed = sl?.summary?.topTrimmedDriver
-      ? `${sl.summary.topTrimmedDriver.label} (${sl.summary.topTrimmedDriver.avgDeltaPct}%)`
-      : 'Equities (−0.24%)';
+      ? `${DRIVER_FRIENDLY_LABELS[sl.summary.topTrimmedDriver.id] || sl.summary.topTrimmedDriver.label} (${sl.summary.topTrimmedDriver.avgDeltaPct}%)`
+      : 'Stock Market (−0.24%)';
     const cc = sl?.championChallenger || {};
     const edgeVal = Number.isFinite(cc.edgePct) ? cc.edgePct : 0;
     const ccText = cc.rollbackActive
-      ? 'Auto-Rollback (50%)'
-      : `${edgeVal >= 0 ? '+' : ''}${edgeVal.toFixed(1)}% vs Base · OK`;
-    const jc = sl?.jumpCalibration || { lambdaMult: 1.0, sigmaJMult: 1.0 };
-    const tailText = `λ ${Number(jc.lambdaMult || 1).toFixed(2)}× · σJ ${Number(jc.sigmaJMult || 1).toFixed(2)}×`;
+      ? 'Resetting toward defaults'
+      : `${edgeVal >= 0 ? '+' : ''}${edgeVal.toFixed(1)}% vs. default`;
     slStrip.innerHTML = `
       <div class="sl-chip">
-        <span class="sl-chip-label">Weight Boosted (${activeRegime})</span>
+        <span class="sl-chip-label">Top Helping Signal</span>
         <span class="sl-chip-val up">${escapeHtml(boosted)}</span>
       </div>
       <div class="sl-chip">
-        <span class="sl-chip-label">Weight Trimmed</span>
+        <span class="sl-chip-label">Trimmed Signal</span>
         <span class="sl-chip-val down">${escapeHtml(trimmed)}</span>
       </div>
       <div class="sl-chip">
-        <span class="sl-chip-label">Champion–Challenger</span>
+        <span class="sl-chip-label">Self-Tuning Edge</span>
         <span class="sl-chip-val ${cc.rollbackActive ? 'down' : 'up'}">${escapeHtml(ccText)}</span>
       </div>
       <div class="sl-chip">
-        <span class="sl-chip-label">Tail &amp; Cone Calib</span>
-        <span class="sl-chip-val">${escapeHtml(tailText)} · ${activeConeMult}×</span>
+        <span class="sl-chip-label">Forecast Range Size</span>
+        <span class="sl-chip-val">${activeRegime} · ${activeConeMult}×</span>
       </div>`;
   }
 
@@ -3517,50 +4349,48 @@ function renderOutlook() {
   if (accList) {
     const rows = [];
     if (recentHist.length) {
-      rows.push('<div class="sl-section-label">Recent 5:10 PM ET Post-Close Self-Corrections</div>');
+      rows.push('<div class="sl-section-label">Recent Daily Forecast Checks</div>');
       for (const h of recentHist.slice(0, 4)) {
         const dtLbl = h.date ? h.date.slice(5) : '—';
         const fmtP = (v) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`;
-        const gTag = `<span class="acc-tag ${h.dirHitGold ? 'hit' : 'miss'}">${h.dirHitGold ? 'HIT' : 'ADJ'}</span>`;
-        const sTag = `<span class="acc-tag ${h.dirHitSilver ? 'hit' : 'miss'}">${h.dirHitSilver ? 'HIT' : 'ADJ'}</span>`;
+        const gTag = `<span class="acc-tag ${h.dirHitGold ? 'hit' : 'miss'}">${h.dirHitGold ? 'RIGHT' : 'TUNED'}</span>`;
+        const sTag = `<span class="acc-tag ${h.dirHitSilver ? 'hit' : 'miss'}">${h.dirHitSilver ? 'RIGHT' : 'TUNED'}</span>`;
         rows.push(
-          `<div class="acc-row"><span>${escapeHtml(dtLbl)}</span><span>Au ${fmtP(h.goldPredPct)}→${fmtP(h.goldActualPct)}${gTag} · Ag ${fmtP(h.silverActualPct)}${sTag}</span></div>`
+          `<div class="acc-row"><span>${escapeHtml(dtLbl)}</span><span>Gold ${fmtP(h.goldPredPct)} → ${fmtP(h.goldActualPct)}${gTag} · Silver ${fmtP(h.silverActualPct)}${sTag}</span></div>`
         );
       }
     }
-    rows.push('<div class="sl-section-label">Walk-Forward Backtest &amp; Live 7D Tracker</div>');
-    if (live7?.count > 0) {
-      rows.push(
-        `<div class="acc-row"><span>Live 7d Graded (${live7.count})</span><span>${live7.dirHitPct}% Dir · ${live7.inConePct}% Cone</span></div>`
-      );
-    } else {
-      rows.push(
-        `<div class="acc-row"><span>Live 7d Tracker</span><span>Logging daily · grades after 7d</span></div>`
-      );
-    }
+    rows.push('<div class="sl-section-label">6-Month Track Record</div>');
     if (btGold) {
-      const sk = btGold.pinballSkillPct != null ? ` · ${btGold.pinballSkillPct >= 0 ? '+' : ''}${btGold.pinballSkillPct}% Skill` : '';
       rows.push(
-        `<div class="acc-row"><span>6m Walk-Fwd Gold (${btGold.samples})</span><span>${btGold.dirHitPct}% Dir · ${btGold.inConePct}% Cone${sk}</span></div>`
+        `<div class="acc-row"><span>6-Month Test · Gold (${btGold.samples} checks)</span><span>${btGold.dirHitPct}% Right · ${btGold.inConePct}% In Range</span></div>`
       );
     }
     if (btSilver) {
-      const sk = btSilver.pinballSkillPct != null ? ` · ${btSilver.pinballSkillPct >= 0 ? '+' : ''}${btSilver.pinballSkillPct}% Skill` : '';
       rows.push(
-        `<div class="acc-row"><span>6m Walk-Fwd Silver (${btSilver.samples})</span><span>${btSilver.dirHitPct}% Dir · ${btSilver.inConePct}% Cone${sk}</span></div>`
+        `<div class="acc-row"><span>6-Month Test · Silver (${btSilver.samples} checks)</span><span>${btSilver.dirHitPct}% Right · ${btSilver.inConePct}% In Range</span></div>`
+      );
+    }
+    if (live7?.count > 0) {
+      rows.push(
+        `<div class="acc-row full-span"><span>Live 7-Day Checks (${live7.count})</span><span>${live7.dirHitPct}% Right · ${live7.inConePct}% In Range</span></div>`
+      );
+    } else {
+      rows.push(
+        `<div class="acc-row full-span"><span>Live 7-Day Checks</span><span>Saving daily · grades after 7 days</span></div>`
       );
     }
     accList.innerHTML = rows.join('');
   }
 
-  // Scored News Feed (with Tier, Recency & Cluster Count)
+  // Scored News Feed
   const newsEl = document.getElementById('outlook-news');
   const updatedEl = document.getElementById('outlook-updated');
   if (updatedEl && res.base.generatedAt) {
     const dt = new Date(res.base.generatedAt);
     updatedEl.textContent = Number.isNaN(dt.getTime())
-      ? '18h decay · Deduplicated · Tiered sources'
-      : `Updated ${dt.toLocaleDateString()} · 18h recency decay`;
+      ? 'Recent headlines scored for Gold & Silver impact'
+      : `Updated ${dt.toLocaleDateString()} · Recent headlines scored for impact`;
   }
   if (newsEl) {
     const items = res.base.headlines || [];
@@ -3571,21 +4401,22 @@ function renderOutlook() {
             const titleHtml = h.url
               ? `<a class="news-title" href="${escapeHtml(h.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(h.title)}</a>`
               : `<div class="news-title">${escapeHtml(h.title)}</div>`;
-            const tierBadge = h.sourceTier ? ` · T${h.sourceTier}` : '';
-            const clusterBadge = h.clusterCount > 1 ? ` · ${h.clusterCount} sources` : '';
+            const clusterBadge = h.clusterCount > 1 ? ` · ${h.clusterCount} articles` : '';
+            const moodWord = h.sentiment === 'bullish' ? 'Positive' : h.sentiment === 'bearish' ? 'Negative' : 'Neutral';
             return `
               <li class="news-item">
                 ${titleHtml}
                 <div class="news-meta">
-                  <span>${escapeHtml(h.source || 'News')} · ${escapeHtml(h.driverLabel || 'Macro')}${tierBadge}${clusterBadge}</span>
-                  <span class="news-pill ${h.sentiment || ''}">${escapeHtml(h.sentiment || 'neutral')}</span>
+                  <span>${escapeHtml(h.source || 'News')} · ${escapeHtml(h.driverLabel || 'Market')}${clusterBadge}</span>
+                  <span class="news-pill ${h.sentiment || ''}">${escapeHtml(moodWord)}</span>
                 </div>
               </li>`;
           })
           .join('')
-      : '<li class="empty-state">No scored headlines yet — run the GitHub Actions Outlook workflow to populate live feeds.</li>';
+      : '<li class="empty-state">No news headlines loaded yet.</li>';
   }
 
+  renderAccuracyReplayChart(res);
   renderSectorLeaders(res);
   renderComexPanel();
   renderInstitutionalPulse(res);
@@ -3878,59 +4709,58 @@ function renderInstitutionalPulse(outlookRes) {
       .join('');
   }
 
-  // 2. Options Implied Vol (^GVZ)
+  // 2. Options Fear Gauge (^GVZ)
   const gvzVal = document.getElementById('inst-gvz-val');
   const gvzSub = document.getElementById('inst-gvz-sub');
   if (gvzVal && gvzSub && inst.impliedVol) {
     const iv = inst.impliedVol;
-    gvzVal.textContent = `${iv.gvz.toFixed(1)}% IV`;
-    gvzSub.textContent = `${iv.ivMinusRv >= 0 ? '+' : ''}${iv.ivMinusRv.toFixed(1)}% vs RV · ${iv.regime}`;
+    gvzVal.textContent = `${iv.gvz.toFixed(1)}% swings`;
+    gvzSub.textContent = iv.gvz >= 25 ? 'High fear — big moves expected' : iv.gvz >= 18 ? 'Elevated expected swings' : 'Calm market expectations';
   }
 
-  // 3. Physical Bullion ETF Flows (GLD / SLV / PSLV)
+  // 3. Bullion Fund Buying (GLD / SLV / PSLV)
   const etfVal = document.getElementById('inst-etf-val');
   const etfSub = document.getElementById('inst-etf-sub');
   if (etfVal && etfSub && inst.etfFlows) {
     const ef = inst.etfFlows;
     const avgRatio = (((ef.gldVolRatio || 1) + (ef.slvVolRatio || 1)) / 2).toFixed(2);
-    etfVal.textContent = `${avgRatio}× Vol`;
+    etfVal.textContent = `${avgRatio}× normal vol`;
     etfVal.className = `inst-val ${ef.silverSignal >= 0.25 ? 'up' : ef.silverSignal <= -0.25 ? 'down' : ''}`;
-    const pslvPart = ef.pslvVsSlv10dPct != null ? `PSLV ${ef.pslvVsSlv10dPct >= 0 ? '+' : ''}${ef.pslvVsSlv10dPct}% vs SLV` : ef.regime;
-    etfSub.textContent = `${pslvPart} · ${ef.regime}`;
+    etfSub.textContent = ef.silverSignal >= 0.2 ? 'Heavy buying in gold & silver funds' : ef.silverSignal <= -0.2 ? 'Funds seeing selling pressure' : 'Steady fund volume';
   }
 
-  // 4. Copper & USD/JPY Carry Stress
+  // 4. Copper & Japan Yen
   const crossVal = document.getElementById('inst-cross-val');
   const crossSub = document.getElementById('inst-cross-sub');
   if (crossVal && crossSub && inst.crossMarket) {
     const cm = inst.crossMarket;
-    const cuStr = cm.cu5dPct != null ? `Cu ${cm.cu5dPct >= 0 ? '+' : ''}${cm.cu5dPct.toFixed(1)}%` : 'Cu —';
-    const jpyStr = cm.usdjpyLast != null ? `¥${cm.usdjpyLast.toFixed(1)}` : 'JPY —';
+    const cuStr = cm.cu5dPct != null ? `Copper ${cm.cu5dPct >= 0 ? '+' : ''}${cm.cu5dPct.toFixed(1)}%` : 'Copper —';
+    const jpyStr = cm.usdjpyLast != null ? `¥${cm.usdjpyLast.toFixed(1)}` : 'Yen —';
     crossVal.textContent = `${cuStr} · ${jpyStr}`;
     crossVal.className = `inst-val ${(cm.cu5dPct || 0) >= 1 ? 'up' : (cm.cu5dPct || 0) <= -1.5 ? 'down' : ''}`;
-    crossSub.textContent = cm.regime;
+    crossSub.textContent = (cm.cu5dPct || 0) >= 1 ? 'Rising copper helps industrial silver' : (cm.cu5dPct || 0) <= -1.5 ? 'Falling copper weighs on silver' : 'Industrial demand neutral';
   }
 
-  // 5. COMEX Spot-to-Futures Basis (Backwardation / Contango) synced with Markets via outlookRes.futures
+  // 5. Futures vs. Spot Spread
   const basisVal = document.getElementById('inst-basis-val');
   const basisSub = document.getElementById('inst-basis-sub');
   const activeBasis = outlookRes?.futures?.gold || outlookRes?.futures?.silver ? outlookRes.futures : inst.basis;
   if (basisVal && basisSub && activeBasis) {
     const bg = activeBasis.gold;
     const bs = activeBasis.silver;
-    const gStr = bg ? `Au ${bg.basisUsd >= 0 ? '+' : '−'}$${Math.abs(bg.basisUsd).toFixed(2)}` : 'Au —';
-    const sStr = bs ? `Ag ${bs.basisUsd >= 0 ? '+' : '−'}$${Math.abs(bs.basisUsd).toFixed(2)}` : 'Ag —';
+    const gStr = bg ? `Gold ${bg.basisUsd >= 0 ? '+' : '−'}$${Math.abs(bg.basisUsd).toFixed(2)}` : 'Gold —';
+    const sStr = bs ? `Silver ${bs.basisUsd >= 0 ? '+' : '−'}$${Math.abs(bs.basisUsd).toFixed(2)}` : 'Silver —';
     basisVal.textContent = `${gStr} · ${sStr}`;
     const tight = (bs?.basisUsd ?? 1) < 0 || (bg?.basisUsd ?? 1) < 0;
     basisVal.className = `inst-val ${tight ? 'up' : ''}`;
     basisSub.textContent =
       bs?.basisUsd < 0 && bg?.basisUsd < 0
-        ? 'Au & Ag Backwardation ↑'
+        ? 'Gold & Silver supply shortage!'
         : bs?.basisUsd < 0
-          ? 'Silver Backwardation (Tight!)'
+          ? 'Silver supply tight (backwardation)'
           : bg?.basisUsd < 0
-            ? 'Gold Backwardation (Tight!)'
-            : bg?.state || bs?.state || 'Normal Contango';
+            ? 'Gold supply tight (backwardation)'
+            : 'Normal futures pricing';
   }
 }
 
@@ -4030,19 +4860,52 @@ function estimateClientJumpParams(metal, outlookRes, tradingDays = 21) {
   const lambdaMult = clampNum(Number(jc.lambdaMult ?? 1.0), 0.75, 1.45);
   const sigmaJMult = clampNum(Number(jc.sigmaJMult ?? 1.0), 0.75, 1.45);
 
+  // Regime-aware asymmetric jump skew & Squeeze Exhaustion / Slam Risk detection
+  const reg = m.regime || outlookRes.marketRegime?.[metal] || null;
+  const sqzScore = Number.isFinite(reg?.squeezeScore) ? reg.squeezeScore : 0;
+  const discScore = Number.isFinite(reg?.discoveryScore) ? reg.discoveryScore : 50;
+  const isBackw = Boolean(reg?.isBackwardation || outlookRes.futures?.[metal]?.isBackwardation);
+  const rsi14 = Number.isFinite(m.rsi14) ? m.rsi14 : null;
+  const exhaustionRisk = sqzScore >= 65 && discScore < 45 && rsi14 != null && rsi14 >= 78;
+
+  let regimeLambdaBoost = 0;
+  let regimeSigmaMult = 1.0;
+  let regimeJumpSkew = 0;
+  let skewRegime = 'Balanced Tails';
+
+  if (exhaustionRisk) {
+    regimeLambdaBoost = (isSilver ? 0.032 : 0.022) * shortTermWeight;
+    regimeSigmaMult = 1.18;
+    regimeJumpSkew = (isSilver ? -0.012 : -0.007) * shortTermWeight;
+    skewRegime = 'Squeeze Exhaustion — Slam Risk';
+  } else if (sqzScore >= 55 || isBackw) {
+    const sqzInt = clampNum((sqzScore - 45) / 55, 0, 1) + (isBackw ? 0.25 : 0);
+    regimeLambdaBoost = clampNum(sqzInt * (isSilver ? 0.034 : 0.021), 0, 0.045) * shortTermWeight;
+    regimeSigmaMult = 1 + clampNum(sqzInt * 0.13, 0, 0.16) * shortTermWeight;
+    regimeJumpSkew = clampNum(sqzInt * (isSilver ? 0.011 : 0.0065), 0, isSilver ? 0.014 : 0.0085) * shortTermWeight;
+    skewRegime = isBackw ? 'Right-Tail Squeeze (Backwardation)' : 'Right-Tail Squeeze';
+  } else if (discScore >= 58) {
+    regimeJumpSkew = (isSilver ? 0.003 : 0.002) * shortTermWeight;
+    regimeSigmaMult = 0.96;
+    skewRegime = 'Steady Discovery';
+  }
+
   const vixBoost = clampNum((vix - 16) / 35, 0, 0.08) * shortTermWeight;
   const catBoost = clampNum(catIntensity * 0.04, 0, 0.05) * shortTermWeight;
-  const lambda = clampNum(((isSilver ? 0.085 : 0.045) + vixBoost + catBoost) * lambdaMult, 0.02, 0.28);
-  const jumpSigma = (isSilver ? 0.042 : 0.022) * volDamp * clampNum(coneMult, 0.8, 1.45) * sigmaJMult;
-  const jumpMean = clampNum(m.unit * (isSilver ? 0.012 : 0.007) * shortTermWeight, -0.018, 0.018);
+  const lambda = clampNum(((isSilver ? 0.085 : 0.045) + vixBoost + catBoost + regimeLambdaBoost) * lambdaMult, 0.02, 0.30);
+  const jumpSigma = (isSilver ? 0.042 : 0.022) * volDamp * clampNum(coneMult, 0.8, 1.45) * sigmaJMult * regimeSigmaMult;
+  const jumpMean = clampNum(m.unit * (isSilver ? 0.012 : 0.007) * shortTermWeight + regimeJumpSkew, -0.024, 0.026);
+  const adjDrift = exhaustionRisk && dailyDrift > 0 ? Math.min(dailyDrift * 0.35, 0.0005) : dailyDrift;
 
   return {
     diffVol,
     lambda,
     jumpMean,
     jumpSigma,
-    dailyDrift,
+    dailyDrift: adjDrift,
     expectedJumpsPerMonth: +(lambda * 21).toFixed(1),
+    skewRegime,
+    exhaustionRisk,
   };
 }
 
@@ -4351,7 +5214,7 @@ function renderMcTargetReadout() {
 
   const deltaEl = document.getElementById('mc-target-delta');
   if (deltaEl) {
-    deltaEl.textContent = `${formatSignedPct(res.pctDelta)} vs spot`;
+    deltaEl.textContent = `${formatSignedPct(res.pctDelta)} vs today`;
     deltaEl.className = `mc-target-delta ${res.isUp ? 'up' : 'down'}`;
   }
 
@@ -4367,8 +5230,8 @@ function renderMcTargetReadout() {
   if (touchBar) touchBar.style.width = `${res.touchPct}%`;
   if (finishBar) finishBar.style.width = `${res.finishPct}%`;
   const dirWord = res.isUp ? 'above' : 'below';
-  if (touchHint) touchHint.textContent = `Touches ${dirWord} anytime (${sim.spec.label})`;
-  if (finishHint) finishHint.textContent = `Closes ${dirWord} at ${sim.spec.xEnd}`;
+  if (touchHint) touchHint.textContent = `Reaches ${dirWord} this price at least once (${sim.spec.label})`;
+  if (finishHint) finishHint.textContent = `Still ${dirWord} this price at ${sim.spec.xEnd}`;
 
   drawMcPathsCanvas(sim, metal, targetOz);
 }
@@ -4397,7 +5260,23 @@ function getMcWorker() {
 function paintJumpDiffusionSim(sim, metal, spec) {
   const subEl = document.getElementById('mc-subtitle');
   if (subEl) {
-    subEl.textContent = `1,500 paths · ~${sim.params.expectedJumpsPerMonth} jumps/mo · ${spec.label} P10–P90`;
+    subEl.textContent = `1,500 simulated ${spec.label} price paths · ~${sim.params.expectedJumpsPerMonth} big jumps/mo`;
+  }
+  const skewEl = document.getElementById('mc-skew-badge');
+  if (skewEl) {
+    const rawLabel = sim.params?.skewRegime || 'Balanced Tails';
+    const isExh = Boolean(sim.params?.exhaustionRisk);
+    const isSqz = !isExh && rawLabel.includes('Squeeze');
+    const isDisc = !isExh && rawLabel.includes('Discovery');
+    const friendly = isExh
+      ? '⚠ Overheated — Drop Risk'
+      : isSqz
+        ? 'Upside Spike Risk'
+        : isDisc
+          ? 'Steady Climb Odds'
+          : 'Normal Odds';
+    skewEl.textContent = friendly;
+    skewEl.className = `regime-pill ${isExh ? 'squeeze' : isSqz ? 'hybrid' : isDisc ? 'discovery' : 'neutral'}`;
   }
 
   const dec = metal === 'gold' && state.settings.unit === 'oz' ? 0 : 2;
@@ -4438,7 +5317,8 @@ function renderJumpDiffusion(outlookRes) {
   });
 
   const jc = res.base?.selfLearning?.jumpCalibration || {};
-  const key = `${metal}|${hKey}|${m.spot.toFixed(2)}|${m.score}|${outlookState.activeScenarios.size}|${mcState.seed}|${jc.lambdaMult ?? 1}|${jc.sigmaJMult ?? 1}`;
+  const regKey = `${m.regime?.discoveryScore ?? 0}/${m.regime?.squeezeScore ?? 0}/${m.regime?.isBackwardation ? 1 : 0}`;
+  const key = `${metal}|${hKey}|${m.spot.toFixed(2)}|${m.score}|${regKey}|${outlookState.activeScenarios.size}|${mcState.seed}|${jc.lambdaMult ?? 1}|${jc.sigmaJMult ?? 1}`;
 
   if (mcSimCache.has(key)) {
     const cachedSim = mcSimCache.get(key);
@@ -4530,10 +5410,12 @@ const FALLBACK_SHANGHAI = {
 async function fetchShanghaiData() {
   try {
     shanghaiState.data = await fetchFreshRepoJson('shanghai.json');
+    state.feedHealth.sgeAt = Date.parse(shanghaiState.data?.updatedAt || 0) || Date.now();
   } catch {
     shanghaiState.data = outlookState.data?.shanghai || FALLBACK_SHANGHAI;
   }
   renderShanghai();
+  renderFeedHealth();
   renderStackTracker();
 }
 
@@ -4558,11 +5440,11 @@ function renderShanghai() {
 
   const subEl = document.getElementById('sge-subtitle');
   if (subEl) {
-    subEl.textContent = `${sge.gold.contract} & ${sge.silver.contract} · USD/CNY ${usdCny.toFixed(4)}`;
+    subEl.textContent = `Shanghai physical prices · 1 USD = ¥${usdCny.toFixed(2)} Yuan`;
   }
 
   // Gold SGE Card
-  document.getElementById('sge-gold-contract').textContent = sge.gold.contract || 'Au99.99';
+  document.getElementById('sge-gold-contract').textContent = 'Shanghai Gold';
   const gPctEl = document.getElementById('sge-gold-pct');
   gPctEl.textContent = formatSignedPct(sge.gold.pct || 0);
   gPctEl.className = `sge-pct ${(sge.gold.pct || 0) >= 0.01 ? 'up' : (sge.gold.pct || 0) <= -0.01 ? 'down' : ''}`;
@@ -4573,27 +5455,27 @@ function renderShanghai() {
   if (goldPremOz != null) {
     const premDisp = convertUnit(goldPremOz);
     const pctPart = goldPremPct != null ? ` (${formatSignedPct(goldPremPct)})` : '';
-    gPremEl.textContent = `vs West: ${formatSignedMoney(premDisp)}/${unitLabel}${pctPart}`;
+    gPremEl.textContent = `vs US/London: ${formatSignedMoney(premDisp)}/${unitLabel}${pctPart}`;
     gPremEl.className = `sge-spread ${goldPremOz >= 0 ? 'up' : 'down'}`;
   } else {
-    gPremEl.textContent = 'vs West: —';
+    gPremEl.textContent = 'vs US/London: —';
     gPremEl.className = 'sge-spread';
   }
 
   // Silver SGE Card
-  document.getElementById('sge-silver-contract').textContent = sge.silver.contract || 'Ag(T+D)';
+  document.getElementById('sge-silver-contract').textContent = 'Shanghai Silver';
   const sPctEl = document.getElementById('sge-silver-pct');
   sPctEl.textContent = formatSignedPct(sge.silver.pct || 0);
   sPctEl.className = `sge-pct ${(sge.silver.pct || 0) >= 0.01 ? 'up' : (sge.silver.pct || 0) <= -0.01 ? 'down' : ''}`;
   document.getElementById('sge-silver-cny').textContent = `¥${Math.round(Number(sge.silver.cnyPerKg)).toLocaleString('en-US')} / kg`;
-  document.getElementById('sge-silver-usd').textContent = `${formatMoney(convertUnit(silverUsdOz))} / ${unitLabel} (incl. VAT)`;
+  document.getElementById('sge-silver-usd').textContent = `${formatMoney(convertUnit(silverUsdOz))} / ${unitLabel} (incl. tax)`;
 
   const sPremEl = document.getElementById('sge-silver-premium');
   if (silverExVatPremOz != null) {
-    sPremEl.textContent = `Ex-13% VAT: ${formatMoney(convertUnit(silverExVatUsdOz))} (${formatSignedMoney(convertUnit(silverExVatPremOz))})`;
+    sPremEl.textContent = `Before 13% tax: ${formatMoney(convertUnit(silverExVatUsdOz))} (${formatSignedMoney(convertUnit(silverExVatPremOz))})`;
     sPremEl.className = `sge-spread ${silverExVatPremOz >= 0 ? 'up' : 'down'}`;
   } else {
-    sPremEl.textContent = `Ex-13% VAT: ${formatMoney(convertUnit(silverExVatUsdOz))}`;
+    sPremEl.textContent = `Before 13% tax: ${formatMoney(convertUnit(silverExVatUsdOz))}`;
     sPremEl.className = 'sge-spread';
   }
 
@@ -4604,14 +5486,14 @@ function renderShanghai() {
     const shag = sge.benchmarks?.SHAG;
     const parts = [];
     if (shau && (shau.am || shau.pm)) {
-      parts.push(`SHAU AM ¥${shau.am ?? '—'} · PM ¥${shau.pm ?? '—'}/g`);
+      parts.push(`Shanghai Gold Fix: Morning ¥${shau.am ?? '—'} · Afternoon ¥${shau.pm ?? '—'}/g`);
     }
     if (shag && (shag.am || shag.pm)) {
-      parts.push(`SHAG AM ¥${shag.am ?? '—'} · PM ¥${shag.pm ?? '—'}/kg`);
+      parts.push(`Silver Fix: Morning ¥${shag.am ?? '—'} · Afternoon ¥${shag.pm ?? '—'}/kg`);
     }
     benchEl.textContent = parts.length
       ? parts.join('  |  ')
-      : 'Source: Shanghai Gold Exchange (en.sge.com.cn)';
+      : 'Source: Shanghai Gold Exchange';
   }
 }
 
@@ -4621,6 +5503,7 @@ function applyTheme(theme) {
   const meta = document.getElementById('meta-theme-color');
   if (meta) meta.setAttribute('content', theme === 'light' ? '#F6F4EF' : '#0D0E11');
   renderChart();
+  renderAccuracyReplayChart(computeInteractiveOutlook());
   if (mcState.lastSim) renderMcTargetReadout();
 }
 
@@ -4672,8 +5555,154 @@ function renderMacroStrip() {
   );
 }
 
+function syncLotsToStackTotals() {
+  const lots = Array.isArray(state.settings.stackLots) ? state.settings.stackLots : [];
+  const syncPill = document.getElementById('stack-lots-sync-note');
+  if (!lots.length) {
+    if (syncPill) syncPill.hidden = true;
+    return;
+  }
+  const agg = { gold: { oz: 0, costSum: 0, count: 0 }, silver: { oz: 0, costSum: 0, count: 0 } };
+  for (const lot of lots) {
+    const m = lot.metal === 'silver' ? 'silver' : 'gold';
+    const oz = Number(lot.oz) || 0;
+    const cost = Number(lot.cost) || 0;
+    if (oz > 0) {
+      agg[m].oz += oz;
+      agg[m].costSum += oz * cost;
+      agg[m].count += 1;
+    }
+  }
+  if (!state.settings.stack) state.settings.stack = { ...DEFAULT_SETTINGS.stack };
+  if (agg.gold.count > 0) {
+    state.settings.stack.goldOz = String(+agg.gold.oz.toFixed(4));
+    state.settings.stack.goldCost = String(+(agg.gold.costSum / agg.gold.oz).toFixed(2));
+  }
+  if (agg.silver.count > 0) {
+    state.settings.stack.silverOz = String(+agg.silver.oz.toFixed(3));
+    state.settings.stack.silverCost = String(+(agg.silver.costSum / agg.silver.oz).toFixed(2));
+  }
+  if (syncPill) {
+    syncPill.hidden = false;
+    syncPill.textContent = `Auto-filled from ${lots.length} purchase${lots.length > 1 ? 's' : ''}`;
+  }
+}
+
+function renderStackLots() {
+  const listEl = document.getElementById('stack-lots-list');
+  const countEl = document.getElementById('stack-lots-count');
+  const lots = Array.isArray(state.settings.stackLots) ? state.settings.stackLots : [];
+  if (countEl) countEl.textContent = `${lots.length} saved`;
+  if (!listEl) return;
+  if (!lots.length) {
+    listEl.innerHTML =
+      '<div class="empty-state">No purchases saved yet. Add your coins or bars above to track your exact average cost and profit.</div>';
+    return;
+  }
+  const canonical = getCanonicalSpotPrices();
+  listEl.innerHTML = lots
+    .map((lot) => {
+      const isSilver = lot.metal === 'silver';
+      const spot = isSilver ? canonical.silver : canonical.gold;
+      const oz = Number(lot.oz) || 0;
+      const cost = Number(lot.cost) || 0;
+      const melt = oz * spot;
+      const paid = oz * cost;
+      const pnl = melt - paid;
+      const pnlPct = paid > 0 ? (pnl / paid) * 100 : 0;
+      const cls = pnl > 0.01 ? 'up' : pnl < -0.01 ? 'down' : '';
+      const badgeCls = isSilver ? 'silver' : 'gold';
+      const sym = isSilver ? 'XAG' : 'XAU';
+      const notePart = lot.note ? ` · ${escapeHtml(lot.note)}` : '';
+      return `
+        <div class="lot-row">
+          <div class="lot-main">
+            <div class="lot-title">
+              <span class="metal-badge ${badgeCls}" style="width:24px;height:24px;font-size:9px;">${sym}</span>
+              <span>${oz.toFixed(isSilver ? 2 : 3)} oz · ${escapeHtml(lot.form || 'Bullion')}${notePart}</span>
+            </div>
+            <div class="lot-sub">Paid ${formatMoney(cost)}/oz (Basis ${formatMoney(paid)})</div>
+          </div>
+          <div class="lot-right">
+            <div class="lot-val-box">
+              <strong>${formatMoney(melt)}</strong>
+              <span class="${cls}">${formatSignedMoney(pnl)} (${formatSignedPct(pnlPct)})</span>
+            </div>
+            <button type="button" class="lot-del-btn" data-lot-id="${escapeHtml(lot.id)}" aria-label="Remove lot" title="Remove lot">&times;</button>
+          </div>
+        </div>`;
+    })
+    .join('');
+}
+
+function renderRatioSwapCalculator() {
+  if (!document.getElementById('panel-ratio-swap')) return;
+  const canonical = getCanonicalSpotPrices();
+  const liveRatio = canonical.silver > 0 ? canonical.gold / canonical.silver : 82;
+  const ra = computeClientRatioAnalytics(liveRatio, outlookState.data || FALLBACK_OUTLOOK);
+
+  const dir = state.swapCalc.dir === 's2g' ? 's2g' : 'g2s';
+  document.getElementById('swap-dir-g2s')?.classList.toggle('active', dir === 'g2s');
+  document.getElementById('swap-dir-s2g')?.classList.toggle('active', dir === 's2g');
+
+  const ozLbl = document.getElementById('swap-oz-label');
+  const recK = document.getElementById('swap-receive-k');
+  const retK = document.getElementById('swap-return-k');
+  const liveRatioEl = document.getElementById('swap-live-ratio');
+  const liveBiasEl = document.getElementById('swap-live-bias');
+  const recNowEl = document.getElementById('swap-receive-now');
+  const freeOzEl = document.getElementById('swap-free-oz');
+  const rtTotalEl = document.getElementById('swap-roundtrip-total');
+  const noteEl = document.getElementById('swap-signal-note');
+
+  const ozInput = Math.max(0.01, Number(state.swapCalc.oz) || 1);
+  const targetRatio = Math.max(10, Number(state.swapCalc.targetRatio) || (dir === 'g2s' ? 65 : 90));
+  const frictionPct = clampNum(Number(state.swapCalc.frictionPct) || 0, 0, 30);
+  const legFactor = Math.max(0.5, 1 - (frictionPct / 2) / 100);
+
+  if (ozLbl) ozLbl.textContent = dir === 'g2s' ? 'Gold to Trade (oz)' : 'Silver to Trade (oz)';
+  if (recK) recK.textContent = dir === 'g2s' ? 'Silver You Get Today' : 'Gold You Get Today';
+  if (retK) retK.textContent = dir === 'g2s' ? 'Extra Free Gold' : 'Extra Free Silver';
+
+  let receivedNow = 0;
+  let roundTripEnd = 0;
+  if (dir === 'g2s') {
+    receivedNow = ozInput * liveRatio * legFactor;
+    roundTripEnd = (receivedNow / targetRatio) * legFactor;
+  } else {
+    receivedNow = (ozInput / liveRatio) * legFactor;
+    roundTripEnd = receivedNow * targetRatio * legFactor;
+  }
+  const freeOz = roundTripEnd - ozInput;
+  const freePct = (freeOz / ozInput) * 100;
+
+  if (liveRatioEl) liveRatioEl.textContent = `${liveRatio.toFixed(1)} : 1`;
+  if (liveBiasEl) {
+    liveBiasEl.textContent = ra.swapBias;
+  }
+  if (recNowEl) recNowEl.textContent = `${receivedNow.toFixed(dir === 'g2s' ? 1 : 3)} oz`;
+  if (freeOzEl) {
+    const sign = freeOz >= 0 ? '+' : '−';
+    freeOzEl.textContent = `${sign}${Math.abs(freeOz).toFixed(dir === 'g2s' ? 3 : 1)} oz`;
+    freeOzEl.className = `stack-stat-v ${freeOz >= 0 ? 'up' : 'down'}`;
+  }
+  if (rtTotalEl) {
+    const unitTag = dir === 'g2s' ? 'oz Gold' : 'oz Silver';
+    rtTotalEl.textContent = `End total: ${roundTripEnd.toFixed(dir === 'g2s' ? 3 : 1)} ${unitTag} (${formatSignedPct(freePct)})`;
+  }
+  if (noteEl) {
+    noteEl.textContent = `${ra.regime} (Higher than ${ra.percentile5y}% of past 5 yrs) · ${ra.swapBias}`;
+  }
+}
+
 function renderStackTracker() {
+  syncLotsToStackTotals();
+  renderStackLots();
+  renderRatioSwapCalculator();
+
   const totalEl = document.getElementById('stack-total-val');
+  const buybackValEl = document.getElementById('stack-buyback-val');
+  const buybackSubEl = document.getElementById('stack-buyback-sub');
   const headerMeltValEl = document.getElementById('header-melt-val');
   const headerMeltBtnEl = document.getElementById('btn-header-melt');
   const dayEl = document.getElementById('stack-day-chg');
@@ -4690,9 +5719,13 @@ function renderStackTracker() {
   const gCost = Math.max(0, parseFloat(st.goldCost) || 0);
   const sOz = Math.max(0, parseFloat(st.silverOz) || 0);
   const sCost = Math.max(0, parseFloat(st.silverCost) || 0);
+  const gSpread = Number.isFinite(parseFloat(st.goldSpreadPct)) ? parseFloat(st.goldSpreadPct) : -2.5;
+  const sSpread = Number.isFinite(parseFloat(st.silverSpreadPct)) ? parseFloat(st.silverSpreadPct) : -6.0;
 
   if (gOz <= 0 && sOz <= 0) {
     if (totalEl) totalEl.textContent = '$0.00';
+    if (buybackValEl) buybackValEl.textContent = '$0.00';
+    if (buybackSubEl) buybackSubEl.textContent = `Au ${gSpread}% · Ag ${sSpread}%`;
     if (headerMeltValEl) headerMeltValEl.textContent = '$0.00';
     if (headerMeltBtnEl) headerMeltBtnEl.className = 'header-melt-btn';
     if (dayEl) {
@@ -4718,11 +5751,14 @@ function renderStackTracker() {
     return;
   }
 
-  const gSpot = state.quotes.gold.price || outlookState.data?.gold?.spot || 0;
-  const sSpot = state.quotes.silver.price || outlookState.data?.silver?.spot || 0;
+  const canonical = getCanonicalSpotPrices();
+  const gSpot = canonical.gold;
+  const sSpot = canonical.silver;
   const gVal = gOz * gSpot;
   const sVal = sOz * sSpot;
   const totalVal = gVal + sVal;
+  const buybackVal = gVal * (1 + gSpread / 100) + sVal * (1 + sSpread / 100);
+  const buybackDiff = buybackVal - totalVal;
   const gDayChg = gOz * (state.quotes.gold.chg || 0);
   const sDayChg = sOz * (state.quotes.silver.chg || 0);
   const dayChg = gDayChg + sDayChg;
@@ -4731,6 +5767,11 @@ function renderStackTracker() {
 
   const formattedTotal = totalVal > 0 ? formatMoney(totalVal) : '$—';
   if (totalEl) totalEl.textContent = formattedTotal;
+  if (buybackValEl) buybackValEl.textContent = totalVal > 0 ? formatMoney(buybackVal) : '$—';
+  if (buybackSubEl) {
+    buybackSubEl.textContent =
+      totalVal > 0 ? `${formatSignedMoney(buybackDiff)} vs melt (Au ${gSpread}% / Ag ${sSpread}%)` : 'After dealer spread';
+  }
   if (headerMeltValEl) headerMeltValEl.textContent = formattedTotal;
   if (headerMeltBtnEl) {
     headerMeltBtnEl.className = `header-melt-btn ${dayChg > 0.01 ? 'up' : dayChg < -0.01 ? 'down' : ''}`;
@@ -4785,7 +5826,7 @@ function renderStackTracker() {
   const sgeDiff = sgeTotal - totalVal;
   if (sgeEl) {
     sgeEl.textContent =
-      totalVal > 0 ? `SGE Eq: ${formatMoney(sgeTotal)} (${formatSignedMoney(sgeDiff)})` : 'Shanghai physical est.';
+      totalVal > 0 ? `China value: ${formatMoney(sgeTotal)} (${formatSignedMoney(sgeDiff)})` : 'Est. value at China prices';
   }
 
   const oRes = totalVal > 0 ? computeInteractiveOutlook() : null;
@@ -4797,23 +5838,23 @@ function renderStackTracker() {
       const bullVal = gOz * oRes.gold.range.bull + sOz * oRes.silver.range.bull;
       const hLbl = outlookState.horizon === '30d' ? '30D' : '7D';
       const scCount = outlookState.activeScenarios.size;
-      const scTag = scCount > 0 ? `${scCount} What-If Scenario${scCount > 1 ? 's' : ''} Active` : `${hLbl} Probabilistic Cone`;
+      const scTag = scCount > 0 ? `${scCount} What-If Test${scCount > 1 ? 's' : ''} On` : `${hLbl} Forecast Range`;
       scStripEl.innerHTML = `
         <div class="stack-sc-head">
-          <span>Projected Stack Valuation (${hLbl})</span>
+          <span>Estimated Stack Value (${hLbl})</span>
           <span>${escapeHtml(scTag)}</span>
         </div>
         <div class="stack-sc-grid">
           <div class="stack-sc-box">
-            <span class="stack-sc-k">Bear (P10)</span>
+            <span class="stack-sc-k">Low Estimate</span>
             <strong class="stack-sc-v down">${formatMoney(bearVal)}</strong>
           </div>
           <div class="stack-sc-box">
-            <span class="stack-sc-k">Base (P50)</span>
+            <span class="stack-sc-k">Likely Value</span>
             <strong class="stack-sc-v base">${formatMoney(baseVal)}</strong>
           </div>
           <div class="stack-sc-box">
-            <span class="stack-sc-k">Bull (P90)</span>
+            <span class="stack-sc-k">High Estimate</span>
             <strong class="stack-sc-v up">${formatMoney(bullVal)}</strong>
           </div>
         </div>`;
@@ -4853,8 +5894,8 @@ function renderStackTracker() {
             <span>Weight: ${escapeHtml(fmtWeight(oz))}</span>
             <span>Share: ${share}% of stack</span>
             <span>Today: ${escapeHtml(formatSignedMoney(dayDelta))}</span>
-            <span>P&amp;L: ${escapeHtml(pnlText)}</span>
-            <span>SGE Eq: ${escapeHtml(formatMoney(sgeVal))}</span>
+            <span>Profit/Loss: ${escapeHtml(pnlText)}</span>
+            <span>China Value: ${escapeHtml(formatMoney(sgeVal))}</span>
             <span>Spot: ${escapeHtml(formatMoney(oz > 0 ? val / oz : 0))}/oz</span>
           </div>
         </article>`;
@@ -4897,26 +5938,26 @@ function renderStackTracker() {
 
     const rows = [
       {
-        name: `Live DXY FX Stack Impact (${hLbl})`,
-        sub: `DXY ${oRes.dollarStrength?.dxy?.toFixed(2) ?? '—'} · ${oRes.dollarStrength?.score ?? 50}/100 (${oRes.dollarStrength?.regime || 'Balanced'})`,
+        name: `US Dollar Effect on Stack (${hLbl})`,
+        sub: `Dollar Index ${oRes.dollarStrength?.dxy?.toFixed(2) ?? '—'} · ${oRes.dollarStrength?.regime || 'Normal Dollar'}`,
         val: fxAfterVal,
         delta: fxDelta,
       },
       {
-        name: '2026 Historic Peak Replay',
-        sub: 'Gold $5,589.38/oz · Silver $121.62/oz',
+        name: 'If Prices Return to 2026 Highs',
+        sub: 'Gold $5,589/oz · Silver $121.62/oz',
         val: peakVal,
         delta: peakVal - totalVal,
       },
       {
-        name: `${hLbl} Bull Target (P90)`,
-        sub: `Au ${formatMoney(oRes.gold.range.bull, 0)} · Ag ${formatMoney(oRes.silver.range.bull, 2)}`,
+        name: `${hLbl} High Forecast`,
+        sub: `Gold ${formatMoney(oRes.gold.range.bull, 0)} · Silver ${formatMoney(oRes.silver.range.bull, 2)}`,
         val: bullVal,
         delta: bullVal - totalVal,
       },
       {
-        name: `${hLbl} Pullback Stress (P10)`,
-        sub: `Au ${formatMoney(oRes.gold.range.bear, 0)} · Ag ${formatMoney(oRes.silver.range.bear, 2)}`,
+        name: `${hLbl} Low Forecast Pullback`,
+        sub: `Gold ${formatMoney(oRes.gold.range.bear, 0)} · Silver ${formatMoney(oRes.silver.range.bear, 2)}`,
         val: bearVal,
         delta: bearVal - totalVal,
       },
@@ -4944,6 +5985,8 @@ function renderStackTracker() {
 
 function renderAll() {
   renderMacroStrip();
+  renderSessionClock();
+  renderFeedHealth();
   renderStatus();
   renderMetalCard('gold');
   renderMetalCard('silver');
@@ -4976,11 +6019,16 @@ function switchView(viewName) {
     renderMetalCard('gold');
     renderMetalCard('silver');
     renderFuturesPanel();
+    renderSessionClock();
+    renderFeedHealth();
     renderStats();
     requestAnimationFrame(renderChart);
   } else if (viewName === 'outlook') {
     renderOutlook();
-    requestAnimationFrame(() => renderJumpDiffusion());
+    requestAnimationFrame(() => {
+      renderAccuracyReplayChart(computeInteractiveOutlook());
+      renderJumpDiffusion();
+    });
   } else if (viewName === 'stack') {
     renderStackTracker();
   }
@@ -5278,6 +6326,8 @@ function wireEvents() {
     ['input-stack-gold-cost', 'goldCost'],
     ['input-stack-silver-oz', 'silverOz'],
     ['input-stack-silver-cost', 'silverCost'],
+    ['input-stack-gold-spread', 'goldSpreadPct'],
+    ['input-stack-silver-spread', 'silverSpreadPct'],
   ];
   stackInputs.forEach(([id, key]) => {
     document.getElementById(id)?.addEventListener('input', (e) => {
@@ -5288,11 +6338,150 @@ function wireEvents() {
     });
   });
 
-  // Export & Import JSON Backup (protects Stack & Custom Alerts from cache clears)
+  // Purchase Lot Ledger: Add & Remove lots
+  document.getElementById('form-add-lot')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const metal = document.getElementById('lot-metal')?.value === 'silver' ? 'silver' : 'gold';
+    const form = document.getElementById('lot-form')?.value || 'Coin / Eagle';
+    const ozEl = document.getElementById('lot-oz');
+    const costEl = document.getElementById('lot-cost');
+    const noteEl = document.getElementById('lot-note');
+    const oz = parseFloat(ozEl?.value);
+    const cost = parseFloat(costEl?.value);
+    if (!Number.isFinite(oz) || oz <= 0 || !Number.isFinite(cost) || cost <= 0) return;
+    if (!Array.isArray(state.settings.stackLots)) state.settings.stackLots = [];
+    state.settings.stackLots.unshift({
+      id: `lot_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      metal,
+      form,
+      oz: +oz.toFixed(4),
+      cost: +cost.toFixed(2),
+      note: (noteEl?.value || '').trim().slice(0, 40),
+      createdAt: new Date().toISOString(),
+    });
+    state.settings.stackLots = state.settings.stackLots.slice(0, 100);
+    if (ozEl) ozEl.value = '';
+    if (costEl) costEl.value = '';
+    if (noteEl) noteEl.value = '';
+    syncLotsToStackTotals();
+    renderSettingsControls();
+    renderStackTracker();
+    savePersistedState();
+  });
+
+  document.getElementById('stack-lots-list')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.lot-del-btn[data-lot-id]');
+    if (!btn) return;
+    const id = btn.dataset.lotId;
+    const removed = (state.settings.stackLots || []).find((l) => l.id === id);
+    state.settings.stackLots = (state.settings.stackLots || []).filter((l) => l.id !== id);
+    if (removed) {
+      const m = removed.metal === 'silver' ? 'silver' : 'gold';
+      if (!state.settings.stackLots.some((l) => (l.metal === 'silver' ? 'silver' : 'gold') === m)) {
+        if (m === 'gold') {
+          state.settings.stack.goldOz = '';
+          state.settings.stack.goldCost = '';
+        } else {
+          state.settings.stack.silverOz = '';
+          state.settings.stack.silverCost = '';
+        }
+      }
+    }
+    syncLotsToStackTotals();
+    renderSettingsControls();
+    renderStackTracker();
+    savePersistedState();
+  });
+
+  // Au <-> Ag Ratio Swap Calculator & Outlook quick-jump button
+  document.getElementById('btn-open-ratio-swap')?.addEventListener('click', () => {
+    switchView('stack');
+    requestAnimationFrame(() => {
+      document.getElementById('panel-ratio-swap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  document.getElementById('swap-dir-g2s')?.addEventListener('click', () => {
+    state.swapCalc.dir = 'g2s';
+    state.swapCalc.oz = 1;
+    state.swapCalc.targetRatio = 65;
+    const ozEl = document.getElementById('input-swap-oz');
+    const tgtEl = document.getElementById('input-swap-target-ratio');
+    if (ozEl) ozEl.value = '1';
+    if (tgtEl) tgtEl.value = '65';
+    renderRatioSwapCalculator();
+  });
+  document.getElementById('swap-dir-s2g')?.addEventListener('click', () => {
+    state.swapCalc.dir = 's2g';
+    state.swapCalc.oz = 80;
+    state.swapCalc.targetRatio = 90;
+    const ozEl = document.getElementById('input-swap-oz');
+    const tgtEl = document.getElementById('input-swap-target-ratio');
+    if (ozEl) ozEl.value = '80';
+    if (tgtEl) tgtEl.value = '90';
+    renderRatioSwapCalculator();
+  });
+  document.getElementById('input-swap-oz')?.addEventListener('input', (e) => {
+    state.swapCalc.oz = parseFloat(e.target.value) || 0;
+    renderRatioSwapCalculator();
+  });
+  document.getElementById('input-swap-target-ratio')?.addEventListener('input', (e) => {
+    state.swapCalc.targetRatio = parseFloat(e.target.value) || 65;
+    renderRatioSwapCalculator();
+  });
+  document.getElementById('input-swap-friction')?.addEventListener('input', (e) => {
+    state.swapCalc.frictionPct = parseFloat(e.target.value) || 0;
+    renderRatioSwapCalculator();
+  });
+
+  // Self-Learning Visual Accuracy Chart Metal Toggle
+  document.getElementById('acc-chart-gold')?.addEventListener('click', () => {
+    state.accuracyChartMetal = 'gold';
+    renderAccuracyReplayChart(computeInteractiveOutlook());
+  });
+  document.getElementById('acc-chart-silver')?.addEventListener('click', () => {
+    state.accuracyChartMetal = 'silver';
+    renderAccuracyReplayChart(computeInteractiveOutlook());
+  });
+
+  // Smart Regime & Quiet-Hours Alerts controls
+  [
+    ['chk-alert-backwardation', 'backwardation'],
+    ['chk-alert-squeeze', 'shortSqueeze'],
+    ['chk-alert-dxy', 'dxyShock'],
+  ].forEach(([id, key]) => {
+    document.getElementById(id)?.addEventListener('change', (e) => {
+      if (!state.settings.smartAlerts) state.settings.smartAlerts = { ...DEFAULT_SETTINGS.smartAlerts };
+      state.settings.smartAlerts[key] = !!e.target.checked;
+      renderSettingsControls();
+      savePersistedState();
+    });
+  });
+
+  document.getElementById('chk-quiet-hours')?.addEventListener('change', (e) => {
+    if (!state.settings.quietHours) state.settings.quietHours = { ...DEFAULT_SETTINGS.quietHours };
+    state.settings.quietHours.enabled = !!e.target.checked;
+    renderSettingsControls();
+    savePersistedState();
+  });
+  document.getElementById('select-quiet-start')?.addEventListener('change', (e) => {
+    if (!state.settings.quietHours) state.settings.quietHours = { ...DEFAULT_SETTINGS.quietHours };
+    state.settings.quietHours.start = parseInt(e.target.value, 10);
+    renderSettingsControls();
+    savePersistedState();
+  });
+  document.getElementById('select-quiet-end')?.addEventListener('change', (e) => {
+    if (!state.settings.quietHours) state.settings.quietHours = { ...DEFAULT_SETTINGS.quietHours };
+    state.settings.quietHours.end = parseInt(e.target.value, 10);
+    renderSettingsControls();
+    savePersistedState();
+  });
+
+  // Export & Import JSON Backup (protects Stack, Lots & Custom Alerts from cache clears)
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 17,
+      version: 25,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
@@ -5322,7 +6511,10 @@ function wireEvents() {
           ...state.settings,
           ...parsed.settings,
           stack: { ...DEFAULT_SETTINGS.stack, ...(parsed.settings.stack || {}) },
+          stackLots: Array.isArray(parsed.settings.stackLots) ? parsed.settings.stackLots.slice(0, 100) : [],
           targets: { ...DEFAULT_SETTINGS.targets, ...(parsed.settings.targets || {}) },
+          smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts, ...(parsed.settings.smartAlerts || {}) },
+          quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(parsed.settings.quietHours || {}) },
         };
         if (Array.isArray(parsed.alertLog)) {
           state.alertLog = parsed.alertLog.slice(0, 25);
@@ -5345,6 +6537,7 @@ function wireEvents() {
     ['input-target-silver-above', 'silverAbove'],
     ['input-target-silver-below', 'silverBelow'],
     ['input-target-ratio-above', 'ratioAbove'],
+    ['input-target-ratio-below', 'ratioBelow'],
   ];
   let targetEvalTimer = null;
   targetInputs.forEach(([id, key]) => {
@@ -5536,6 +6729,7 @@ function wireEvents() {
   // Resize & visibility battery optimization
   window.addEventListener('resize', () => {
     renderChart();
+    renderAccuracyReplayChart(computeInteractiveOutlook());
     if (mcState.lastSim) renderMcTargetReadout();
   });
   document.addEventListener('visibilitychange', () => {

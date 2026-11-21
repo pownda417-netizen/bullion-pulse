@@ -5,6 +5,8 @@ import {
   classifyHeadlines,
   computeMarketRegimeDecomposition,
   computeQuantSignals,
+  computeRatioAnalytics,
+  computeSetupQuality,
   recencyDecayWeight,
 } from './historical_patterns.mjs';
 import { parseRssItems } from './analyze_outlook.mjs';
@@ -836,4 +838,83 @@ assert.ok(regimeOutlook.marketRegime?.gold && regimeOutlook.marketRegime?.silver
 assert.ok(regimeOutlook.gold.regime && regimeOutlook.silver.regime, 'buildOutlook must attach per-metal regime');
 assert.ok(regimeOutlook.narrative.includes('Regime decomposition:'), 'buildNarrative must include regime decomposition');
 
-console.log('All 21 Bullion Pulse suites (Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, Jump-Diffusion, FRED, COT, Miners, Shanghai & Accuracy) passed!');
+// 22. Regime-Aware Asymmetric Jump-Diffusion & Squeeze Exhaustion / Slam Risk
+const neutralJp = estimateJumpParams({
+  metal: 'silver',
+  dailyVol: 0.022,
+  unitScore: 0.1,
+  regime: { discoveryScore: 45, squeezeScore: 25, isBackwardation: false },
+  rsi14: 52,
+});
+const squeezeJp = estimateJumpParams({
+  metal: 'silver',
+  dailyVol: 0.022,
+  unitScore: 0.1,
+  regime: { discoveryScore: 48, squeezeScore: 76, isBackwardation: true },
+  rsi14: 64,
+});
+const exhaustionJp = estimateJumpParams({
+  metal: 'silver',
+  dailyVol: 0.022,
+  unitScore: 0.25,
+  regime: { discoveryScore: 34, squeezeScore: 78, isBackwardation: true },
+  rsi14: 83,
+});
+assert.ok(squeezeJp.jumpMean > neutralJp.jumpMean, `Squeeze right-tail jumpMean (${squeezeJp.jumpMean}) must exceed neutral (${neutralJp.jumpMean})`);
+assert.ok(squeezeJp.lambda > neutralJp.lambda, 'Squeeze regime must lift Poisson jump intensity lambda');
+assert.equal(squeezeJp.exhaustionRisk, false);
+assert.equal(exhaustionJp.exhaustionRisk, true, 'High squeeze + weak discovery + RSI >= 78 must trigger Squeeze Exhaustion flag');
+assert.ok(exhaustionJp.exhaustionLabel.includes('Slam Risk'));
+assert.ok(exhaustionJp.jumpMean < squeezeJp.jumpMean, 'Exhaustion slam risk must flip jump skew downward vs active squeeze');
+assert.ok(exhaustionJp.jumpSigma > neutralJp.jumpSigma, 'Exhaustion slam risk must widen tail jumpSigma');
+
+// 23. Gold/Silver Ratio Z-Score, 5-Year Percentile & Swap Signal
+const highRatio = computeRatioAnalytics({ ratio: 94.5 });
+const lowRatio = computeRatioAnalytics({ ratio: 63.0 });
+const fairRatio = computeRatioAnalytics({ ratio: 81.0 });
+assert.ok(highRatio.zScore > 1.0 && highRatio.percentile5y >= 85, `Ratio 94.5 must be > +1σ & >= 85th pct, got Z=${highRatio.zScore}, pct=${highRatio.percentile5y}`);
+assert.equal(highRatio.swapBias, 'Rotate Gold → Silver');
+assert.ok(lowRatio.zScore < -1.0 && lowRatio.percentile5y <= 15, `Ratio 63.0 must be < -1σ & <= 15th pct, got Z=${lowRatio.zScore}, pct=${lowRatio.percentile5y}`);
+assert.equal(lowRatio.swapBias, 'Rotate Silver → Gold');
+assert.equal(fairRatio.swapBias, 'Hold / Neutral');
+assert.ok(regimeOutlook.ratioAnalytics && Number.isFinite(regimeOutlook.ratioAnalytics.zScore), 'buildOutlook must attach ratioAnalytics');
+
+// 24. Plain-English Setup Quality / Actionability Classifier
+const sqExhaustion = computeSetupQuality({
+  metal: 'silver',
+  spot: 45,
+  regime: { discoveryScore: 34, squeezeScore: 75, isBackwardation: true },
+  rsi14: 82,
+  dailyVol: 0.022,
+  unitScore: 0.2,
+});
+assert.equal(sqExhaustion.label, 'Squeeze Exhaustion — Slam Risk');
+assert.equal(sqExhaustion.tone, 'bearish');
+assert.ok(sqExhaustion.support < 45 && sqExhaustion.resistance > 45);
+
+const sqDipBuy = computeSetupQuality({
+  metal: 'gold',
+  spot: 3500,
+  regime: { discoveryScore: 62, squeezeScore: 30, isBackwardation: false },
+  rsi14: 28,
+  dailyVol: 0.012,
+  unitScore: 0.18,
+});
+assert.equal(sqDipBuy.label, 'Accumulation / Dip-Buy Zone');
+assert.equal(sqDipBuy.tone, 'bullish');
+assert.ok(sqDipBuy.score >= 70);
+
+const sqHeadwind = computeSetupQuality({
+  metal: 'gold',
+  spot: 3500,
+  regime: { discoveryScore: 32, squeezeScore: 22, isBackwardation: false },
+  rsi14: 48,
+  dailyVol: 0.012,
+  dollarStrength: { score: 74 },
+  unitScore: -0.35,
+});
+assert.equal(sqHeadwind.label, 'Macro Headwind — Wait');
+assert.equal(sqHeadwind.tone, 'bearish');
+assert.ok(regimeOutlook.setupQuality?.gold && regimeOutlook.setupQuality?.silver, 'buildOutlook must attach setupQuality');
+
+console.log('All 24 Bullion Pulse suites (Asymmetric Regime Jump-Diffusion, Au/Ag Ratio Z-Score/Swap, Setup Quality, Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, FRED, COT, Miners, Shanghai & Accuracy) passed!');
