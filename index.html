@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=22" />
+  <link rel="stylesheet" href="./styles.css?v=23" />
 </head>
 <body>
   <div class="app-shell">
@@ -217,7 +217,7 @@
                 <h2 class="panel-title" id="chart-title">Gold (XAU/USD) · 1D (5m)</h2>
                 <span class="regime-pill neutral" id="chart-regime-pill">Gold Consolidation / Neutral</span>
               </div>
-              <div class="panel-subtitle" id="chart-subtitle">5m OHLC candles · Next refresh in 05:00</div>
+              <div class="panel-subtitle" id="chart-subtitle">5m OHLC candles · Next update in 00:15</div>
             </div>
             <div class="chart-controls">
               <button type="button" id="btn-toggle-forecast" class="chip-toggle active" aria-pressed="true">Forecast</button>
@@ -285,8 +285,8 @@
             <div class="stat-value" id="stat-close">$—</div>
           </div>
           <div class="stat-item">
-            <div class="stat-label">Candles</div>
-            <div class="stat-value" id="stat-refresh">5m live</div>
+            <div class="stat-label">Auto-Update</div>
+            <div class="stat-value" id="stat-refresh">15s live</div>
           </div>
         </section>
 
@@ -1044,6 +1044,6 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=22" defer></script>
+  <script src="./app.js?v=23" defer></script>
 </body>
 </html>

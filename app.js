@@ -1,7 +1,8 @@
 /* Bullion Pulse — Spot Gold & Silver PWA */
 
 const TROY_OZ_TO_GRAMS = 31.1034768;
-const REFRESH_MS = 30000;
+const REFRESH_MS = 15000;
+const SLOW_REFRESH_MS = 60000;
 const CANDLE_INTERVAL_MS = 5 * 60 * 1000;
 const STORAGE_KEY = 'bullion_pulse_state_v2';
 const ANON_FETCH_OPTS = {
@@ -131,6 +132,7 @@ const state = {
   },
   mode: 'connecting', // 'live' | 'demo' | 'error'
   lastUpdated: null,
+  nextRefreshAt: Date.now() + REFRESH_MS,
   refreshTimer: null,
   candleRefreshTimer: null,
   countdownTimer: null,
@@ -444,7 +446,12 @@ async function fetchLiveFuturesQuotes() {
   }
 }
 
+let spotFetchInFlight = false;
+let goldPriceOrgBlockedUntil = 0;
+
 async function fetchSpotQuotes(checkQuorum = false) {
+  if (spotFetchInFlight && !checkQuorum) return;
+  spotFetchInFlight = true;
   const refreshBtn = document.getElementById('btn-refresh');
   refreshBtn?.classList.add('spinning');
 
@@ -457,30 +464,38 @@ async function fetchSpotQuotes(checkQuorum = false) {
         fetchFromGoldApiCom(),
       ]);
       if (gpRes.status === 'fulfilled') {
+        goldPriceOrgBlockedUntil = 0;
         result = gpRes.value;
         if (gaRes.status === 'fulfilled' && result.gold.price > 0) {
           const spreadPct = Math.abs(result.gold.price - gaRes.value.gold.price) / result.gold.price * 100;
           state.liveMacro.consensusNote = spreadPct <= 0.65 ? 'Quorum ✓' : `Spread ${spreadPct.toFixed(1)}%`;
         }
       } else if (gaRes.status === 'fulfilled') {
+        goldPriceOrgBlockedUntil = Date.now() + 10 * 60 * 1000;
         result = gaRes.value;
       } else {
         throw new Error('All live spot feeds failed');
       }
       state.mode = 'live';
-    } else {
-      result = await fetchFromGoldPriceOrg();
-      state.mode = 'live';
-    }
-  } catch {
-    try {
+    } else if (Date.now() < goldPriceOrgBlockedUntil) {
       result = await fetchFromGoldApiCom();
       state.mode = 'live';
-    } catch {
-      result = buildFallbackDemoQuotes();
-      state.mode = 'demo';
+    } else {
+      try {
+        result = await fetchFromGoldPriceOrg();
+        state.mode = 'live';
+      } catch {
+        goldPriceOrgBlockedUntil = Date.now() + 10 * 60 * 1000;
+        result = await fetchFromGoldApiCom();
+        state.mode = 'live';
+      }
     }
+  } catch {
+    result = buildFallbackDemoQuotes();
+    state.mode = 'demo';
   } finally {
+    spotFetchInFlight = false;
+    state.nextRefreshAt = Date.now() + REFRESH_MS;
     setTimeout(() => refreshBtn?.classList.remove('spinning'), 350);
   }
 
@@ -1183,16 +1198,13 @@ function updateCandleCountdown() {
   if (!el) return;
   const tf = state.settings.chartTimeframe || '1d';
   const now = Date.now();
-  const nextClose = bucket5m(now) + CANDLE_INTERVAL_MS;
-  const remaining = nextClose - now;
+  const nextTickAt = state.nextRefreshAt || now + REFRESH_MS;
+  const remaining = Math.max(0, nextTickAt - now);
   if (tf === '1d') {
-    el.textContent = `5m OHLC candles · Next refresh in ${formatCountdown(remaining)}`;
+    el.textContent = `5m OHLC candles · Next update in ${formatCountdown(remaining)}`;
   } else {
     const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
-    el.textContent = `${meta.subtitle} · Live spot synced`;
-  }
-  if (remaining <= 1000) {
-    fetchCandlesData();
+    el.textContent = `${meta.subtitle} · Live update in ${formatCountdown(remaining)}`;
   }
 }
 
@@ -5560,11 +5572,15 @@ function startPolling() {
   if (state.refreshTimer) clearInterval(state.refreshTimer);
   if (state.candleRefreshTimer) clearInterval(state.candleRefreshTimer);
   if (state.countdownTimer) clearInterval(state.countdownTimer);
-  state.refreshTimer = setInterval(fetchSpotQuotes, REFRESH_MS);
+  state.nextRefreshAt = Date.now() + REFRESH_MS;
+  state.refreshTimer = setInterval(() => {
+    state.nextRefreshAt = Date.now() + REFRESH_MS;
+    fetchSpotQuotes();
+  }, REFRESH_MS);
   state.candleRefreshTimer = setInterval(() => {
     fetchCandlesData();
     refreshSlowFeeds(true);
-  }, CANDLE_INTERVAL_MS);
+  }, SLOW_REFRESH_MS);
   state.countdownTimer = setInterval(updateCandleCountdown, 1000);
   updateCandleCountdown();
 }
