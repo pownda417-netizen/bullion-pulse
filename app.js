@@ -59,6 +59,8 @@ const DEFAULT_SETTINGS = {
   direction: 'both', // 'both' | 'up' | 'down'
   ntfyTopic: '',
   unit: 'oz', // 'oz' | 'g'
+  currency: 'USD', // 'USD' | 'CAD' | 'EUR' | 'GBP' | 'AUD' | 'MXN'
+  privacyMode: false,
   theme: 'dark',
   selectedMetal: 'gold',
   chartMode: 'gold', // 'gold' | 'silver' | 'ratio'
@@ -79,6 +81,20 @@ const DEFAULT_SETTINGS = {
     silverSpreadPct: -6.0,
   },
   stackLots: [],
+  stackGoals: {
+    goldOz: '',
+    silverOz: '',
+    targetUsd: '',
+  },
+  ladder: {
+    budget: 1000,
+    metal: 'auto',
+  },
+  dealGrader: {
+    preset: 'ase_1oz',
+    qty: 1,
+    ask: '',
+  },
   targets: {
     goldAbove: '',
     goldBelow: '',
@@ -91,11 +107,19 @@ const DEFAULT_SETTINGS = {
     backwardation: true,
     shortSqueeze: true,
     dxyShock: true,
+    morningDigest: false,
   },
   quietHours: {
     enabled: false,
     start: 22,
     end: 7,
+  },
+  subViews: {
+    markets: 'live',
+    outlook: 'forecast',
+    trade: 'swap',
+    stack: 'overview',
+    alerts: 'rules',
   },
 };
 
@@ -104,10 +128,48 @@ const state = {
     ...DEFAULT_SETTINGS,
     stack: { ...DEFAULT_SETTINGS.stack },
     stackLots: [],
+    stackGoals: { ...DEFAULT_SETTINGS.stackGoals },
+    ladder: { ...DEFAULT_SETTINGS.ladder },
+    dealGrader: { ...DEFAULT_SETTINGS.dealGrader },
     targets: { ...DEFAULT_SETTINGS.targets },
     smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts },
     quietHours: { ...DEFAULT_SETTINGS.quietHours },
+    subViews: { ...DEFAULT_SETTINGS.subViews },
   },
+  fxRates: {
+    USD: 1,
+    CAD: 1.43,
+    EUR: 0.91,
+    GBP: 0.76,
+    CHF: 0.84,
+    AUD: 1.5,
+    MXN: 19.03,
+    INR: 93.37,
+    CNY: 6.69,
+    JPY: 159.75,
+    THB: 33.94,
+    LAK: 22369,
+    SGD: 1.29,
+    HKD: 7.84,
+    KRW: 1331,
+    VND: 25730,
+    IDR: 18262,
+    AED: 3.67,
+    SAR: 3.75,
+    TRY: 50.53,
+    ZAR: 17.41,
+  },
+  whatIfPrices: {
+    gold: null,
+    silver: null,
+  },
+  lastLadderTargets: {
+    goldDipUsd: null,
+    silverDipUsd: null,
+  },
+  speechActive: false,
+  activeView: 'markets',
+  lastMainView: 'markets',
   quotes: {
     gold: { price: null, prevClose: null, chg: 0, pct: 0 },
     silver: { price: null, prevClose: null, chg: 0, pct: 0 },
@@ -187,9 +249,13 @@ function loadPersistedState() {
         ...parsed.settings,
         stack: { ...DEFAULT_SETTINGS.stack, ...(parsed.settings.stack || {}) },
         stackLots: Array.isArray(parsed.settings.stackLots) ? parsed.settings.stackLots.slice(0, 100) : [],
+        stackGoals: { ...DEFAULT_SETTINGS.stackGoals, ...(parsed.settings.stackGoals || {}) },
+        ladder: { ...DEFAULT_SETTINGS.ladder, ...(parsed.settings.ladder || {}) },
+        dealGrader: { ...DEFAULT_SETTINGS.dealGrader, ...(parsed.settings.dealGrader || {}) },
         targets: { ...DEFAULT_SETTINGS.targets, ...(parsed.settings.targets || {}) },
         smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts, ...(parsed.settings.smartAlerts || {}) },
         quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(parsed.settings.quietHours || {}) },
+        subViews: { ...DEFAULT_SETTINGS.subViews, ...(parsed.settings.subViews || {}) },
       };
       if (!parsed.settings.chartMode && parsed.settings.selectedMetal) {
         state.settings.chartMode = parsed.settings.selectedMetal;
@@ -234,27 +300,135 @@ function savePersistedState() {
   }
 }
 
-/* ---------- Formatting Helpers ---------- */
+/* ---------- Multi-Currency, Privacy & Formatting Helpers ---------- */
+
+const CURRENCY_META = {
+  USD: { symbol: '$', label: 'USD', zeroDecimals: false },
+  CAD: { symbol: 'C$', label: 'CAD', zeroDecimals: false },
+  EUR: { symbol: '€', label: 'EUR', zeroDecimals: false },
+  GBP: { symbol: '£', label: 'GBP', zeroDecimals: false },
+  CHF: { symbol: 'Fr', label: 'CHF', zeroDecimals: false },
+  AUD: { symbol: 'A$', label: 'AUD', zeroDecimals: false },
+  MXN: { symbol: 'MX$', label: 'MXN', zeroDecimals: false },
+  INR: { symbol: '₹', label: 'INR', zeroDecimals: false },
+  CNY: { symbol: 'CN¥', label: 'CNY', zeroDecimals: false },
+  JPY: { symbol: '¥', label: 'JPY', zeroDecimals: true },
+  THB: { symbol: '฿', label: 'THB', zeroDecimals: false },
+  LAK: { symbol: '₭', label: 'LAK', zeroDecimals: true },
+  SGD: { symbol: 'S$', label: 'SGD', zeroDecimals: false },
+  HKD: { symbol: 'HK$', label: 'HKD', zeroDecimals: false },
+  KRW: { symbol: '₩', label: 'KRW', zeroDecimals: true },
+  VND: { symbol: '₫', label: 'VND', zeroDecimals: true },
+  IDR: { symbol: 'Rp', label: 'IDR', zeroDecimals: true },
+  AED: { symbol: 'DH ', label: 'AED', zeroDecimals: false },
+  SAR: { symbol: 'SR ', label: 'SAR', zeroDecimals: false },
+  TRY: { symbol: '₺', label: 'TRY', zeroDecimals: false },
+  ZAR: { symbol: 'R', label: 'ZAR', zeroDecimals: false },
+};
+
+function getCurrencyCode() {
+  const c = String(state.settings.currency || 'USD').toUpperCase();
+  return CURRENCY_META[c] ? c : 'USD';
+}
+
+function getCurrencySymbol() {
+  return CURRENCY_META[getCurrencyCode()].symbol;
+}
+
+function getFxRate() {
+  const code = getCurrencyCode();
+  const r = Number(state.fxRates?.[code]);
+  return Number.isFinite(r) && r > 0 ? r : 1;
+}
+
+function isPrivacyOn() {
+  return !!state.settings.privacyMode;
+}
+
+function applyPrivacyMode() {
+  const hidden = isPrivacyOn();
+  const btn = document.getElementById('btn-privacy-toggle');
+  const icon = document.getElementById('icon-privacy');
+  if (btn) {
+    btn.classList.toggle('active', hidden);
+    btn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+    btn.title = hidden
+      ? 'Privacy Mode ON — click to show your stack amounts'
+      : 'Privacy Mode — hide your stack amounts';
+  }
+  if (icon) {
+    icon.innerHTML = hidden
+      ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" />'
+      : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />';
+  }
+}
 
 function convertUnit(usdPerOz) {
   if (usdPerOz == null || Number.isNaN(usdPerOz)) return null;
   return state.settings.unit === 'g' ? usdPerOz / TROY_OZ_TO_GRAMS : usdPerOz;
 }
 
-function formatMoney(value, decimals = 2) {
-  if (value == null || Number.isNaN(value)) return '$—';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value);
+function formatMoney(value, decimals = 2, opts = null) {
+  const usdOnly = !!opts?.usdOnly;
+  const code = usdOnly ? 'USD' : getCurrencyCode();
+  const meta = CURRENCY_META[code] || CURRENCY_META.USD;
+  const sym = meta.symbol;
+  if (value == null || Number.isNaN(value)) return `${sym}—`;
+  const rate = usdOnly ? 1 : getFxRate();
+  const converted = Number(value) * rate;
+  const dec = meta.zeroDecimals ? 0 : decimals;
+  const sign = converted < 0 ? '−' : '';
+  const numStr = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: dec,
+    maximumFractionDigits: dec,
+  }).format(Math.abs(converted));
+  return `${sign}${sym}${numStr}`;
 }
 
-function formatSignedMoney(value, decimals = 2) {
-  if (value == null || Number.isNaN(value)) return '$—';
+function formatCompactMoney(value, decimals = 2, opts = null) {
+  const usdOnly = !!opts?.usdOnly;
+  const code = usdOnly ? 'USD' : getCurrencyCode();
+  const meta = CURRENCY_META[code] || CURRENCY_META.USD;
+  if (value == null || Number.isNaN(value)) return `${meta.symbol}—`;
+  const rate = usdOnly ? 1 : getFxRate();
+  const converted = Number(value) * rate;
+  const abs = Math.abs(converted);
+  const sign = converted < 0 ? '−' : '';
+  if (abs >= 1_000_000_000) {
+    return `${sign}${meta.symbol}${(abs / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (abs >= 1_000_000) {
+    return `${sign}${meta.symbol}${(abs / 1_000_000).toFixed(2)}M`;
+  }
+  return formatMoney(value, decimals, opts);
+}
+
+function formatSignedMoney(value, decimals = 2, opts = null) {
+  const sym = opts?.usdOnly ? '$' : getCurrencySymbol();
+  if (value == null || Number.isNaN(value)) return `${sym}—`;
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
-  return `${sign}${formatMoney(Math.abs(value), decimals)}`;
+  return `${sign}${formatMoney(Math.abs(value), decimals, opts)}`;
+}
+
+function privMoney(value, decimals = 2) {
+  return isPrivacyOn() ? `${getCurrencySymbol()}•••••` : formatMoney(value, decimals);
+}
+
+function privSignedMoney(value, decimals = 2) {
+  return isPrivacyOn() ? `${getCurrencySymbol()}•••••` : formatSignedMoney(value, decimals);
+}
+
+function normalCdf(z) {
+  const x = Number(z) || 0;
+  const sign = x < 0 ? -1 : 1;
+  const a = Math.abs(x) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * a);
+  const erf =
+    1 -
+    (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t) *
+      Math.exp(-a * a);
+  return 0.5 * (1 + sign * erf);
 }
 
 function formatSignedPct(pct) {
@@ -457,7 +631,7 @@ async function fetchLiveDxyIndex() {
       if (!res.ok) return null;
       const json = await res.json();
       const val = computeIceDxyFromRates(json?.rates);
-      return val != null ? { val, label } : null;
+      return val != null ? { val, label, rates: json?.rates || null } : null;
     } catch {
       return null;
     } finally {
@@ -468,17 +642,31 @@ async function fetchLiveDxyIndex() {
   const hit =
     (await tryEndpoint('https://open.er-api.com/v6/latest/USD', 'Live ICE DXY')) ||
     (await tryEndpoint(
-      'https://api.frankfurter.app/latest?from=USD&to=EUR,JPY,GBP,CAD,SEK,CHF',
+      'https://api.frankfurter.app/latest?from=USD&to=EUR,JPY,GBP,CAD,SEK,CHF,AUD,MXN,THB,CNY,INR,SGD,HKD,KRW,IDR,TRY,ZAR',
       'Live ICE DXY'
     ));
 
   if (hit) {
+    if (hit.rates) {
+      for (const code of Object.keys(CURRENCY_META)) {
+        if (code === 'USD') continue;
+        const r = Number(hit.rates[code]);
+        if (Number.isFinite(r) && r > 0) state.fxRates[code] = r;
+      }
+    }
     state.liveMacro.dxy = hit.val;
     state.liveMacro.dxySource = hit.label;
     state.feedHealth.dxyAt = Date.now();
     state.feedHealth.dxyLive = true;
     renderMacroStrip();
     renderFeedHealth();
+    if (getCurrencyCode() !== 'USD') {
+      renderMetalCard('gold');
+      renderMetalCard('silver');
+      renderFuturesPanel();
+      renderStats();
+      renderShanghai();
+    }
     renderOutlook();
     renderStackTracker();
     renderChart();
@@ -935,7 +1123,8 @@ function renderMetalCard(metal) {
   const threshold =
     metal === 'gold' ? state.settings.goldThreshold : state.settings.silverThreshold;
   const decimals = metal === 'silver' || state.settings.unit === 'g' ? 2 : 2;
-  const unitSuffix = state.settings.unit === 'g' ? 'USD / gram' : 'USD / troy oz';
+  const curr = getCurrencyCode();
+  const unitSuffix = state.settings.unit === 'g' ? `${curr} / gram` : `${curr} / troy oz`;
 
   const priceEl = document.getElementById(`${metal}-price`);
   const chgEl = document.getElementById(`${metal}-chg`);
@@ -956,7 +1145,9 @@ function renderMetalCard(metal) {
   const displayPrice = convertUnit(rawPrice);
   const displayChg = convertUnit(quote.chg || 0);
 
-  priceEl.textContent = formatMoney(displayPrice, decimals);
+  const formattedPrice = formatMoney(displayPrice, decimals);
+  priceEl.textContent = formattedPrice;
+  priceEl.classList.toggle('long-val', formattedPrice.length >= 11);
   chgEl.textContent = quote.price != null ? `${formatSignedMoney(displayChg, decimals)} today` : 'Syncing live tick…';
 
   pctEl.textContent = formatSignedPct(quote.pct);
@@ -2003,7 +2194,8 @@ function renderChart() {
     ctx.lineTo(padLeft + plotW, y);
     ctx.stroke();
     ctx.fillStyle = mutedCol;
-    ctx.fillText(fmtChartVal(val, val >= 500 ? 0 : 2), w - 2, y);
+    const axisTxt = isRatio ? `${Number(val).toFixed(1)}:1` : formatCompactMoney(val, val >= 500 ? 0 : 2);
+    ctx.fillText(axisTxt, w - 2, y);
   }
 
   // Reference baseline (Prev close on 1D, period open on longer ranges)
@@ -2503,9 +2695,42 @@ function renderSettingsControls() {
   const chkBackw = document.getElementById('chk-alert-backwardation');
   const chkSqz = document.getElementById('chk-alert-squeeze');
   const chkDxy = document.getElementById('chk-alert-dxy');
+  const chkDigest = document.getElementById('chk-morning-digest');
   if (chkBackw) chkBackw.checked = sa.backwardation !== false;
   if (chkSqz) chkSqz.checked = sa.shortSqueeze !== false;
   if (chkDxy) chkDxy.checked = sa.dxyShock !== false;
+  if (chkDigest) chkDigest.checked = !!sa.morningDigest;
+
+  const selCurrency = document.getElementById('select-currency');
+  if (selCurrency) selCurrency.value = getCurrencyCode();
+  applyPrivacyMode();
+
+  const goals = state.settings.stackGoals || DEFAULT_SETTINGS.stackGoals;
+  const goalFieldMap = [
+    ['input-goal-gold-oz', goals.goldOz],
+    ['input-goal-silver-oz', goals.silverOz],
+    ['input-goal-usd', goals.targetUsd],
+  ];
+  for (const [id, val] of goalFieldMap) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = val ?? '';
+  }
+
+  const ladder = state.settings.ladder || DEFAULT_SETTINGS.ladder;
+  const ladderBudgetEl = document.getElementById('input-ladder-budget');
+  const ladderMetalEl = document.getElementById('select-ladder-metal');
+  if (ladderBudgetEl && document.activeElement !== ladderBudgetEl) {
+    ladderBudgetEl.value = ladder.budget ?? 1000;
+  }
+  if (ladderMetalEl) ladderMetalEl.value = ladder.metal || 'auto';
+
+  const dg = state.settings.dealGrader || DEFAULT_SETTINGS.dealGrader;
+  const dgPreset = document.getElementById('deal-preset');
+  const dgQty = document.getElementById('input-deal-qty');
+  const dgAsk = document.getElementById('input-deal-ask');
+  if (dgPreset) dgPreset.value = dg.preset || 'ase_1oz';
+  if (dgQty && document.activeElement !== dgQty) dgQty.value = dg.qty ?? 1;
+  if (dgAsk && document.activeElement !== dgAsk) dgAsk.value = dg.ask ?? '';
 
   const qh = state.settings.quietHours || DEFAULT_SETTINGS.quietHours;
   const chkQuiet = document.getElementById('chk-quiet-hours');
@@ -2547,6 +2772,7 @@ function renderSettingsControls() {
     extraTargets.push(`ALERT_BACKWARDATION=${sa.backwardation !== false}`);
     extraTargets.push(`ALERT_SHORT_SQUEEZE=${sa.shortSqueeze !== false}`);
     extraTargets.push(`ALERT_DXY_SHOCK=${sa.dxyShock !== false}`);
+    if (sa.morningDigest) extraTargets.push('MORNING_DIGEST=true');
     if (qh.enabled) {
       extraTargets.push(`QUIET_HOURS_START=${qh.start}`);
       extraTargets.push(`QUIET_HOURS_END=${qh.end}`);
@@ -3738,9 +3964,8 @@ function renderFuturesPanel(outlookRes = null) {
     const dec = dispFut >= 500 ? 2 : 2;
     if (priceEl) priceEl.textContent = formatMoney(dispFut, dec);
     if (basisEl) {
-      const sign = dispBasis > 0 ? '+' : dispBasis < 0 ? '−' : '';
       const pctSign = data.basisPct > 0 ? '+' : data.basisPct < 0 ? '−' : '';
-      basisEl.textContent = `Diff vs Spot: ${sign}$${Math.abs(dispBasis).toFixed(2)}/${uLbl} (${pctSign}${Math.abs(data.basisPct).toFixed(2)}%)`;
+      basisEl.textContent = `Diff vs Spot: ${formatSignedMoney(dispBasis, 2)}/${uLbl} (${pctSign}${Math.abs(data.basisPct).toFixed(2)}%)`;
       basisEl.className = `futures-basis ${data.isBackwardation ? 'up' : data.basisPct > 1.15 ? 'down' : ''}`;
     }
     if (curveEl) {
@@ -4071,6 +4296,581 @@ function renderAccuracyReplayChart(res) {
   });
 }
 
+/* ---------- v27 Outlook Features: Buy-the-Dip Ladder, Spoken Brief, Shareable Card & Purchasing Power ---------- */
+
+function formatRealGoldPick(oz, priceUsd) {
+  const grams = oz * TROY_OZ_TO_GRAMS;
+  const oneGramUsd = priceUsd / TROY_OZ_TO_GRAMS;
+  if (grams < 0.72) {
+    return {
+      usesGrams: true,
+      text: `Save toward 1g gold bar (~${formatMoney(oneGramUsd, 0)}/g)`,
+    };
+  }
+  if (grams < 1.55) return { usesGrams: true, text: `≈ 1g gold bar (${grams.toFixed(1)}g)` };
+  if (grams < 2.15) return { usesGrams: true, text: `≈ 2× 1g gold bars (${grams.toFixed(1)}g)` };
+  if (grams < 2.85) return { usesGrams: true, text: `≈ 2.5g gold bar (${grams.toFixed(1)}g)` };
+  if (grams < 4.1) return { usesGrams: false, text: `≈ 1/10 oz gold coin (${grams.toFixed(1)}g)` };
+  if (grams < 6.4) return { usesGrams: true, text: `≈ 5g gold bar (${grams.toFixed(1)}g)` };
+  if (grams < 9.0) return { usesGrams: false, text: `≈ 1/4 oz gold coin (${grams.toFixed(1)}g)` };
+  if (grams < 12.8) return { usesGrams: true, text: `≈ 10g gold bar (${grams.toFixed(1)}g)` };
+  if (grams < 18.5) return { usesGrams: false, text: `≈ 1/2 oz gold coin (${grams.toFixed(1)}g)` };
+  if (grams < 26.5) return { usesGrams: false, text: `≈ 1/2 oz + 1/4 oz gold (${oz.toFixed(2)} oz)` };
+  if (grams < 37.5) return { usesGrams: false, text: `≈ 1 oz gold coin/bar` };
+  const wholeOz = Math.floor(oz + 0.08);
+  const remOz = Math.max(0, oz - wholeOz);
+  let tail = '';
+  if (remOz >= 0.42) tail = ' + 1/2 oz';
+  else if (remOz >= 0.2) tail = ' + 1/4 oz';
+  else if (remOz >= 0.08) tail = ' + 1/10 oz';
+  else if (remOz * TROY_OZ_TO_GRAMS >= 2.0) tail = ` + ${Math.round(remOz * TROY_OZ_TO_GRAMS)}g`;
+  return { usesGrams: false, text: `≈ ${wholeOz}× 1 oz${tail} gold` };
+}
+
+function formatRealSilverPick(oz) {
+  if (oz < 0.65) {
+    const face90 = oz / 0.715;
+    return `≈ $${face90.toFixed(2)} face 90% silver (${oz.toFixed(2)} oz)`;
+  }
+  const rounded = Math.max(1, Math.round(oz));
+  if (rounded <= 8) return `≈ ${rounded}× 1 oz silver coin${rounded === 1 ? '' : 's'}`;
+  if (rounded <= 11) return `≈ 10 oz silver bar (${oz.toFixed(1)} oz)`;
+  if (rounded <= 18) {
+    const extra = rounded - 10;
+    return `≈ 10 oz bar + ${extra}× 1 oz coin${extra === 1 ? '' : 's'}`;
+  }
+  if (rounded <= 22) return `≈ 20-coin tube (1 oz silver)`;
+  if (rounded >= 90 && rounded <= 115) return `≈ 100 oz silver bar (${Math.round(oz)} oz)`;
+  const bars10 = Math.floor(rounded / 10);
+  const rem = rounded % 10;
+  return rem >= 2
+    ? `≈ ${bars10}× 10 oz bar${bars10 === 1 ? '' : 's'} + ${rem}× 1 oz`
+    : `≈ ${bars10}× 10 oz silver bar${bars10 === 1 ? '' : 's'}`;
+}
+
+function renderBuyLadder(res) {
+  const stepsEl = document.getElementById('buy-ladder-steps');
+  const summaryEl = document.getElementById('buy-ladder-summary');
+  const subtitleEl = document.getElementById('buy-ladder-subtitle');
+  if (!stepsEl) return;
+
+  const ladderCfg = state.settings.ladder || DEFAULT_SETTINGS.ladder;
+  const budgetDisp = Math.max(50, Number(ladderCfg.budget) || 1000);
+  const fx = getFxRate();
+  const budgetUsd = budgetDisp / fx;
+  const choice = ladderCfg.metal || 'auto';
+
+  const budgetLbl = document.querySelector('#panel-buy-ladder label span');
+  if (budgetLbl) budgetLbl.textContent = `Your Budget (${getCurrencySymbol()})`;
+
+  let gShare = 0.5;
+  let sShare = 0.5;
+  let splitNote = 'Balanced 50% Gold / 50% Silver split';
+  if (choice === 'gold') {
+    gShare = 1;
+    sShare = 0;
+    splitNote = '100% Gold focus across 3 staged entry prices (matched to real grams & fractional coins)';
+  } else if (choice === 'silver') {
+    gShare = 0;
+    sShare = 1;
+    splitNote = '100% Silver focus across 3 staged entry prices (matched to real coins & bars)';
+  } else {
+    const tone = res?.ratioAnalytics?.tone;
+    if (tone === 'bullish') {
+      gShare = 0.3;
+      sShare = 0.7;
+      splitNote = 'Smart Split: 70% Silver / 30% Gold (Silver is historically cheap vs. Gold)';
+    } else if (tone === 'gold') {
+      gShare = 0.7;
+      sShare = 0.3;
+      splitNote = 'Smart Split: 70% Gold / 30% Silver (Gold is better relative value right now)';
+    } else {
+      gShare = 0.5;
+      sShare = 0.5;
+      splitNote = 'Smart Split: 50% Gold / 50% Silver (Ratio near 5-year normal)';
+    }
+  }
+  if (subtitleEl) subtitleEl.textContent = splitNote;
+
+  const gSpot = res.gold.spot;
+  const sSpot = res.silver.spot;
+  const gFloor = Math.min(gSpot * 0.992, res.setupQuality?.gold?.support || gSpot * 0.975);
+  const sFloor = Math.min(sSpot * 0.992, res.setupQuality?.silver?.support || sSpot * 0.96);
+
+  const gLow30 = Math.min(
+    gFloor * 0.972,
+    Math.min(res.gold.range.bear, gSpot * (1 - 1.35 * (res.gold.dailyVol || 0.011) * Math.sqrt(30)))
+  );
+  const sLow30 = Math.min(
+    sFloor * 0.955,
+    Math.min(res.silver.range.bear, sSpot * (1 - 1.35 * (res.silver.dailyVol || 0.021) * Math.sqrt(30)))
+  );
+
+  state.lastLadderTargets = {
+    goldDipUsd: gShare > 0 ? Math.round(gFloor) : null,
+    silverDipUsd: sShare > 0 ? +sFloor.toFixed(2) : null,
+  };
+
+  const steps = [
+    {
+      cls: 'step-1',
+      tag: 'Step 1 · 35% Today',
+      pct: 0.35,
+      title: 'Starter Position Now',
+      gPrice: gSpot,
+      sPrice: sSpot,
+      note: 'Gets you in the door without risking missing a rally.',
+    },
+    {
+      cls: 'step-2',
+      tag: 'Step 2 · 35% First Dip',
+      pct: 0.35,
+      title: 'Near-Term Support Floor',
+      gPrice: gFloor,
+      sPrice: sFloor,
+      note: 'Adds on a normal pullback to key buyer support.',
+    },
+    {
+      cls: 'step-3',
+      tag: 'Step 3 · 30% Deep Sale',
+      pct: 0.3,
+      title: '30-Day Low Pullback',
+      gPrice: gLow30,
+      sPrice: sLow30,
+      note: 'Saves dry powder for sharp flush-outs or dollar spikes.',
+    },
+  ];
+
+  let totalGoldOz = 0;
+  let totalSilverOz = 0;
+
+  stepsEl.innerHTML = steps
+    .map((st) => {
+      const stepUsd = budgetUsd * st.pct;
+      const gAmt = stepUsd * gShare;
+      const sAmt = stepUsd * sShare;
+      const gOz = gAmt > 0 ? gAmt / st.gPrice : 0;
+      const sOz = sAmt > 0 ? sAmt / st.sPrice : 0;
+      totalGoldOz += gOz;
+      totalSilverOz += sOz;
+
+      const lines = [];
+      if (gAmt > 0) {
+        const gPick = formatRealGoldPick(gOz, st.gPrice);
+        const gPriceTag = gPick.usesGrams
+          ? `${formatMoney(st.gPrice / TROY_OZ_TO_GRAMS, 0)}/g`
+          : `${formatMoney(st.gPrice, 0)}/oz`;
+        lines.push(
+          `<strong>Gold (${formatMoney(gAmt, 0)})</strong> ≤ ${escapeHtml(gPriceTag)} → ${escapeHtml(gPick.text)}`
+        );
+      }
+      if (sAmt > 0) {
+        const sPick = formatRealSilverPick(sOz);
+        lines.push(
+          `<strong>Silver (${formatMoney(sAmt, 0)})</strong> ≤ ${escapeHtml(formatMoney(st.sPrice, 2))}/oz → ${escapeHtml(sPick)}`
+        );
+      }
+      return `
+        <article class="ladder-step-card ${st.cls}">
+          <div class="ladder-step-top">
+            <span class="ladder-step-tag">${escapeHtml(st.tag)}</span>
+            <strong class="ladder-step-amt">${formatMoney(stepUsd, 0)}</strong>
+          </div>
+          <div class="ladder-step-trigger">${escapeHtml(st.title)}</div>
+          <div class="ladder-step-detail">${lines.join('<br>')}</div>
+          <div class="ladder-step-detail" style="font-family:var(--font-sans);">${escapeHtml(st.note)}</div>
+        </article>`;
+    })
+    .join('');
+
+  if (summaryEl) {
+    const parts = [];
+    if (gShare > 0 && totalGoldOz > 0) {
+      const avgG = (budgetUsd * gShare) / totalGoldOz;
+      const saveG = ((gSpot - avgG) / gSpot) * 100;
+      const totGoldPick = formatRealGoldPick(totalGoldOz, avgG).text;
+      const avgTag = totGoldPick.includes('g ') || totGoldPick.includes('1g')
+        ? `${formatMoney(avgG / TROY_OZ_TO_GRAMS, 0)}/g`
+        : `${formatMoney(avgG, 0)}/oz`;
+      parts.push(`Gold total ${totGoldPick} (avg ${avgTag} · saves ${saveG.toFixed(1)}% vs today)`);
+    }
+    if (sShare > 0 && totalSilverOz > 0) {
+      const avgS = (budgetUsd * sShare) / totalSilverOz;
+      const saveS = ((sSpot - avgS) / sSpot) * 100;
+      const totSilverPick = formatRealSilverPick(totalSilverOz);
+      parts.push(`Silver total ${totSilverPick} (avg ${formatMoney(avgS, 2)}/oz · saves ${saveS.toFixed(1)}% vs today)`);
+    }
+    summaryEl.textContent = `Full ladder: ${parts.join(' · ')}`;
+  }
+}
+
+function applyLadderDipAlerts() {
+  const feedback = document.getElementById('ladder-alert-feedback');
+  const t = state.lastLadderTargets || {};
+  if (!state.settings.targets) state.settings.targets = { ...DEFAULT_SETTINGS.targets };
+  const setParts = [];
+  if (t.goldDipUsd) {
+    state.settings.targets.goldBelow = String(t.goldDipUsd);
+    if (state.sessionAlerted.targets) delete state.sessionAlerted.targets.goldBelow;
+    setParts.push(`Gold ≤ ${formatMoney(t.goldDipUsd, 0)}`);
+  }
+  if (t.silverDipUsd) {
+    state.settings.targets.silverBelow = String(t.silverDipUsd);
+    if (state.sessionAlerted.targets) delete state.sessionAlerted.targets.silverBelow;
+    setParts.push(`Silver ≤ ${formatMoney(t.silverDipUsd, 2)}`);
+  }
+  if (!setParts.length) return;
+  renderSettingsControls();
+  savePersistedState();
+  if (feedback) {
+    feedback.className = 'feedback-note ok';
+    feedback.textContent = `Dip alerts saved! ${setParts.join(' · ')} — synced to Settings (⚙).`;
+  }
+}
+
+function toggleBriefingSpeech() {
+  const btn = document.getElementById('btn-listen-brief');
+  const feedback = document.getElementById('share-card-feedback');
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (feedback) {
+      feedback.className = 'feedback-note err';
+      feedback.textContent = 'Spoken audio is not supported in this browser.';
+    }
+    return;
+  }
+
+  if (state.speechActive || window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+    state.speechActive = false;
+    if (btn) {
+      btn.textContent = '🔊 Listen';
+      btn.classList.remove('speaking');
+    }
+    return;
+  }
+
+  const res = computeInteractiveOutlook();
+  const gPct = state.quotes.gold.pct || 0;
+  const sPct = state.quotes.silver.pct || 0;
+  const dirPct = (p) => `${p >= 0 ? 'up' : 'down'} ${Math.abs(p).toFixed(1)} percent`;
+  const script =
+    `Bullion Pulse market briefing. ` +
+    `Gold is trading at ${formatMoney(res.gold.spot, 0)} per ounce, ${dirPct(gPct)} today, rated ${res.setupQuality.gold.label}. ` +
+    `Silver is at ${formatMoney(res.silver.spot, 2)} per ounce, ${dirPct(sPct)} today, rated ${res.setupQuality.silver.label}. ` +
+    `${res.narrative}`;
+
+  const utter = new SpeechSynthesisUtterance(script);
+  utter.rate = 1.02;
+  utter.pitch = 1.0;
+  utter.onend = () => {
+    state.speechActive = false;
+    if (btn) {
+      btn.textContent = '🔊 Listen';
+      btn.classList.remove('speaking');
+    }
+  };
+  utter.onerror = () => {
+    state.speechActive = false;
+    if (btn) {
+      btn.textContent = '🔊 Listen';
+      btn.classList.remove('speaking');
+    }
+  };
+
+  state.speechActive = true;
+  if (btn) {
+    btn.textContent = '⏹ Stop';
+    btn.classList.add('speaking');
+  }
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utter);
+}
+
+function exportShareMarketCard() {
+  const feedback = document.getElementById('share-card-feedback');
+  try {
+    const res = computeInteractiveOutlook();
+    const W = 1200;
+    const H = 630;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Background dark luxury gradient
+    const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+    bgGrad.addColorStop(0, '#0D0E12');
+    bgGrad.addColorStop(0.55, '#13161F');
+    bgGrad.addColorStop(1, '#0B0C10');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle warm gold radial glow
+    const glow = ctx.createRadialGradient(240, 120, 20, 240, 120, 420);
+    glow.addColorStop(0, 'rgba(212, 168, 67, 0.16)');
+    glow.addColorStop(1, 'rgba(212, 168, 67, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    // Outer border
+    ctx.strokeStyle = 'rgba(212, 168, 67, 0.35)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 20, W - 40, H - 40);
+
+    // Header
+    ctx.fillStyle = '#F3D27A';
+    ctx.font = '700 28px Inter, system-ui, sans-serif';
+    ctx.fillText('BULLION PULSE', 56, 78);
+
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '600 16px Inter, system-ui, sans-serif';
+    ctx.fillText(`DAILY GOLD & SILVER MARKET SNAPSHOT · ${getCurrencyCode()}`, 56, 106);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#E5E7EB';
+    ctx.font = '600 17px "JetBrains Mono", monospace';
+    const stamp = new Date().toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    ctx.fillText(`${stamp} · Live Feed`, W - 56, 86);
+    ctx.textAlign = 'left';
+
+    // Helper for rounded rect
+    const roundRect = (x, y, w, h, r) => {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    };
+
+    const hLbl = outlookState.horizon === '30d' ? '30-Day' : '7-Day';
+    const cards = [
+      {
+        x: 56,
+        title: 'GOLD SPOT (XAU)',
+        accent: '#F3D27A',
+        spot: formatMoney(res.gold.spot, 2),
+        pct: state.quotes.gold.pct || 0,
+        target: `${hLbl} Expected: ${formatMoney(res.gold.range.base, 0)}`,
+        range: `Range ${formatMoney(res.gold.range.bear, 0)} – ${formatMoney(res.gold.range.bull, 0)}`,
+        verdict: `${res.setupQuality.gold.label} (${res.setupQuality.gold.score}/100)`,
+      },
+      {
+        x: 616,
+        title: 'SILVER SPOT (XAG)',
+        accent: '#CBD5E1',
+        spot: formatMoney(res.silver.spot, 2),
+        pct: state.quotes.silver.pct || 0,
+        target: `${hLbl} Expected: ${formatMoney(res.silver.range.base, 2)}`,
+        range: `Range ${formatMoney(res.silver.range.bear, 2)} – ${formatMoney(res.silver.range.bull, 2)}`,
+        verdict: `${res.setupQuality.silver.label} (${res.setupQuality.silver.score}/100)`,
+      },
+    ];
+
+    cards.forEach((c) => {
+      roundRect(c.x, 140, 528, 286, 18);
+      ctx.fillStyle = 'rgba(24, 27, 36, 0.92)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = c.accent;
+      ctx.font = '700 17px Inter, system-ui, sans-serif';
+      ctx.fillText(c.title, c.x + 28, 180);
+
+      const pctStr = formatSignedPct(c.pct);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = c.pct >= 0 ? '#22C55E' : '#EF4444';
+      ctx.font = '700 22px "JetBrains Mono", monospace';
+      ctx.fillText(pctStr, c.x + 500, 182);
+      ctx.textAlign = 'left';
+
+      ctx.fillStyle = '#F9FAFB';
+      ctx.font = '700 54px "JetBrains Mono", monospace';
+      ctx.fillText(c.spot, c.x + 28, 252);
+
+      ctx.fillStyle = '#D1D5DB';
+      ctx.font = '600 20px "JetBrains Mono", monospace';
+      ctx.fillText(c.target, c.x + 28, 304);
+
+      ctx.fillStyle = '#9CA3AF';
+      ctx.font = '500 16px "JetBrains Mono", monospace';
+      ctx.fillText(c.range, c.x + 28, 336);
+
+      roundRect(c.x + 28, 360, 472, 42, 10);
+      ctx.fillStyle = 'rgba(212, 168, 67, 0.14)';
+      ctx.fill();
+      ctx.fillStyle = '#F3D27A';
+      ctx.font = '700 16px Inter, system-ui, sans-serif';
+      ctx.fillText(`Verdict: ${c.verdict}`, c.x + 44, 387);
+    });
+
+    // Bottom 3-metric intelligence bar (never includes private stack!)
+    const ratioVal = res.silver.spot > 0 ? (res.gold.spot / res.silver.spot).toFixed(1) : '—';
+    const dxyVal = res.dollarStrength?.dxy != null ? res.dollarStrength.dxy.toFixed(1) : '—';
+    const supplyState =
+      res.futures?.gold?.isBackwardation || res.futures?.silver?.isBackwardation
+        ? 'Tight Physical Supply ↑'
+        : 'Normal Futures Curve';
+
+    const pills = [
+      { label: 'GOLD / SILVER RATIO', val: `${ratioVal} : 1`, sub: res.ratioAnalytics?.swapBias || 'Fairly Priced' },
+      {
+        label: 'US DOLLAR STRENGTH',
+        val: `${dxyVal} (${res.dollarStrength?.score ?? 50}/100)`,
+        sub: res.dollarStrength?.regime || 'Normal Dollar',
+      },
+      { label: 'SUPPLY PRESSURE', val: supplyState, sub: `Signal Agreement ${res.base?.confidence || 62}%` },
+    ];
+
+    pills.forEach((p, idx) => {
+      const px = 56 + idx * 370;
+      roundRect(px, 452, 348, 106, 14);
+      ctx.fillStyle = 'rgba(20, 23, 31, 0.9)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.stroke();
+
+      ctx.fillStyle = '#9CA3AF';
+      ctx.font = '600 12px Inter, system-ui, sans-serif';
+      ctx.fillText(p.label, px + 20, 480);
+
+      ctx.fillStyle = '#F9FAFB';
+      ctx.font = '700 20px "JetBrains Mono", monospace';
+      ctx.fillText(p.val, px + 20, 512);
+
+      ctx.fillStyle = '#D1D5DB';
+      ctx.font = '500 14px Inter, system-ui, sans-serif';
+      ctx.fillText(p.sub.slice(0, 34), px + 20, 540);
+    });
+
+    // Footer
+    ctx.fillStyle = '#6B7280';
+    ctx.font = '500 14px Inter, system-ui, sans-serif';
+    ctx.fillText(
+      'Public market snapshot only · Personal stack balances are never included · pownda417-netizen.github.io/bullion-pulse',
+      56,
+      594
+    );
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const fileName = `bullion-pulse-snapshot-${todayKey()}.png`;
+      try {
+        const file = new File([blob], fileName, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Bullion Pulse Market Snapshot',
+            text: `Gold ${formatMoney(res.gold.spot)} · Silver ${formatMoney(res.silver.spot)}`,
+          });
+          if (feedback) {
+            feedback.className = 'feedback-note ok';
+            feedback.textContent = 'Shared clean Market Snapshot! (Zero personal stack data included.)';
+          }
+          return;
+        }
+      } catch {
+        // Fall through to standard PNG download if share canceled/unsupported
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      if (feedback) {
+        feedback.className = 'feedback-note ok';
+        feedback.textContent = `Saved ${fileName} (clean public market card — zero private stack info).`;
+      }
+    }, 'image/png');
+  } catch (err) {
+    if (feedback) {
+      feedback.className = 'feedback-note err';
+      feedback.textContent = `Could not generate share card: ${err.message}`;
+    }
+  }
+}
+
+function renderPurchasingPower(res) {
+  const homeEl = document.getElementById('pp-home-oz');
+  const carEl = document.getElementById('pp-car-oz');
+  const spxEl = document.getElementById('pp-spx-gold');
+  const barsEl = document.getElementById('pp-bars-list');
+  const titleEl = document.querySelector('#panel-purchasing-power .pp-compare-title');
+  if (!homeEl || !barsEl) return;
+
+  const gSpot = Math.max(1, res?.gold?.spot || 3500);
+  const sSpot = Math.max(1, res?.silver?.spot || 41);
+  const sp500 = Number(res?.base?.macroSnapshot?.sp500) || 5950;
+
+  const homeOz = 415000 / gSpot;
+  const carOz = 48500 / gSpot;
+  const spxRatio = sp500 / gSpot;
+
+  homeEl.textContent = `${Math.round(homeOz)} oz Gold`;
+  if (carEl) carEl.textContent = `${carOz.toFixed(1)} oz Gold`;
+  if (spxEl) spxEl.textContent = `${spxRatio.toFixed(2)}×`;
+
+  const baseStartUsd = 10000;
+  if (titleEl) {
+    titleEl.textContent = `If you put ${formatMoney(baseStartUsd, 0)} away in 2020 (Real Buying Power Today)`;
+  }
+
+  const cashNowUsd = 7940; // ~26% cumulative CPI erosion since 2020
+  const goldNowUsd = baseStartUsd * (gSpot / 1770);
+  const silverNowUsd = baseStartUsd * (sSpot / 20.55);
+  const maxVal = Math.max(cashNowUsd, goldNowUsd, silverNowUsd, baseStartUsd);
+
+  const items = [
+    {
+      name: 'Paper Cash (After ~26% Inflation)',
+      valUsd: cashNowUsd,
+      pct: ((cashNowUsd - baseStartUsd) / baseStartUsd) * 100,
+      cls: 'cash',
+      valCls: 'down',
+    },
+    {
+      name: 'Physical Gold (Since 2020)',
+      valUsd: goldNowUsd,
+      pct: ((goldNowUsd - baseStartUsd) / baseStartUsd) * 100,
+      cls: 'gold',
+      valCls: goldNowUsd >= baseStartUsd ? 'up' : 'down',
+    },
+    {
+      name: 'Physical Silver (Since 2020)',
+      valUsd: silverNowUsd,
+      pct: ((silverNowUsd - baseStartUsd) / baseStartUsd) * 100,
+      cls: 'silver',
+      valCls: silverNowUsd >= baseStartUsd ? 'up' : 'down',
+    },
+  ];
+
+  barsEl.innerHTML = items
+    .map((it) => {
+      const widthPct = Math.max(8, Math.min(100, Math.round((it.valUsd / maxVal) * 100)));
+      return `
+        <div class="pp-bar-row">
+          <div class="pp-bar-head">
+            <span class="pp-bar-name">${escapeHtml(it.name)}</span>
+            <span class="pp-bar-val ${it.valCls}">${formatMoney(it.valUsd, 0)} (${formatSignedPct(it.pct)})</span>
+          </div>
+          <div class="pp-bar-track">
+            <div class="pp-bar-fill ${it.cls}" style="width:${widthPct}%"></div>
+          </div>
+        </div>`;
+    })
+    .join('');
+}
+
 function renderOutlook() {
   const view = document.getElementById('view-outlook');
   if (!view) return;
@@ -4116,7 +4916,9 @@ function renderOutlook() {
   document.getElementById('outlook-narrative').textContent = res.narrative;
   renderSetupQuality(res);
   renderRatioAnalytics(res);
+  renderBuyLadder(res);
   renderDollarStrength(res);
+  renderPurchasingPower(res);
 
   const outlookRegimePill = document.getElementById('outlook-regime-pill');
   if (outlookRegimePill && res.marketRegime?.gold && res.marketRegime?.silver) {
@@ -5098,7 +5900,7 @@ function drawMcPathsCanvas(sim, metal, targetOz) {
     ctx.lineTo(padLeft + plotW, y);
     ctx.stroke();
     ctx.fillStyle = mutedCol;
-    ctx.fillText(formatMoney(convertUnit(val), val >= 100 ? 0 : 2), w - 2, y);
+    ctx.fillText(formatCompactMoney(convertUnit(val), val >= 100 ? 0 : 2), w - 2, y);
   }
 
   const fillEnvelope = (upperArr, lowerArr, fillStyle) => {
@@ -5209,7 +6011,12 @@ function renderMcTargetReadout() {
     mcState.targetByMetal[metal] = rawTarget;
   }
 
-  const targetOz = state.settings.unit === 'g' ? rawTarget * TROY_OZ_TO_GRAMS : rawTarget;
+  const currSpan = document.querySelector('.mc-currency');
+  if (currSpan) currSpan.textContent = getCurrencySymbol();
+
+  const fx = getFxRate();
+  const rawUsd = rawTarget / fx;
+  const targetOz = state.settings.unit === 'g' ? rawUsd * TROY_OZ_TO_GRAMS : rawUsd;
   const res = evaluateMcTarget(sim, targetOz);
 
   const deltaEl = document.getElementById('mc-target-delta');
@@ -5545,11 +6352,11 @@ function renderMacroStrip() {
     state.liveMacro.dxy != null ? state.liveMacro.dxySource || 'Live ICE DXY' : null
   );
   setTile('macro-tnx', 'macro-tnx-chg', snap.tnx != null ? `${Number(snap.tnx).toFixed(2)}%` : '—', snap.tnx5dPct);
-  setTile('macro-copper', 'macro-copper-chg', snap.copper != null ? `$${Number(snap.copper).toFixed(2)}` : '—', snap.cu5dPct);
+  setTile('macro-copper', 'macro-copper-chg', snap.copper != null ? formatMoney(Number(snap.copper), 2) : '—', snap.cu5dPct);
   setTile(
     'macro-platinum',
     'macro-platinum-chg',
-    livePlat != null ? `$${Math.round(Number(livePlat)).toLocaleString('en-US')}` : '—',
+    livePlat != null ? formatMoney(Number(livePlat), 0) : '—',
     snap.platinum5dPct,
     state.liveMacro.platinum != null ? 'Live XPT' : null
   );
@@ -5588,6 +6395,278 @@ function syncLotsToStackTotals() {
   }
 }
 
+const DEAL_PRESETS = {
+  ase_1oz: { name: '1 oz American Silver Eagle', metal: 'silver', ozPerUnit: 1.0, lowPct: 8, highPct: 16, qtyLabel: 'Quantity (coins)' },
+  silver_maple: { name: '1 oz Silver Maple / Britannia', metal: 'silver', ozPerUnit: 1.0, lowPct: 5, highPct: 11, qtyLabel: 'Quantity (coins)' },
+  silver_round: { name: '1 oz Generic Silver Round', metal: 'silver', ozPerUnit: 1.0, lowPct: 3, highPct: 7.5, qtyLabel: 'Quantity (rounds)' },
+  silver_bar_10: { name: '10 oz Silver Bar', metal: 'silver', ozPerUnit: 10.0, lowPct: 2.5, highPct: 6.5, qtyLabel: 'Quantity (bars)' },
+  junk_90: { name: '90% Pre-1965 US Silver', metal: 'silver', ozPerUnit: 0.715, lowPct: 2, highPct: 8, qtyLabel: 'Face Value ($1 = 0.715 oz)' },
+  junk_40: { name: '40% Silver Half Dollars', metal: 'silver', ozPerUnit: 0.295, lowPct: -2, highPct: 5, qtyLabel: 'Face Value ($1 = 0.295 oz)' },
+  age_1oz: { name: '1 oz American Gold Eagle', metal: 'gold', ozPerUnit: 1.0, lowPct: 3.5, highPct: 6.5, qtyLabel: 'Quantity (coins)' },
+  agb_1oz: { name: '1 oz American Gold Buffalo', metal: 'gold', ozPerUnit: 1.0, lowPct: 3.8, highPct: 7.0, qtyLabel: 'Quantity (coins)' },
+  gold_bar_1oz: { name: '1 oz Gold Bar / Maple', metal: 'gold', ozPerUnit: 1.0, lowPct: 1.5, highPct: 4.0, qtyLabel: 'Quantity (bars/coins)' },
+  gold_tenth: { name: '1/10 oz Gold Coin', metal: 'gold', ozPerUnit: 0.1, lowPct: 8, highPct: 15, qtyLabel: 'Quantity (coins)' },
+  gold_14k_g: { name: '14K Gold Jewelry (58.3% pure)', metal: 'gold', ozPerUnit: 0.5833 / TROY_OZ_TO_GRAMS, lowPct: 10, highPct: 25, qtyLabel: 'Weight (grams)' },
+  gold_18k_g: { name: '18K Gold Jewelry (75% pure)', metal: 'gold', ozPerUnit: 0.75 / TROY_OZ_TO_GRAMS, lowPct: 10, highPct: 25, qtyLabel: 'Weight (grams)' },
+  gold_24k_g: { name: '24K Pure Gold (99.9% pure)', metal: 'gold', ozPerUnit: 1.0 / TROY_OZ_TO_GRAMS, lowPct: 4, highPct: 12, qtyLabel: 'Weight (grams)' },
+};
+
+function renderDealGrader() {
+  if (!document.getElementById('panel-deal-grader')) return;
+  const dg = state.settings.dealGrader || DEFAULT_SETTINGS.dealGrader;
+  const preset = DEAL_PRESETS[dg.preset] || DEAL_PRESETS.ase_1oz;
+  const qty = Math.max(0.01, parseFloat(dg.qty) || 1);
+  const askInput = parseFloat(dg.ask);
+
+  const qtyLbl = document.getElementById('deal-qty-label');
+  const askLbl = document.getElementById('deal-ask-label');
+  const badgeEl = document.getElementById('deal-grade-badge');
+  const meltEl = document.getElementById('deal-melt-val');
+  const ozEl = document.getElementById('deal-pure-oz');
+  const markupEl = document.getElementById('deal-markup-val');
+  const rangeEl = document.getElementById('deal-typical-range');
+  const beEl = document.getElementById('deal-breakeven-val');
+  const beSubEl = document.getElementById('deal-breakeven-sub');
+  const noteEl = document.getElementById('deal-verdict-note');
+
+  if (qtyLbl) qtyLbl.textContent = preset.qtyLabel;
+  if (askLbl) askLbl.textContent = `Seller Asking Price (Total ${getCurrencySymbol()})`;
+
+  const canonical = getCanonicalSpotPrices();
+  const spotUsd = preset.metal === 'silver' ? canonical.silver : canonical.gold;
+  const pureOz = qty * preset.ozPerUnit;
+  const meltUsd = pureOz * spotUsd;
+  const metalWord = preset.metal === 'silver' ? 'Silver' : 'Gold';
+
+  if (meltEl) meltEl.textContent = formatMoney(meltUsd, 2);
+  if (ozEl) ozEl.textContent = `${pureOz.toFixed(pureOz >= 1 ? 3 : 4)} pure oz ${metalWord}`;
+  if (rangeEl) rangeEl.textContent = `Typical markup: ${preset.lowPct}%–${preset.highPct}%`;
+
+  if (!Number.isFinite(askInput) || askInput <= 0 || meltUsd <= 0) {
+    if (badgeEl) {
+      badgeEl.textContent = 'Enter Price';
+      badgeEl.className = 'signal-pill';
+    }
+    if (markupEl) {
+      markupEl.textContent = '—';
+      markupEl.className = 'stack-stat-v';
+    }
+    if (beEl) beEl.textContent = `${getCurrencySymbol()}—`;
+    if (beSubEl) beSubEl.textContent = `Fair range: ${formatMoney(meltUsd * (1 + preset.lowPct / 100))} – ${formatMoney(meltUsd * (1 + preset.highPct / 100))}`;
+    if (noteEl) {
+      noteEl.className = 'deal-verdict-note';
+      noteEl.textContent = `Pure metal melt is ${formatMoney(meltUsd)}. Enter the seller's total asking price above to grade this deal right now.`;
+    }
+    return;
+  }
+
+  const askUsd = askInput / getFxRate();
+  const markupUsd = askUsd - meltUsd;
+  const markupPct = (markupUsd / meltUsd) * 100;
+  const breakEvenUsd = pureOz > 0 ? askUsd / pureOz : 0;
+  const beMovePct = spotUsd > 0 ? ((breakEvenUsd - spotUsd) / spotUsd) * 100 : 0;
+
+  if (markupEl) {
+    markupEl.textContent = `${formatSignedMoney(markupUsd)} (${formatSignedPct(markupPct)})`;
+    markupEl.className = `stack-stat-v ${markupPct <= preset.lowPct ? 'up' : markupPct > preset.highPct ? 'down' : ''}`;
+  }
+  if (beEl) beEl.textContent = `${formatMoney(breakEvenUsd, preset.metal === 'silver' ? 2 : 0)}/oz`;
+  if (beSubEl) {
+    beSubEl.textContent =
+      beMovePct <= 0
+        ? `Instant equity (${formatSignedPct(Math.abs(beMovePct))} below spot)`
+        : `${metalWord} needs +${beMovePct.toFixed(1)}% to break even`;
+  }
+
+  let gradeLabel = 'Fair Price';
+  let badgeCls = 'signal-pill';
+  let noteCls = 'deal-verdict-note fair';
+  let verdictMsg = `Fair Price — markup (${markupPct.toFixed(1)}%) sits right inside the normal shop range (${preset.lowPct}%–${preset.highPct}%) for ${preset.name}.`;
+
+  if (markupPct <= 0) {
+    gradeLabel = 'Below Melt! 🔥';
+    badgeCls = 'signal-pill bullish';
+    noteCls = 'deal-verdict-note great';
+    verdictMsg = `Steal — priced ${Math.abs(markupPct).toFixed(1)}% below pure metal melt (${formatMoney(meltUsd)}). Double-check weight and authenticity before buying.`;
+  } else if (markupPct <= preset.lowPct) {
+    gradeLabel = 'Great Deal';
+    badgeCls = 'signal-pill bullish';
+    noteCls = 'deal-verdict-note great';
+    verdictMsg = `Great Deal — paying ${markupPct.toFixed(1)}% over spot is at or below the low end of normal shop prices for ${preset.name}.`;
+  } else if (markupPct > preset.highPct) {
+    gradeLabel = 'Overpriced';
+    badgeCls = 'signal-pill bearish';
+    noteCls = 'deal-verdict-note high';
+    const fairTop = meltUsd * (1 + preset.highPct / 100);
+    verdictMsg = `Overpriced — you're paying ${(markupPct - preset.highPct).toFixed(1)}% above normal shop prices. Try negotiating closer to ${formatMoney(fairTop)} or compare other dealers.`;
+  }
+
+  if (badgeEl) {
+    badgeEl.textContent = gradeLabel;
+    badgeEl.className = badgeCls;
+  }
+  if (noteEl) {
+    noteEl.className = noteCls;
+    noteEl.textContent = verdictMsg;
+  }
+}
+
+function renderStackGoalsAndWhatIf() {
+  if (!document.getElementById('panel-stack-goals')) return;
+
+  const st = state.settings.stack || {};
+  const gOz = Math.max(0, parseFloat(st.goldOz) || 0);
+  const sOz = Math.max(0, parseFloat(st.silverOz) || 0);
+  const canonical = getCanonicalSpotPrices();
+  const gSpot = canonical.gold;
+  const sSpot = canonical.silver;
+  const totalValUsd = gOz * gSpot + sOz * sSpot;
+  const hidden = isPrivacyOn();
+
+  // Goals progress bars
+  const goals = state.settings.stackGoals || DEFAULT_SETTINGS.stackGoals;
+  const gGoal = Math.max(0, parseFloat(goals.goldOz) || 0);
+  const sGoal = Math.max(0, parseFloat(goals.silverOz) || 0);
+  const fx = getFxRate();
+  const rawUsdGoalInput = Math.max(0, parseFloat(goals.targetUsd) || 0);
+  const targetValUsd = rawUsdGoalInput > 0 ? rawUsdGoalInput / fx : 0;
+
+  const goalUsdLbl = document.getElementById('input-goal-usd')?.closest('label')?.querySelector('span');
+  if (goalUsdLbl) goalUsdLbl.textContent = `Value Goal (${getCurrencySymbol()})`;
+
+  const progListEl = document.getElementById('stack-goals-progress');
+  const oddsEl = document.getElementById('stack-goal-odds');
+  const goalRows = [];
+
+  if (gGoal > 0) {
+    const pct = Math.min(100, (gOz / gGoal) * 100);
+    const rem = Math.max(0, gGoal - gOz);
+    goalRows.push({
+      label: 'Gold Ounces Goal',
+      cls: '',
+      pct,
+      nums: hidden
+        ? `••• / ${gGoal.toFixed(2)} oz (${pct.toFixed(0)}%)`
+        : `${gOz.toFixed(2)} / ${gGoal.toFixed(2)} oz (${pct.toFixed(0)}%)${rem > 0 ? ` · ${rem.toFixed(2)} oz left` : ' · Reached! 🎉'}`,
+    });
+  }
+  if (sGoal > 0) {
+    const pct = Math.min(100, (sOz / sGoal) * 100);
+    const rem = Math.max(0, sGoal - sOz);
+    goalRows.push({
+      label: 'Silver Ounces Goal',
+      cls: 'silver',
+      pct,
+      nums: hidden
+        ? `••• / ${sGoal.toFixed(0)} oz (${pct.toFixed(0)}%)`
+        : `${sOz.toFixed(1)} / ${sGoal.toFixed(0)} oz (${pct.toFixed(0)}%)${rem > 0 ? ` · ${rem.toFixed(1)} oz left` : ' · Reached! 🎉'}`,
+    });
+  }
+  if (targetValUsd > 0) {
+    const pct = Math.min(100, (totalValUsd / targetValUsd) * 100);
+    const rem = Math.max(0, targetValUsd - totalValUsd);
+    goalRows.push({
+      label: 'Stack Value Goal',
+      cls: '',
+      pct,
+      nums: hidden
+        ? `${getCurrencySymbol()}••••• / ${formatMoney(targetValUsd, 0)} (${pct.toFixed(0)}%)`
+        : `${formatMoney(totalValUsd, 0)} / ${formatMoney(targetValUsd, 0)} (${pct.toFixed(0)}%)${rem > 0 ? ` · ${formatMoney(rem, 0)} left` : ' · Reached! 🎉'}`,
+    });
+  }
+
+  if (progListEl) {
+    if (!goalRows.length) {
+      progListEl.innerHTML =
+        '<div class="empty-state">Enter a Gold oz, Silver oz, or Dollar value goal above to track progress bars &amp; 1-year odds.</div>';
+    } else {
+      progListEl.innerHTML = goalRows
+        .map(
+          (r) => `
+          <div class="goal-prog-row">
+            <div class="goal-prog-head">
+              <span class="goal-prog-label">${escapeHtml(r.label)}</span>
+              <span class="goal-prog-nums">${escapeHtml(r.nums)}</span>
+            </div>
+            <div class="goal-prog-track">
+              <div class="goal-prog-fill ${r.cls}" style="width:${r.pct.toFixed(1)}%"></div>
+            </div>
+          </div>`
+        )
+        .join('');
+    }
+  }
+
+  if (oddsEl) {
+    if (targetValUsd > 0 && totalValUsd > 0) {
+      if (totalValUsd >= targetValUsd) {
+        oddsEl.textContent = 'Goal Reached! 🎉';
+        oddsEl.className = 'signal-pill bullish';
+      } else {
+        const wG = (gOz * gSpot) / totalValUsd;
+        const wS = 1 - wG;
+        const sigG = 0.175;
+        const sigS = 0.31;
+        const rho = 0.78;
+        const portVol = Math.sqrt(wG * wG * sigG * sigG + wS * wS * sigS * sigS + 2 * rho * wG * wS * sigG * sigS);
+        const mu = 0.085;
+        const z = (Math.log(targetValUsd / totalValUsd) - (mu - 0.5 * portVol * portVol)) / Math.max(0.08, portVol);
+        const prob = clampNum(Math.round((1 - normalCdf(z)) * 100), 1, 99);
+        oddsEl.textContent = `~${prob}% chance in 1 yr`;
+        oddsEl.className = `signal-pill ${prob >= 55 ? 'bullish' : ''}`;
+      }
+    } else if (goalRows.length) {
+      const avgPct = Math.round(goalRows.reduce((s, r) => s + r.pct, 0) / goalRows.length);
+      oddsEl.textContent = `${avgPct}% to goals`;
+      oddsEl.className = `signal-pill ${avgPct >= 100 ? 'bullish' : ''}`;
+    } else {
+      oddsEl.textContent = 'Set a goal';
+      oddsEl.className = 'signal-pill';
+    }
+  }
+
+  // Interactive Future Price Wealth Sliders (USD internal, formatted in active currency)
+  if (state.whatIfPrices.gold == null) state.whatIfPrices.gold = Math.round(gSpot);
+  if (state.whatIfPrices.silver == null) state.whatIfPrices.silver = +sSpot.toFixed(2);
+
+  const simG = clampNum(Number(state.whatIfPrices.gold) || gSpot, 2000, 10000);
+  const simS = clampNum(Number(state.whatIfPrices.silver) || sSpot, 20, 250);
+
+  const gSlider = document.getElementById('slider-whatif-gold');
+  const sSlider = document.getElementById('slider-whatif-silver');
+  const gValEl = document.getElementById('whatif-gold-val');
+  const sValEl = document.getElementById('whatif-silver-val');
+  const totEl = document.getElementById('whatif-total-val');
+  const gainEl = document.getElementById('whatif-gain-val');
+  const ratioEl = document.getElementById('whatif-ratio-val');
+
+  if (gSlider && document.activeElement !== gSlider) gSlider.value = String(Math.round(simG));
+  if (sSlider && document.activeElement !== sSlider) sSlider.value = String(+simS.toFixed(1));
+  if (gValEl) gValEl.textContent = `${formatMoney(simG, 0)}/oz`;
+  if (sValEl) sValEl.textContent = `${formatMoney(simS, 2)}/oz`;
+
+  const futureTotal = gOz * simG + sOz * simS;
+  const gainUsd = futureTotal - totalValUsd;
+  const gainPct = totalValUsd > 0 ? (gainUsd / totalValUsd) * 100 : 0;
+
+  if (totEl) totEl.textContent = privMoney(futureTotal, 2);
+  if (gainEl) {
+    if (gOz <= 0 && sOz <= 0) {
+      gainEl.textContent = 'Add ounces above to simulate your stack';
+      gainEl.className = 'whatif-gain';
+    } else if (hidden) {
+      gainEl.textContent = 'Hidden (Privacy Mode ON)';
+      gainEl.className = 'whatif-gain';
+    } else {
+      gainEl.textContent = `${formatSignedMoney(gainUsd, 0)} (${formatSignedPct(gainPct)}) vs today`;
+      gainEl.className = `whatif-gain ${gainUsd > 0.5 ? 'up' : gainUsd < -0.5 ? 'down' : ''}`;
+    }
+  }
+  if (ratioEl) {
+    ratioEl.textContent = `Simulated Ratio: ${(simG / Math.max(0.01, simS)).toFixed(1)} : 1`;
+  }
+}
+
 function renderStackLots() {
   const listEl = document.getElementById('stack-lots-list');
   const countEl = document.getElementById('stack-lots-count');
@@ -5600,6 +6679,7 @@ function renderStackLots() {
     return;
   }
   const canonical = getCanonicalSpotPrices();
+  const hidden = isPrivacyOn();
   listEl.innerHTML = lots
     .map((lot) => {
       const isSilver = lot.metal === 'silver';
@@ -5610,23 +6690,28 @@ function renderStackLots() {
       const paid = oz * cost;
       const pnl = melt - paid;
       const pnlPct = paid > 0 ? (pnl / paid) * 100 : 0;
-      const cls = pnl > 0.01 ? 'up' : pnl < -0.01 ? 'down' : '';
+      const cls = hidden ? '' : pnl > 0.01 ? 'up' : pnl < -0.01 ? 'down' : '';
       const badgeCls = isSilver ? 'silver' : 'gold';
       const sym = isSilver ? 'XAG' : 'XAU';
       const notePart = lot.note ? ` · ${escapeHtml(lot.note)}` : '';
+      const ozLabel = hidden ? '••• oz' : `${oz.toFixed(isSilver ? 2 : 3)} oz`;
+      const paidLine = hidden
+        ? 'Cost hidden (Privacy Mode)'
+        : `Paid ${formatMoney(cost)}/oz (Basis ${formatMoney(paid)})`;
+      const pnlLine = hidden ? '•••••' : `${formatSignedMoney(pnl)} (${formatSignedPct(pnlPct)})`;
       return `
         <div class="lot-row">
           <div class="lot-main">
             <div class="lot-title">
               <span class="metal-badge ${badgeCls}" style="width:24px;height:24px;font-size:9px;">${sym}</span>
-              <span>${oz.toFixed(isSilver ? 2 : 3)} oz · ${escapeHtml(lot.form || 'Bullion')}${notePart}</span>
+              <span>${ozLabel} · ${escapeHtml(lot.form || 'Bullion')}${notePart}</span>
             </div>
-            <div class="lot-sub">Paid ${formatMoney(cost)}/oz (Basis ${formatMoney(paid)})</div>
+            <div class="lot-sub">${paidLine}</div>
           </div>
           <div class="lot-right">
             <div class="lot-val-box">
-              <strong>${formatMoney(melt)}</strong>
-              <span class="${cls}">${formatSignedMoney(pnl)} (${formatSignedPct(pnlPct)})</span>
+              <strong>${privMoney(melt)}</strong>
+              <span class="${cls}">${pnlLine}</span>
             </div>
             <button type="button" class="lot-del-btn" data-lot-id="${escapeHtml(lot.id)}" aria-label="Remove lot" title="Remove lot">&times;</button>
           </div>
@@ -5699,7 +6784,11 @@ function renderStackTracker() {
   syncLotsToStackTotals();
   renderStackLots();
   renderRatioSwapCalculator();
+  renderDealGrader();
+  renderStackGoalsAndWhatIf();
+  applyPrivacyMode();
 
+  const hidden = isPrivacyOn();
   const totalEl = document.getElementById('stack-total-val');
   const buybackValEl = document.getElementById('stack-buyback-val');
   const buybackSubEl = document.getElementById('stack-buyback-sub');
@@ -5723,22 +6812,23 @@ function renderStackTracker() {
   const sSpread = Number.isFinite(parseFloat(st.silverSpreadPct)) ? parseFloat(st.silverSpreadPct) : -6.0;
 
   if (gOz <= 0 && sOz <= 0) {
-    if (totalEl) totalEl.textContent = '$0.00';
-    if (buybackValEl) buybackValEl.textContent = '$0.00';
+    const zeroText = hidden ? `${getCurrencySymbol()}•••••` : formatMoney(0, 2);
+    if (totalEl) totalEl.textContent = zeroText;
+    if (buybackValEl) buybackValEl.textContent = zeroText;
     if (buybackSubEl) buybackSubEl.textContent = `Au ${gSpread}% · Ag ${sSpread}%`;
-    if (headerMeltValEl) headerMeltValEl.textContent = '$0.00';
+    if (headerMeltValEl) headerMeltValEl.textContent = zeroText;
     if (headerMeltBtnEl) headerMeltBtnEl.className = 'header-melt-btn';
     if (dayEl) {
-      dayEl.textContent = 'Enter oz above to track live';
+      dayEl.textContent = hidden ? 'Hidden (Privacy Mode ON)' : 'Enter oz above to track live';
       dayEl.className = 'stack-stat-s';
     }
     if (pnlValEl) {
-      pnlValEl.textContent = '—';
+      pnlValEl.textContent = hidden ? `${getCurrencySymbol()}•••••` : '—';
       pnlValEl.className = 'stack-stat-v';
     }
-    if (pnlPctEl) pnlPctEl.textContent = 'Cost basis vs spot';
+    if (pnlPctEl) pnlPctEl.textContent = 'What you paid vs. today';
     if (splitEl) splitEl.textContent = '—';
-    if (sgeEl) sgeEl.textContent = 'Shanghai physical est.';
+    if (sgeEl) sgeEl.textContent = 'Est. value at China prices';
     if (scStripEl) scStripEl.hidden = true;
     if (breakdownEl) {
       breakdownEl.innerHTML =
@@ -5746,7 +6836,7 @@ function renderStackTracker() {
     }
     if (milestonesEl) {
       milestonesEl.innerHTML =
-        '<div class="empty-state">Add holdings above to calculate DXY FX impact and price milestone valuations.</div>';
+        '<div class="empty-state">Add holdings above to calculate US Dollar impact and future price scenarios.</div>';
     }
     return;
   }
@@ -5765,19 +6855,30 @@ function renderStackTracker() {
   const prevTotal = totalVal - dayChg;
   const dayPct = prevTotal > 0 ? (dayChg / prevTotal) * 100 : 0;
 
-  const formattedTotal = totalVal > 0 ? formatMoney(totalVal) : '$—';
+  const formattedTotal = totalVal > 0 ? privMoney(totalVal) : `${getCurrencySymbol()}—`;
+  const formattedHeaderTotal = totalVal > 0
+    ? (hidden ? `${getCurrencySymbol()}•••••` : formatCompactMoney(totalVal))
+    : `${getCurrencySymbol()}—`;
   if (totalEl) totalEl.textContent = formattedTotal;
-  if (buybackValEl) buybackValEl.textContent = totalVal > 0 ? formatMoney(buybackVal) : '$—';
+  if (buybackValEl) buybackValEl.textContent = totalVal > 0 ? privMoney(buybackVal) : `${getCurrencySymbol()}—`;
   if (buybackSubEl) {
-    buybackSubEl.textContent =
-      totalVal > 0 ? `${formatSignedMoney(buybackDiff)} vs melt (Au ${gSpread}% / Ag ${sSpread}%)` : 'After dealer spread';
+    buybackSubEl.textContent = hidden
+      ? `Hidden (Au ${gSpread}% / Ag ${sSpread}%)`
+      : totalVal > 0
+        ? `${formatSignedMoney(buybackDiff)} vs melt (Au ${gSpread}% / Ag ${sSpread}%)`
+        : 'After shop buyback discount';
   }
-  if (headerMeltValEl) headerMeltValEl.textContent = formattedTotal;
+  if (headerMeltValEl) headerMeltValEl.textContent = formattedHeaderTotal;
   if (headerMeltBtnEl) {
-    headerMeltBtnEl.className = `header-melt-btn ${dayChg > 0.01 ? 'up' : dayChg < -0.01 ? 'down' : ''}`;
+    headerMeltBtnEl.className = hidden
+      ? 'header-melt-btn'
+      : `header-melt-btn ${dayChg > 0.01 ? 'up' : dayChg < -0.01 ? 'down' : ''}`;
   }
   if (dayEl) {
-    if (totalVal > 0) {
+    if (hidden) {
+      dayEl.textContent = `Today: ••••• (${formatSignedPct(dayPct)})`;
+      dayEl.className = 'stack-stat-s';
+    } else if (totalVal > 0) {
       dayEl.textContent = `Today: ${formatSignedMoney(dayChg)} (${formatSignedPct(dayPct)})`;
       dayEl.className = `stack-stat-s ${dayChg > 0.01 ? 'up' : dayChg < -0.01 ? 'down' : ''}`;
     } else {
@@ -5801,9 +6902,13 @@ function renderStackTracker() {
     if (basisCost > 0 && basisCurrent > 0) {
       const pnlUsd = basisCurrent - basisCost;
       const pnlPct = (pnlUsd / basisCost) * 100;
-      pnlValEl.textContent = formatSignedMoney(pnlUsd);
-      pnlValEl.className = `stack-stat-v ${pnlUsd > 0.01 ? 'up' : pnlUsd < -0.01 ? 'down' : ''}`;
-      pnlPctEl.textContent = `${formatSignedPct(pnlPct)} on ${formatMoney(basisCost)}`;
+      pnlValEl.textContent = privSignedMoney(pnlUsd);
+      pnlValEl.className = hidden
+        ? 'stack-stat-v'
+        : `stack-stat-v ${pnlUsd > 0.01 ? 'up' : pnlUsd < -0.01 ? 'down' : ''}`;
+      pnlPctEl.textContent = hidden
+        ? `${formatSignedPct(pnlPct)} (basis hidden)`
+        : `${formatSignedPct(pnlPct)} on ${formatMoney(basisCost)}`;
     } else {
       pnlValEl.textContent = '—';
       pnlValEl.className = 'stack-stat-v';
@@ -5825,8 +6930,11 @@ function renderStackTracker() {
   const sgeTotal = gSgeVal + sSgeVal;
   const sgeDiff = sgeTotal - totalVal;
   if (sgeEl) {
-    sgeEl.textContent =
-      totalVal > 0 ? `China value: ${formatMoney(sgeTotal)} (${formatSignedMoney(sgeDiff)})` : 'Est. value at China prices';
+    sgeEl.textContent = hidden
+      ? 'China value: •••••'
+      : totalVal > 0
+        ? `China value: ${formatMoney(sgeTotal)} (${formatSignedMoney(sgeDiff)})`
+        : 'Est. value at China prices';
   }
 
   const oRes = totalVal > 0 ? computeInteractiveOutlook() : null;
@@ -5847,15 +6955,15 @@ function renderStackTracker() {
         <div class="stack-sc-grid">
           <div class="stack-sc-box">
             <span class="stack-sc-k">Low Estimate</span>
-            <strong class="stack-sc-v down">${formatMoney(bearVal)}</strong>
+            <strong class="stack-sc-v down">${privMoney(bearVal)}</strong>
           </div>
           <div class="stack-sc-box">
             <span class="stack-sc-k">Likely Value</span>
-            <strong class="stack-sc-v base">${formatMoney(baseVal)}</strong>
+            <strong class="stack-sc-v base">${privMoney(baseVal)}</strong>
           </div>
           <div class="stack-sc-box">
             <span class="stack-sc-k">High Estimate</span>
-            <strong class="stack-sc-v up">${formatMoney(bullVal)}</strong>
+            <strong class="stack-sc-v up">${privMoney(bullVal)}</strong>
           </div>
         </div>`;
       scStripEl.hidden = false;
@@ -5867,6 +6975,7 @@ function renderStackTracker() {
   // Metal-by-Metal Breakdown (#panel-stack-breakdown)
   if (breakdownEl) {
     const fmtWeight = (oz) => {
+      if (hidden) return '••• oz · ••• g';
       const grams = oz * TROY_OZ_TO_GRAMS;
       return grams >= 1000
         ? `${oz.toFixed(2)} oz · ${(grams / 1000).toFixed(2)} kg`
@@ -5876,8 +6985,11 @@ function renderStackTracker() {
       const hasCost = oz > 0 && cost > 0;
       const pnl = hasCost ? val - oz * cost : null;
       const pnlPct = hasCost && oz * cost > 0 ? (pnl / (oz * cost)) * 100 : null;
-      const pnlText =
-        pnl != null ? `${formatSignedMoney(pnl)} (${formatSignedPct(pnlPct)})` : 'No cost basis';
+      const pnlText = hidden
+        ? '•••••'
+        : pnl != null
+          ? `${formatSignedMoney(pnl)} (${formatSignedPct(pnlPct)})`
+          : 'No cost basis';
       return `
         <article class="stack-metal-card">
           <div class="stack-metal-head">
@@ -5885,7 +6997,7 @@ function renderStackTracker() {
               <span class="metal-badge ${cls}" style="width:28px;height:28px;font-size:10px;">${code}</span>
               <span>${name}</span>
             </div>
-            <strong class="stack-metal-val">${formatMoney(val)}</strong>
+            <strong class="stack-metal-val">${privMoney(val)}</strong>
           </div>
           <div class="stack-alloc-bar">
             <div class="stack-alloc-fill ${cls === 'silver' ? 'silver' : ''}" style="width:${share}%"></div>
@@ -5893,9 +7005,9 @@ function renderStackTracker() {
           <div class="stack-metal-meta">
             <span>Weight: ${escapeHtml(fmtWeight(oz))}</span>
             <span>Share: ${share}% of stack</span>
-            <span>Today: ${escapeHtml(formatSignedMoney(dayDelta))}</span>
+            <span>Today: ${escapeHtml(privSignedMoney(dayDelta))}</span>
             <span>Profit/Loss: ${escapeHtml(pnlText)}</span>
-            <span>China Value: ${escapeHtml(formatMoney(sgeVal))}</span>
+            <span>China Value: ${escapeHtml(privMoney(sgeVal))}</span>
             <span>Spot: ${escapeHtml(formatMoney(oz > 0 ? val / oz : 0))}/oz</span>
           </div>
         </article>`;
@@ -5945,7 +7057,7 @@ function renderStackTracker() {
       },
       {
         name: 'If Prices Return to 2026 Highs',
-        sub: 'Gold $5,589/oz · Silver $121.62/oz',
+        sub: `Gold ${formatMoney(5589.38, 0)}/oz · Silver ${formatMoney(121.62, 2)}/oz`,
         val: peakVal,
         delta: peakVal - totalVal,
       },
@@ -5966,7 +7078,7 @@ function renderStackTracker() {
     milestonesEl.innerHTML = rows
       .map((r) => {
         const pct = totalVal > 0 ? (r.delta / totalVal) * 100 : 0;
-        const cls = r.delta > 0.01 ? 'up' : r.delta < -0.01 ? 'down' : '';
+        const cls = hidden ? '' : r.delta > 0.01 ? 'up' : r.delta < -0.01 ? 'down' : '';
         return `
           <div class="stack-milestone-row">
             <div class="stack-ms-left">
@@ -5974,8 +7086,8 @@ function renderStackTracker() {
               <span class="stack-ms-sub">${escapeHtml(r.sub)}</span>
             </div>
             <div class="stack-ms-right">
-              <span class="stack-ms-val">${formatMoney(r.val)}</span>
-              <span class="stack-ms-delta ${cls}">${formatSignedMoney(r.delta)} (${formatSignedPct(pct)})</span>
+              <span class="stack-ms-val">${privMoney(r.val)}</span>
+              <span class="stack-ms-delta ${cls}">${hidden ? `••••• (${formatSignedPct(pct)})` : `${formatSignedMoney(r.delta)} (${formatSignedPct(pct)})`}</span>
             </div>
           </div>`;
       })
@@ -6000,9 +7112,87 @@ function renderAll() {
   renderOutlook();
 }
 
-/* ---------- Navigation & Events ---------- */
+/* ---------- Navigation, Sub-Pages & Events ---------- */
+
+function applySubView(viewName, subName) {
+  const viewEl = document.getElementById(`view-${viewName}`);
+  if (!viewEl) return;
+  const fallback = DEFAULT_SETTINGS.subViews[viewName] || 'live';
+  const nav = viewEl.querySelector(`.sub-nav[data-parent-view="${viewName}"]`);
+  const validSubs = nav
+    ? Array.from(nav.querySelectorAll('.sub-tab-btn')).map((b) => b.dataset.subTarget)
+    : [];
+  const target = validSubs.includes(subName) ? subName : validSubs[0] || fallback;
+  if (!state.settings.subViews) state.settings.subViews = { ...DEFAULT_SETTINGS.subViews };
+  state.settings.subViews[viewName] = target;
+
+  if (nav) {
+    nav.querySelectorAll('.sub-tab-btn').forEach((btn) => {
+      const isAct = btn.dataset.subTarget === target;
+      btn.classList.toggle('active', isAct);
+      btn.setAttribute('aria-selected', isAct ? 'true' : 'false');
+    });
+  }
+
+  viewEl.querySelectorAll(':scope > [data-sub]').forEach((el) => {
+    el.classList.toggle('sub-hidden', el.dataset.sub !== target);
+  });
+}
+
+function applyAllSubViews() {
+  const sv = state.settings.subViews || DEFAULT_SETTINGS.subViews;
+  for (const v of ['markets', 'outlook', 'trade', 'stack', 'alerts']) {
+    applySubView(v, sv[v]);
+  }
+}
+
+function switchSubView(viewName, subName) {
+  applySubView(viewName, subName);
+  savePersistedState();
+
+  if (viewName === 'markets') {
+    if (subName === 'live') {
+      renderMetalCard('gold');
+      renderMetalCard('silver');
+      renderStats();
+      requestAnimationFrame(renderChart);
+    } else if (subName === 'global') {
+      renderFuturesPanel();
+      renderShanghai();
+      renderSessionClock();
+    } else if (subName === 'macro') {
+      renderMacroStrip();
+      renderFeedHealth();
+    }
+  } else if (viewName === 'outlook') {
+    renderOutlook();
+    if (subName === 'sim') {
+      requestAnimationFrame(() => {
+        renderAccuracyReplayChart(computeInteractiveOutlook());
+        renderJumpDiffusion();
+      });
+    }
+  } else if (viewName === 'trade') {
+    const res = computeInteractiveOutlook();
+    if (subName === 'swap') {
+      renderRatioAnalytics(res);
+      renderRatioSwapCalculator();
+    } else if (subName === 'ladder') {
+      renderBuyLadder(res);
+    } else if (subName === 'grader') {
+      renderDealGrader();
+    }
+  } else if (viewName === 'stack') {
+    renderStackTracker();
+  } else if (viewName === 'alerts') {
+    renderSettingsControls();
+    renderAlertLog();
+  }
+}
 
 function switchView(viewName) {
+  state.activeView = viewName;
+  if (viewName !== 'alerts') state.lastMainView = viewName;
   document.querySelectorAll('.view-panel').forEach((panel) => {
     panel.classList.toggle('active', panel.id === `view-${viewName}`);
   });
@@ -6012,6 +7202,14 @@ function switchView(viewName) {
     if (active) btn.setAttribute('aria-current', 'page');
     else btn.removeAttribute('aria-current');
   });
+  const settingsBtn = document.getElementById('btn-settings');
+  if (settingsBtn) {
+    const isSettings = viewName === 'alerts';
+    settingsBtn.classList.toggle('active', isSettings);
+    settingsBtn.setAttribute('aria-pressed', isSettings ? 'true' : 'false');
+  }
+  const activeSub = state.settings.subViews?.[viewName] || DEFAULT_SETTINGS.subViews[viewName];
+  applySubView(viewName, activeSub);
   if (window.scrollY > 20) {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
@@ -6022,15 +7220,28 @@ function switchView(viewName) {
     renderSessionClock();
     renderFeedHealth();
     renderStats();
-    requestAnimationFrame(renderChart);
+    if (state.settings.subViews?.markets === 'live') {
+      requestAnimationFrame(renderChart);
+    }
   } else if (viewName === 'outlook') {
     renderOutlook();
-    requestAnimationFrame(() => {
-      renderAccuracyReplayChart(computeInteractiveOutlook());
-      renderJumpDiffusion();
-    });
+    if (state.settings.subViews?.outlook === 'sim') {
+      requestAnimationFrame(() => {
+        renderAccuracyReplayChart(computeInteractiveOutlook());
+        renderJumpDiffusion();
+      });
+    }
+  } else if (viewName === 'trade') {
+    const res = computeInteractiveOutlook();
+    renderRatioAnalytics(res);
+    renderBuyLadder(res);
+    renderDealGrader();
+    renderRatioSwapCalculator();
   } else if (viewName === 'stack') {
     renderStackTracker();
+  } else if (viewName === 'alerts') {
+    renderSettingsControls();
+    renderAlertLog();
   }
 }
 
@@ -6044,6 +7255,47 @@ function wireEvents() {
   });
   document.getElementById('btn-header-melt')?.addEventListener('click', () => {
     switchView('stack');
+    switchSubView('stack', 'overview');
+  });
+
+  // Sub-Page Pill Navigation inside each main tab
+  document.querySelectorAll('.sub-nav').forEach((nav) => {
+    nav.addEventListener('click', (e) => {
+      const btn = e.target.closest('.sub-tab-btn[data-sub-target]');
+      if (!btn) return;
+      const parentView = nav.dataset.parentView;
+      const subTarget = btn.dataset.subTarget;
+      if (parentView && subTarget) switchSubView(parentView, subTarget);
+    });
+  });
+
+  // Privacy Mode Toggle (hides header Melt value & Stack holdings across reloads)
+  document.getElementById('btn-privacy-toggle')?.addEventListener('click', () => {
+    state.settings.privacyMode = !state.settings.privacyMode;
+    applyPrivacyMode();
+    renderStackTracker();
+    savePersistedState();
+  });
+
+  // Live Multi-Currency Switcher (USD, CAD, EUR, GBP, AUD, MXN)
+  document.getElementById('select-currency')?.addEventListener('change', (e) => {
+    const oldFx = getFxRate();
+    const nextCode = String(e.target.value || 'USD').toUpperCase();
+    state.settings.currency = CURRENCY_META[nextCode] ? nextCode : 'USD';
+    const newFx = getFxRate();
+    if (oldFx > 0 && newFx > 0 && oldFx !== newFx) {
+      const ratio = newFx / oldFx;
+      mcState.targetByMetal.gold =
+        state.settings.unit === 'oz'
+          ? Math.round(mcState.targetByMetal.gold * ratio)
+          : +(mcState.targetByMetal.gold * ratio).toFixed(2);
+      mcState.targetByMetal.silver = +(mcState.targetByMetal.silver * ratio).toFixed(2);
+      const mcIn = document.getElementById('input-mc-target');
+      if (mcIn) mcIn.value = mcState.targetByMetal[mcState.metal];
+    }
+    renderAll();
+    if (mcState.lastSim) renderMcTargetReadout();
+    savePersistedState();
   });
 
   // Candlestick chart 1D–ALL timeframe selector (lazy-loads candles_hist.json once on 7D–ALL)
@@ -6093,18 +7345,99 @@ function wireEvents() {
     mcTargetTimer = setTimeout(() => renderMcTargetReadout(), 120);
   });
 
-  document.querySelectorAll('.mc-preset-btn').forEach((btn) => {
+  document.querySelectorAll('.mc-preset-btn[data-pct]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const pct = parseFloat(btn.dataset.pct);
       const sim = mcState.lastSim;
       const inputEl = document.getElementById('input-mc-target');
       if (!sim || !inputEl || !Number.isFinite(pct)) return;
-      const spotDisp = convertUnit(sim.spot);
+      const spotDisp = convertUnit(sim.spot) * getFxRate();
       const targetDisp = spotDisp * (1 + pct / 100);
       const formatted = spotDisp >= 500 ? Math.round(targetDisp / 10) * 10 : +targetDisp.toFixed(2);
       mcState.targetByMetal[mcState.metal] = formatted;
       inputEl.value = formatted;
       renderMcTargetReadout();
+    });
+  });
+
+  // Smart Buy-the-Dip Ladder, Spoken Brief & Shareable Market Snapshot Card
+  document.getElementById('input-ladder-budget')?.addEventListener('input', (e) => {
+    if (!state.settings.ladder) state.settings.ladder = { ...DEFAULT_SETTINGS.ladder };
+    state.settings.ladder.budget = Math.max(50, parseFloat(e.target.value) || 1000);
+    renderBuyLadder(computeInteractiveOutlook());
+    savePersistedState();
+  });
+  document.getElementById('select-ladder-metal')?.addEventListener('change', (e) => {
+    if (!state.settings.ladder) state.settings.ladder = { ...DEFAULT_SETTINGS.ladder };
+    state.settings.ladder.metal = e.target.value || 'auto';
+    renderBuyLadder(computeInteractiveOutlook());
+    savePersistedState();
+  });
+  document.getElementById('btn-apply-ladder-alerts')?.addEventListener('click', () => {
+    applyLadderDipAlerts();
+  });
+  document.getElementById('btn-listen-brief')?.addEventListener('click', () => {
+    toggleBriefingSpeech();
+  });
+  document.getElementById('btn-share-card')?.addEventListener('click', () => {
+    exportShareMarketCard();
+  });
+
+  // Coin Shop Fair Price & Deal Grader
+  document.getElementById('deal-preset')?.addEventListener('change', (e) => {
+    if (!state.settings.dealGrader) state.settings.dealGrader = { ...DEFAULT_SETTINGS.dealGrader };
+    state.settings.dealGrader.preset = e.target.value || 'ase_1oz';
+    renderDealGrader();
+    savePersistedState();
+  });
+  document.getElementById('input-deal-qty')?.addEventListener('input', (e) => {
+    if (!state.settings.dealGrader) state.settings.dealGrader = { ...DEFAULT_SETTINGS.dealGrader };
+    state.settings.dealGrader.qty = e.target.value;
+    renderDealGrader();
+    savePersistedState();
+  });
+  document.getElementById('input-deal-ask')?.addEventListener('input', (e) => {
+    if (!state.settings.dealGrader) state.settings.dealGrader = { ...DEFAULT_SETTINGS.dealGrader };
+    state.settings.dealGrader.ask = e.target.value;
+    renderDealGrader();
+    savePersistedState();
+  });
+
+  // Stack Goals & Future Price Wealth Sliders
+  [
+    ['input-goal-gold-oz', 'goldOz'],
+    ['input-goal-silver-oz', 'silverOz'],
+    ['input-goal-usd', 'targetUsd'],
+  ].forEach(([id, key]) => {
+    document.getElementById(id)?.addEventListener('input', (e) => {
+      if (!state.settings.stackGoals) state.settings.stackGoals = { ...DEFAULT_SETTINGS.stackGoals };
+      state.settings.stackGoals[key] = e.target.value.trim();
+      renderStackGoalsAndWhatIf();
+      savePersistedState();
+    });
+  });
+
+  document.getElementById('slider-whatif-gold')?.addEventListener('input', (e) => {
+    state.whatIfPrices.gold = parseFloat(e.target.value) || 3500;
+    renderStackGoalsAndWhatIf();
+  });
+  document.getElementById('slider-whatif-silver')?.addEventListener('input', (e) => {
+    state.whatIfPrices.silver = parseFloat(e.target.value) || 41;
+    renderStackGoalsAndWhatIf();
+  });
+  document.querySelectorAll('.whatif-preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.reset) {
+        const c = getCanonicalSpotPrices();
+        state.whatIfPrices.gold = Math.round(c.gold);
+        state.whatIfPrices.silver = +c.silver.toFixed(2);
+      } else {
+        const g = parseFloat(btn.dataset.gold);
+        const s = parseFloat(btn.dataset.silver);
+        if (Number.isFinite(g)) state.whatIfPrices.gold = g;
+        if (Number.isFinite(s)) state.whatIfPrices.silver = s;
+      }
+      renderStackGoalsAndWhatIf();
     });
   });
 
@@ -6234,6 +7567,16 @@ function wireEvents() {
   document.getElementById('btn-theme')?.addEventListener('click', () => {
     applyTheme(state.settings.theme === 'dark' ? 'light' : 'dark');
     savePersistedState();
+  });
+  document.getElementById('btn-settings')?.addEventListener('click', () => {
+    if (state.activeView === 'alerts') {
+      switchView(state.lastMainView || 'markets');
+    } else {
+      switchView('alerts');
+    }
+  });
+  document.getElementById('btn-close-settings')?.addEventListener('click', () => {
+    switchView(state.lastMainView || 'markets');
   });
 
   // Unit switch
@@ -6393,9 +7736,10 @@ function wireEvents() {
     savePersistedState();
   });
 
-  // Au <-> Ag Ratio Swap Calculator & Outlook quick-jump button
+  // Au <-> Ag Ratio Swap Calculator smooth scroll inside Trade tab
   document.getElementById('btn-open-ratio-swap')?.addEventListener('click', () => {
-    switchView('stack');
+    switchView('trade');
+    switchSubView('trade', 'swap');
     requestAnimationFrame(() => {
       document.getElementById('panel-ratio-swap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
@@ -6449,6 +7793,7 @@ function wireEvents() {
     ['chk-alert-backwardation', 'backwardation'],
     ['chk-alert-squeeze', 'shortSqueeze'],
     ['chk-alert-dxy', 'dxyShock'],
+    ['chk-morning-digest', 'morningDigest'],
   ].forEach(([id, key]) => {
     document.getElementById(id)?.addEventListener('change', (e) => {
       if (!state.settings.smartAlerts) state.settings.smartAlerts = { ...DEFAULT_SETTINGS.smartAlerts };
@@ -6481,7 +7826,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 25,
+      version: 30,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
@@ -6512,6 +7857,9 @@ function wireEvents() {
           ...parsed.settings,
           stack: { ...DEFAULT_SETTINGS.stack, ...(parsed.settings.stack || {}) },
           stackLots: Array.isArray(parsed.settings.stackLots) ? parsed.settings.stackLots.slice(0, 100) : [],
+          stackGoals: { ...DEFAULT_SETTINGS.stackGoals, ...(parsed.settings.stackGoals || {}) },
+          ladder: { ...DEFAULT_SETTINGS.ladder, ...(parsed.settings.ladder || {}) },
+          dealGrader: { ...DEFAULT_SETTINGS.dealGrader, ...(parsed.settings.dealGrader || {}) },
           targets: { ...DEFAULT_SETTINGS.targets, ...(parsed.settings.targets || {}) },
           smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts, ...(parsed.settings.smartAlerts || {}) },
           quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(parsed.settings.quietHours || {}) },
@@ -6520,6 +7868,7 @@ function wireEvents() {
           state.alertLog = parsed.alertLog.slice(0, 25);
         }
         applyTheme(state.settings.theme);
+        applyPrivacyMode();
         renderAll();
         savePersistedState();
       }
@@ -6801,6 +8150,8 @@ function registerServiceWorker() {
 function init() {
   loadPersistedState();
   applyTheme(state.settings.theme);
+  applyPrivacyMode();
+  applyAllSubViews();
   wireEvents();
   renderAll();
   fetchSpotQuotes();

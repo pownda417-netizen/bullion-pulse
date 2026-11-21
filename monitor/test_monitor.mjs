@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  buildMorningDigestPayload,
   evaluateMetalAlert,
   evaluatePriceTargets,
   evaluateRegimeAlerts,
@@ -397,4 +398,28 @@ const regimeDup = evaluateRegimeAlerts({
 });
 assert.equal(regimeDup.triggered.length, 0, 'Regime alerts must deduplicate within the same day');
 
-console.log('All 19 Bullion Pulse monitor, gold-api fallback, Quiet Hours, Regime/Backwardation/DXY alerts, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');
+// 20. Daily 8:00 AM ET Morning Brief Digest payload
+const digestPayload = buildMorningDigestPayload({
+  topic: 'my-morning-topic',
+  market: {
+    gold: { price: 3542.5, pct: 0.65 },
+    silver: { price: 41.25, pct: 1.42 },
+  },
+  shanghai: { gold: { premiumUsdOz: 24.5 } },
+  outlook: {
+    dollarStrength: { dxy: 103.5, score: 56, regime: 'Balanced USD' },
+    ratioAnalytics: { swapBias: 'Rotate Gold → Silver' },
+    setupQuality: {
+      gold: { label: 'Accumulation / Dip-Buy Zone', score: 74 },
+      silver: { label: 'Squeeze Breakout — Chase Caution', score: 60 },
+    },
+  },
+  appUrl: 'https://pownda417-netizen.github.io/bullion-pulse/',
+});
+assert.equal(digestPayload.topic, 'my-morning-topic');
+assert.match(digestPayload.title, /Good Morning · Gold \$3,543 \| Silver \$41\.25/);
+assert.match(digestPayload.message, /China Gold vs US\/London: \+\$24\.50\/oz/);
+assert.match(digestPayload.message, /Gold Setup: Accumulation \/ Dip-Buy Zone/);
+assert.equal(digestPayload.click, 'https://pownda417-netizen.github.io/bullion-pulse/');
+
+console.log('All 20 Bullion Pulse monitor, Morning Digest, gold-api fallback, Quiet Hours, Regime/Backwardation/DXY alerts, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');

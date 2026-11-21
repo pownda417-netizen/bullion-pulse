@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=26" />
+  <link rel="stylesheet" href="./styles.css?v=31" />
 </head>
 <body>
   <div class="app-shell">
@@ -49,6 +49,15 @@
           </svg>
           <span>Outlook</span>
         </a>
+        <a href="#trade" class="nav-btn" data-view="trade" id="top-nav-trade">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9" />
+            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+            <polyline points="7 23 3 19 7 15" />
+            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+          </svg>
+          <span>Trade</span>
+        </a>
         <a href="#stack" class="nav-btn" data-view="stack" id="top-nav-stack">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="12 2 2 7 12 12 22 7 12 2" />
@@ -57,26 +66,18 @@
           </svg>
           <span>Stack</span>
         </a>
-        <a href="#alerts" class="nav-btn" data-view="alerts" id="top-nav-alerts">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          <span>Alerts</span>
-        </a>
-        <a href="#setup" class="nav-btn" data-view="setup" id="top-nav-setup">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-            <line x1="12" y1="18" x2="12.01" y2="18" />
-          </svg>
-          <span>Setup</span>
-        </a>
       </nav>
 
       <div class="header-actions">
         <button type="button" class="header-melt-btn" id="btn-header-melt" aria-label="Open My Bullion Stack" title="Total Stack Melt Value — click to open Stack">
           <span class="header-melt-k">Melt</span>
           <strong class="header-melt-v" id="header-melt-val">$0.00</strong>
+        </button>
+        <button type="button" class="icon-btn" id="btn-privacy-toggle" aria-label="Hide or show my stack balance" aria-pressed="false" title="Privacy Mode — hide your stack amounts">
+          <svg id="icon-privacy" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
         </button>
         <button type="button" class="icon-btn" id="btn-refresh" aria-label="Refresh spot prices" title="Refresh spot prices">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -90,6 +91,12 @@
           <svg id="icon-theme" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="4" />
             <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+          </svg>
+        </button>
+        <button type="button" class="icon-btn" id="btn-settings" aria-label="Open settings and alerts" aria-pressed="false" title="Settings &amp; Alerts">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
       </div>
@@ -109,14 +116,51 @@
       <section class="view-panel active" id="view-markets" aria-label="Spot metal markets">
         <div class="toolbar-row">
           <span class="section-label">Live Gold &amp; Silver Prices</span>
-          <div class="segmented" role="group" aria-label="Weight unit">
-            <button type="button" id="unit-oz" class="active">Troy oz</button>
-            <button type="button" id="unit-g">Gram</button>
+          <div class="toolbar-controls">
+            <select id="select-currency" class="currency-select" aria-label="Display currency">
+              <optgroup label="Americas &amp; Europe">
+                <option value="USD">USD $ · US</option>
+                <option value="CAD">CAD C$ · Canada</option>
+                <option value="EUR">EUR € · Europe</option>
+                <option value="GBP">GBP £ · UK</option>
+                <option value="CHF">CHF Fr · Switzerland</option>
+                <option value="AUD">AUD A$ · Australia</option>
+                <option value="MXN">MXN MX$ · Mexico</option>
+              </optgroup>
+              <optgroup label="Asia &amp; Bullion Hubs">
+                <option value="INR">INR ₹ · India</option>
+                <option value="CNY">CNY CN¥ · China</option>
+                <option value="JPY">JPY ¥ · Japan</option>
+                <option value="THB">THB ฿ · Thailand</option>
+                <option value="LAK">LAK ₭ · Laos</option>
+                <option value="SGD">SGD S$ · Singapore</option>
+                <option value="HKD">HKD HK$ · Hong Kong</option>
+                <option value="KRW">KRW ₩ · South Korea</option>
+                <option value="VND">VND ₫ · Vietnam</option>
+                <option value="IDR">IDR Rp · Indonesia</option>
+              </optgroup>
+              <optgroup label="Middle East &amp; Africa">
+                <option value="AED">AED DH · Dubai / UAE</option>
+                <option value="SAR">SAR SR · Saudi Arabia</option>
+                <option value="TRY">TRY ₺ · Turkey</option>
+                <option value="ZAR">ZAR R · South Africa</option>
+              </optgroup>
+            </select>
+            <div class="segmented" role="group" aria-label="Weight unit">
+              <button type="button" id="unit-oz" class="active">Troy oz</button>
+              <button type="button" id="unit-g">Gram</button>
+            </div>
           </div>
         </div>
 
+        <div class="sub-nav" data-parent-view="markets" role="tablist" aria-label="Markets sections">
+          <button type="button" class="sub-tab-btn active" data-sub-target="live" role="tab" aria-selected="true">Live &amp; Chart</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="global" role="tab" aria-selected="false">Futures &amp; Global</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="macro" role="tab" aria-selected="false">Macro &amp; Feeds</button>
+        </div>
+
         <!-- Gold Card -->
-        <article class="metal-card selected" id="card-gold" data-metal="gold" tabindex="0" aria-label="Gold spot price card">
+        <article class="metal-card selected" id="card-gold" data-metal="gold" data-sub="live" tabindex="0" aria-label="Gold spot price card">
           <div class="metal-header">
             <div class="metal-identity">
               <div class="metal-badge gold">XAU</div>
@@ -145,7 +189,7 @@
         </article>
 
         <!-- Silver Card -->
-        <article class="metal-card" id="card-silver" data-metal="silver" tabindex="0" aria-label="Silver spot price card">
+        <article class="metal-card" id="card-silver" data-metal="silver" data-sub="live" tabindex="0" aria-label="Silver spot price card">
           <div class="metal-header">
             <div class="metal-identity">
               <div class="metal-badge silver">XAG</div>
@@ -174,7 +218,7 @@
         </article>
 
         <!-- COMEX Gold & Silver Futures + Spot-to-Futures Backwardation Panel -->
-        <section class="panel" id="panel-futures" aria-label="Gold and Silver Futures and supply pressure">
+        <section class="panel" id="panel-futures" data-sub="global" aria-label="Gold and Silver Futures and supply pressure">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Futures Prices &amp; Supply Pressure</h2>
@@ -210,7 +254,7 @@
         </section>
 
         <!-- Global Bullion Session Clock & Liquidity Risk Strip -->
-        <section class="panel session-panel" id="panel-session-clock" aria-label="World gold and silver trading hours">
+        <section class="panel session-panel" id="panel-session-clock" data-sub="global" aria-label="World gold and silver trading hours">
           <div class="session-head">
             <div class="session-title-row">
               <span class="session-title">World Trading Hours</span>
@@ -245,7 +289,7 @@
         </section>
 
         <!-- Multi-Timeframe OHLC Candlestick & Prediction Fan Chart -->
-        <section class="panel" id="panel-chart" aria-label="Price chart with forecast and timeframe selector">
+        <section class="panel" id="panel-chart" data-sub="live" aria-label="Price chart with forecast and timeframe selector">
           <div class="panel-header">
             <div class="chart-title-block">
               <div class="chart-title-row">
@@ -314,7 +358,7 @@
         </section>
 
         <!-- Market Reference Strip -->
-        <section class="stats-grid" aria-label="Key market metrics">
+        <section class="stats-grid" data-sub="live" aria-label="Key market metrics">
           <div class="stat-item">
             <div class="stat-label">Gold / Silver Ratio</div>
             <div class="stat-value" id="stat-ratio">-- : 1</div>
@@ -330,7 +374,7 @@
         </section>
 
         <!-- Shanghai Gold Exchange (SGE) Panel -->
-        <section class="panel" id="panel-shanghai" aria-label="China physical gold and silver prices">
+        <section class="panel" id="panel-shanghai" data-sub="global" aria-label="China physical gold and silver prices">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">China Physical Prices (Shanghai)</h2>
@@ -367,7 +411,7 @@
         </section>
 
         <!-- Cross-Market Live Macro Ticker Strip (Relocated Below Shanghai SGE) -->
-        <section class="macro-strip" id="macro-ticker-strip" aria-label="Related market prices">
+        <section class="macro-strip" id="macro-ticker-strip" data-sub="macro" aria-label="Related market prices">
           <div class="macro-tile">
             <span class="macro-k">US Dollar Index</span>
             <strong class="macro-v" id="macro-dxy">—</strong>
@@ -391,7 +435,7 @@
         </section>
 
         <!-- Live Feed Health & Freshness Monitor -->
-        <section class="feed-health-strip" id="feed-health-strip" aria-label="Live data freshness">
+        <section class="feed-health-strip" id="feed-health-strip" data-sub="macro" aria-label="Live data freshness">
           <span class="fh-title">Data Freshness</span>
           <span class="fh-pill" id="fh-spot"><i class="fh-dot"></i>Spot —</span>
           <span class="fh-pill" id="fh-dxy"><i class="fh-dot"></i>Dollar —</span>
@@ -412,12 +456,19 @@
           </div>
         </div>
 
-        <div class="disclaimer-note">
+        <div class="sub-nav" data-parent-view="outlook" role="tablist" aria-label="Outlook sections">
+          <button type="button" class="sub-tab-btn active" data-sub-target="forecast" role="tab" aria-selected="true">Forecast</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="drivers" role="tab" aria-selected="false">Macro &amp; Drivers</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="vaults" role="tab" aria-selected="false">Vaults &amp; Miners</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="sim" role="tab" aria-selected="false">Odds &amp; News</button>
+        </div>
+
+        <div class="disclaimer-note" data-sub="forecast">
           <strong>Private &amp; Anonymous:</strong> Runs locally with public data — no accounts, no cookies, no tracking. Combines world news, China physical demand, US Dollar strength, and past market patterns (for information only, not financial advice).
         </div>
 
         <!-- Gold & Silver Probabilistic Range Cards -->
-        <div class="forecast-grid">
+        <div class="forecast-grid" data-sub="forecast">
           <article class="forecast-card" id="forecast-gold">
             <div class="forecast-top">
               <span class="metal-badge gold" style="width:30px;height:30px;font-size:11px;">XAU</span>
@@ -468,7 +519,7 @@
         </div>
 
         <!-- Plain-English Setup Quality / Actionability Card -->
-        <section class="panel" id="panel-setup-quality" aria-label="Plain-English buy or wait summary">
+        <section class="panel" id="panel-setup-quality" data-sub="forecast" aria-label="Plain-English buy or wait summary">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Buy / Wait Summary</h2>
@@ -497,57 +548,23 @@
           </div>
         </section>
 
-        <!-- Gold / Silver Ratio Z-Score, 5-Year Percentile & Swap Signal -->
-        <section class="panel" id="panel-ratio-analytics" aria-label="Gold to Silver ratio value and swap signal">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">Gold / Silver Ratio &amp; Best Value</h2>
-              <div class="panel-subtitle" id="ratio-panel-subtitle">Compares today's ratio to the past 5 years to spot which metal is cheaper</div>
-            </div>
-            <button type="button" class="chip-toggle" id="btn-open-ratio-swap">Swap Calculator →</button>
-          </div>
-          <div class="ratio-analytics-row">
-            <div class="ratio-metric-box">
-              <span class="ratio-k">Today's Ratio</span>
-              <strong class="ratio-v" id="ratio-live-val">— : 1</strong>
-            </div>
-            <div class="ratio-metric-box">
-              <span class="ratio-k">vs. 5-Yr Avg</span>
-              <strong class="ratio-v" id="ratio-zscore-val">—</strong>
-            </div>
-            <div class="ratio-metric-box">
-              <span class="ratio-k">5-Yr Rank</span>
-              <strong class="ratio-v" id="ratio-pct-val">—</strong>
-            </div>
-            <div class="ratio-metric-box">
-              <span class="ratio-k">Better Value</span>
-              <strong class="ratio-v" id="ratio-swap-val">Fairly Priced</strong>
-            </div>
-          </div>
-          <div class="ratio-bar-track">
-            <div class="ratio-bar-marker" id="ratio-pct-marker" style="left:50%"></div>
-          </div>
-          <div class="dxy-meter-labels">
-            <span>Gold Cheap (Trade Ag→Au)</span>
-            <span id="ratio-mean-label">5-Yr Average ~79:1</span>
-            <span>Silver Cheap (Trade Au→Ag)</span>
-          </div>
-        </section>
-
         <!-- Narrative Synthesis -->
-        <section class="panel">
+        <section class="panel" id="panel-outlook-summary" data-sub="forecast">
           <div class="panel-header outlook-summary-head">
             <h2 class="panel-title">Today's Plain-English Summary</h2>
             <div class="outlook-summary-badges">
+              <button type="button" class="chip-toggle brief-action-btn" id="btn-listen-brief" title="Listen to a 25-second spoken market summary">🔊 Listen</button>
+              <button type="button" class="chip-toggle brief-action-btn" id="btn-share-card" title="Download a clean shareable market snapshot image (never includes your private stack)">📷 Share Card</button>
               <span class="regime-pill neutral" id="outlook-regime-pill">Sideways / Calm</span>
               <span class="panel-subtitle" id="outlook-confidence">Agreement —%</span>
             </div>
           </div>
           <p class="outlook-summary" id="outlook-narrative">Loading today's market summary…</p>
+          <div class="feedback-note" id="share-card-feedback" role="status"></div>
         </section>
 
         <!-- US Dollar Strength (DXY) & FX Cost Impact Panel -->
-        <section class="panel" id="panel-dollar-strength" aria-label="US Dollar strength and impact on metal prices">
+        <section class="panel" id="panel-dollar-strength" data-sub="drivers" aria-label="US Dollar strength and impact on metal prices">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">US Dollar Strength &amp; Price Impact</h2>
@@ -587,8 +604,38 @@
           </div>
         </section>
 
+        <!-- Real-World Purchasing Power: Gold vs. Cash -->
+        <section class="panel" id="panel-purchasing-power" data-sub="drivers" aria-label="Gold and Silver real-world purchasing power versus cash">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Gold vs. Cash Reality Check</h2>
+              <div class="panel-subtitle">What gold buys in real life &amp; how $10,000 held up against inflation since 2020</div>
+            </div>
+            <span class="signal-pill bullish" id="pp-badge">Inflation Shield</span>
+          </div>
+          <div class="pp-grid">
+            <div class="pp-card">
+              <span class="pp-k">US Median Home</span>
+              <strong class="pp-v" id="pp-home-oz">— oz Gold</strong>
+              <span class="pp-s" id="pp-home-sub">Down from ~580 oz in 2000</span>
+            </div>
+            <div class="pp-card">
+              <span class="pp-k">Average New Car</span>
+              <strong class="pp-v" id="pp-car-oz">— oz Gold</strong>
+              <span class="pp-s" id="pp-car-sub">Down from ~76 oz in 2000</span>
+            </div>
+            <div class="pp-card">
+              <span class="pp-k">S&amp;P 500 / Gold</span>
+              <strong class="pp-v" id="pp-spx-gold">—×</strong>
+              <span class="pp-s" id="pp-spx-sub">Lower = Gold beating stocks</span>
+            </div>
+          </div>
+          <div class="pp-compare-title">If you put $10,000 away in 2020 (Real Buying Power Today)</div>
+          <div class="pp-bars" id="pp-bars-list"></div>
+        </section>
+
         <!-- Institutional Pro Quant Signals -->
-        <section class="pro-grid" aria-label="Key market health indicators">
+        <section class="pro-grid" data-sub="drivers" aria-label="Key market health indicators">
           <article class="pro-card">
             <div class="pro-label">Inflation-Adj. Rates</div>
             <div class="pro-value" id="pro-realyield">—%</div>
@@ -612,7 +659,7 @@
         </section>
 
         <!-- Gold & Silver Sector Companies -->
-        <section class="panel" id="panel-sector-leaders" aria-label="Major gold and silver mining companies">
+        <section class="panel" id="panel-sector-leaders" data-sub="vaults" aria-label="Major gold and silver mining companies">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Major Mining Companies (9)</h2>
@@ -625,7 +672,7 @@
         </section>
 
         <!-- COMEX Paper Gold & Paper Silver Contracts vs. Registered Vaults -->
-        <section class="panel" id="panel-comex" aria-label="Paper contracts versus vault supply">
+        <section class="panel" id="panel-comex" data-sub="vaults" aria-label="Paper contracts versus vault supply">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Paper Contracts vs. Vault Supply</h2>
@@ -660,7 +707,7 @@
         </section>
 
         <!-- Institutional Pulse -->
-        <section class="panel" id="panel-institutional" aria-label="Upcoming market events and big-money signals">
+        <section class="panel" id="panel-institutional" data-sub="vaults" aria-label="Upcoming market events and big-money signals">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Upcoming Events &amp; Big-Money Signals</h2>
@@ -702,7 +749,7 @@
         </section>
 
         <!-- Merton Jump-Diffusion Monte Carlo Panel -->
-        <section class="panel" id="panel-jump-diffusion" aria-label="Price odds simulator">
+        <section class="panel" id="panel-jump-diffusion" data-sub="sim" aria-label="Price odds simulator">
           <div class="panel-header">
             <div>
               <div class="mc-title-row">
@@ -797,7 +844,7 @@
         </section>
 
         <!-- Interactive What-If Event Stress Tester -->
-        <section class="panel" id="panel-scenarios">
+        <section class="panel" id="panel-scenarios" data-sub="forecast">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">What-If Event Tester</h2>
@@ -809,7 +856,7 @@
         </section>
 
         <!-- 9 Macro & Quant Drivers -->
-        <section class="panel" id="panel-drivers">
+        <section class="panel" id="panel-drivers" data-sub="drivers">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">What's Moving Prices Today</h2>
@@ -820,7 +867,7 @@
         </section>
 
         <!-- Historical Analogs -->
-        <section class="panel" id="panel-analogs">
+        <section class="panel" id="panel-analogs" data-sub="drivers">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Similar Past Events</h2>
@@ -831,7 +878,7 @@
         </section>
 
         <!-- Live Walk-Forward & Daily 5:10 PM ET Self-Learning -->
-        <section class="panel" id="panel-self-learn" aria-label="Daily forecast accuracy self-check">
+        <section class="panel" id="panel-self-learn" data-sub="sim" aria-label="Daily forecast accuracy self-check">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Daily Self-Check &amp; Accuracy</h2>
@@ -862,7 +909,7 @@
         </section>
 
         <!-- Scored World & Metals News -->
-        <section class="panel" id="panel-news">
+        <section class="panel" id="panel-news" data-sub="sim">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Latest Market News</h2>
@@ -873,15 +920,204 @@
         </section>
       </section>
 
-      <!-- VIEW 3: MY BULLION STACK (DEDICATED PRIVATE PORTFOLIO PAGE) -->
+      <!-- VIEW 3: TRADE (BUY, GRADE & SWAP TOOLS) -->
+      <section class="view-panel" id="view-trade" aria-label="Buy, grade, and swap bullion tools">
+        <div class="toolbar-row">
+          <span class="section-label">Buy, Grade &amp; Swap Tools</span>
+          <span class="signal-pill bullish">Live Spot Synced</span>
+        </div>
+
+        <div class="sub-nav" data-parent-view="trade" role="tablist" aria-label="Trade sections">
+          <button type="button" class="sub-tab-btn active" data-sub-target="swap" role="tab" aria-selected="true">Ratio &amp; Swap</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="ladder" role="tab" aria-selected="false">Buy-the-Dip</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="grader" role="tab" aria-selected="false">Deal Grader</button>
+        </div>
+
+        <!-- Gold / Silver Ratio Z-Score, 5-Year Percentile & Swap Signal -->
+        <section class="panel" id="panel-ratio-analytics" data-sub="swap" aria-label="Gold to Silver ratio value and swap signal">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Gold / Silver Ratio &amp; Best Value</h2>
+              <div class="panel-subtitle" id="ratio-panel-subtitle">Compares today's ratio to the past 5 years to spot which metal is cheaper</div>
+            </div>
+            <button type="button" class="chip-toggle" id="btn-open-ratio-swap">Swap Calculator ↓</button>
+          </div>
+          <div class="ratio-analytics-row">
+            <div class="ratio-metric-box">
+              <span class="ratio-k">Today's Ratio</span>
+              <strong class="ratio-v" id="ratio-live-val">— : 1</strong>
+            </div>
+            <div class="ratio-metric-box">
+              <span class="ratio-k">vs. 5-Yr Avg</span>
+              <strong class="ratio-v" id="ratio-zscore-val">—</strong>
+            </div>
+            <div class="ratio-metric-box">
+              <span class="ratio-k">5-Yr Rank</span>
+              <strong class="ratio-v" id="ratio-pct-val">—</strong>
+            </div>
+            <div class="ratio-metric-box">
+              <span class="ratio-k">Better Value</span>
+              <strong class="ratio-v" id="ratio-swap-val">Fairly Priced</strong>
+            </div>
+          </div>
+          <div class="ratio-bar-track">
+            <div class="ratio-bar-marker" id="ratio-pct-marker" style="left:50%"></div>
+          </div>
+          <div class="dxy-meter-labels">
+            <span>Gold Cheap (Trade Ag→Au)</span>
+            <span id="ratio-mean-label">5-Yr Average ~79:1</span>
+            <span>Silver Cheap (Trade Au→Ag)</span>
+          </div>
+        </section>
+
+        <!-- Smart Buy-the-Dip Ladder Planner -->
+        <section class="panel" id="panel-buy-ladder" data-sub="ladder" aria-label="Smart buy-the-dip budget ladder planner">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Smart Buy-the-Dip Ladder</h2>
+              <div class="panel-subtitle" id="buy-ladder-subtitle">Splits your budget across 3 smart price steps so you don't go all-in on one tick</div>
+            </div>
+            <button type="button" class="btn btn-primary ladder-alert-btn" id="btn-apply-ladder-alerts">🔔 Set Dip Alerts</button>
+          </div>
+          <div class="ladder-inputs-row">
+            <label class="stack-field">
+              <span>Your Budget ($)</span>
+              <input type="number" id="input-ladder-budget" class="text-input stack-input" min="50" step="50" value="1000" />
+            </label>
+            <label class="stack-field">
+              <span>What to Buy</span>
+              <select id="select-ladder-metal" class="select-input lot-input">
+                <option value="auto">Smart Split (Favor Cheaper Metal)</option>
+                <option value="gold">Gold Only</option>
+                <option value="silver">Silver Only</option>
+              </select>
+            </label>
+          </div>
+          <div class="ladder-steps-grid" id="buy-ladder-steps"></div>
+          <div class="ladder-foot-row">
+            <span class="ladder-summary" id="buy-ladder-summary">Calculating 3-step buy ladder…</span>
+            <span class="feedback-note" id="ladder-alert-feedback" role="status"></span>
+          </div>
+        </section>
+
+        <!-- Coin Shop Fair Price & Deal Grader -->
+        <section class="panel" id="panel-deal-grader" data-sub="grader" aria-label="Coin shop fair price and deal grader">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Coin Shop Deal Grader</h2>
+              <div class="panel-subtitle">Check if a coin, bar, 90% silver roll, or gold jewelry piece is a good deal or overpriced</div>
+            </div>
+            <span class="signal-pill" id="deal-grade-badge">Enter Price</span>
+          </div>
+          <div class="deal-inputs-grid">
+            <label class="stack-field">
+              <span>Item Type</span>
+              <select id="deal-preset" class="select-input lot-input">
+                <option value="ase_1oz">1 oz American Silver Eagle</option>
+                <option value="silver_maple">1 oz Silver Maple / Britannia</option>
+                <option value="silver_round">1 oz Generic Silver Round</option>
+                <option value="silver_bar_10">10 oz Silver Bar</option>
+                <option value="junk_90">90% Pre-1965 US Silver ($ Face)</option>
+                <option value="junk_40">40% Silver Half Dollars ($ Face)</option>
+                <option value="age_1oz">1 oz American Gold Eagle</option>
+                <option value="agb_1oz">1 oz American Gold Buffalo</option>
+                <option value="gold_bar_1oz">1 oz Gold Bar / Maple</option>
+                <option value="gold_tenth">1/10 oz Gold Coin</option>
+                <option value="gold_14k_g">14K Gold Jewelry (grams)</option>
+                <option value="gold_18k_g">18K Gold Jewelry (grams)</option>
+                <option value="gold_24k_g">24K Pure Gold (grams)</option>
+              </select>
+            </label>
+            <label class="stack-field">
+              <span id="deal-qty-label">Quantity (coins/bars)</span>
+              <input type="number" id="input-deal-qty" class="text-input stack-input" min="0.1" step="any" value="1" />
+            </label>
+            <label class="stack-field">
+              <span id="deal-ask-label">Seller Asking Price (Total $)</span>
+              <input type="number" id="input-deal-ask" class="text-input stack-input" min="0.01" step="any" placeholder="e.g. 46.50" />
+            </label>
+          </div>
+          <div class="deal-results-grid">
+            <div class="stack-stat">
+              <span class="stack-stat-k">Pure Melt Value</span>
+              <strong class="stack-stat-v" id="deal-melt-val">$—</strong>
+              <span class="stack-stat-s" id="deal-pure-oz">— pure oz</span>
+            </div>
+            <div class="stack-stat">
+              <span class="stack-stat-k">Dealer Markup</span>
+              <strong class="stack-stat-v" id="deal-markup-val">—</strong>
+              <span class="stack-stat-s" id="deal-typical-range">Typical: —</span>
+            </div>
+            <div class="stack-stat">
+              <span class="stack-stat-k">Break-Even Spot</span>
+              <strong class="stack-stat-v" id="deal-breakeven-val">$—</strong>
+              <span class="stack-stat-s" id="deal-breakeven-sub">Price needed to break even</span>
+            </div>
+          </div>
+          <div class="deal-verdict-note" id="deal-verdict-note">Enter the seller's asking price above to grade this deal right now.</div>
+        </section>
+
+        <!-- Gold / Silver Ratio Swap Calculator -->
+        <section class="panel" id="panel-ratio-swap" data-sub="swap" aria-label="Gold and Silver swap calculator">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Gold ↔ Silver Swap Calculator</h2>
+              <div class="panel-subtitle" id="swap-signal-note">See how trading one metal for the other at extreme ratios can earn extra free ounces</div>
+            </div>
+            <div class="segmented" role="group" aria-label="Swap direction">
+              <button type="button" id="swap-dir-g2s" class="active">Gold → Silver</button>
+              <button type="button" id="swap-dir-s2g">Silver → Gold</button>
+            </div>
+          </div>
+          <div class="swap-inputs-grid">
+            <label class="stack-field">
+              <span id="swap-oz-label">Gold to Trade (oz)</span>
+              <input type="number" id="input-swap-oz" class="text-input stack-input" min="0.01" step="any" value="1" />
+            </label>
+            <label class="stack-field">
+              <span id="swap-target-label">Goal Ratio to Trade Back</span>
+              <input type="number" id="input-swap-target-ratio" class="text-input stack-input" min="15" max="150" step="1" value="65" />
+            </label>
+            <label class="stack-field">
+              <span>Shop Fees Both Ways (%)</span>
+              <input type="number" id="input-swap-friction" class="text-input stack-input" min="0" max="20" step="0.5" value="4.0" />
+            </label>
+          </div>
+          <div class="swap-results-grid">
+            <div class="stack-stat">
+              <span class="stack-stat-k">Today's Ratio</span>
+              <strong class="stack-stat-v" id="swap-live-ratio">— : 1</strong>
+              <span class="stack-stat-s" id="swap-live-bias">Checking value…</span>
+            </div>
+            <div class="stack-stat">
+              <span class="stack-stat-k" id="swap-receive-k">Silver You Get Today</span>
+              <strong class="stack-stat-v" id="swap-receive-now">— oz</strong>
+              <span class="stack-stat-s">After dealer fee</span>
+            </div>
+            <div class="stack-stat">
+              <span class="stack-stat-k" id="swap-return-k">Extra Free Ounces</span>
+              <strong class="stack-stat-v up" id="swap-free-oz">— oz</strong>
+              <span class="stack-stat-s" id="swap-roundtrip-total">End total —</span>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <!-- VIEW 4: MY BULLION STACK (DEDICATED PRIVATE PORTFOLIO PAGE) -->
       <section class="view-panel" id="view-stack" aria-label="My Bullion Stack physical holdings">
         <div class="toolbar-row">
           <span class="section-label">My Bullion Stack</span>
           <span class="signal-pill bullish">100% Private · Saved on Device</span>
         </div>
 
+        <div class="sub-nav" data-parent-view="stack" role="tablist" aria-label="Stack sections">
+          <button type="button" class="sub-tab-btn active" data-sub-target="overview" role="tab" aria-selected="true">Overview</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="goals" role="tab" aria-selected="false">Goals &amp; What-If</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="lots" role="tab" aria-selected="false">My Purchases</button>
+        </div>
+
         <!-- Physical Holdings & Melt Value -->
-        <section class="panel" id="panel-stack" aria-label="Private physical gold and silver stack tracker">
+        <section class="panel" id="panel-stack" data-sub="overview" aria-label="Private physical gold and silver stack tracker">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">My Gold &amp; Silver Value</h2>
@@ -949,8 +1185,72 @@
           <div class="stack-scenario-strip" id="stack-scenario-strip" hidden></div>
         </section>
 
+        <!-- Stack Goals & Interactive Future Price Wealth Sliders -->
+        <section class="panel" id="panel-stack-goals" data-sub="goals" aria-label="Stacking goals and future price wealth sliders">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Stack Goals &amp; Future Price Sliders</h2>
+              <div class="panel-subtitle">Track progress toward your goals and slide future Gold &amp; Silver prices live</div>
+            </div>
+            <span class="signal-pill" id="stack-goal-odds">Set a goal</span>
+          </div>
+          <div class="goals-inputs-grid">
+            <label class="stack-field">
+              <span>Gold Goal (oz)</span>
+              <input type="number" id="input-goal-gold-oz" class="text-input stack-input" min="0" step="0.5" placeholder="e.g. 10" />
+            </label>
+            <label class="stack-field">
+              <span>Silver Goal (oz)</span>
+              <input type="number" id="input-goal-silver-oz" class="text-input stack-input" min="0" step="10" placeholder="e.g. 500" />
+            </label>
+            <label class="stack-field">
+              <span>Dollar Value Goal ($)</span>
+              <input type="number" id="input-goal-usd" class="text-input stack-input" min="0" step="500" placeholder="e.g. 25000" />
+            </label>
+          </div>
+          <div class="goals-progress-list" id="stack-goals-progress"></div>
+
+          <div class="whatif-box">
+            <div class="whatif-head">
+              <strong>What If Future Prices Jump?</strong>
+              <div class="whatif-presets">
+                <button type="button" class="mc-preset-btn whatif-preset-btn" data-gold="5589" data-silver="121.62">2026 Highs</button>
+                <button type="button" class="mc-preset-btn whatif-preset-btn" data-gold="5000" data-silver="100">$5k / $100</button>
+                <button type="button" class="mc-preset-btn whatif-preset-btn" data-gold="7500" data-silver="150">$7.5k / $150</button>
+                <button type="button" class="mc-preset-btn whatif-preset-btn" data-reset="1">Today</button>
+              </div>
+            </div>
+            <div class="whatif-sliders-grid">
+              <div class="control-group">
+                <div class="control-top">
+                  <label class="control-label" for="slider-whatif-gold">Future Gold Price</label>
+                  <span class="control-value" id="whatif-gold-val">$3,539/oz</span>
+                </div>
+                <input type="range" id="slider-whatif-gold" min="2000" max="10000" step="25" value="3539" />
+              </div>
+              <div class="control-group">
+                <div class="control-top">
+                  <label class="control-label" for="slider-whatif-silver">Future Silver Price</label>
+                  <span class="control-value silver" id="whatif-silver-val">$41.08/oz</span>
+                </div>
+                <input type="range" id="slider-whatif-silver" class="silver-range" min="20" max="250" step="0.5" value="41" />
+              </div>
+            </div>
+            <div class="whatif-readout">
+              <div>
+                <span class="stack-stat-k">Future Stack Value</span>
+                <strong class="whatif-big" id="whatif-total-val">$0.00</strong>
+              </div>
+              <div class="whatif-right">
+                <span class="whatif-gain" id="whatif-gain-val">Add ounces above to simulate</span>
+                <span class="whatif-ratio" id="whatif-ratio-val">Simulated Ratio: — : 1</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Purchase Lot Ledger -->
-        <section class="panel" id="panel-stack-lots" aria-label="My individual bullion purchases">
+        <section class="panel" id="panel-stack-lots" data-sub="lots" aria-label="My individual bullion purchases">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">My Purchases (Lots)</h2>
@@ -979,53 +1279,8 @@
           </div>
         </section>
 
-        <!-- Gold / Silver Ratio Swap Calculator -->
-        <section class="panel" id="panel-ratio-swap" aria-label="Gold and Silver swap calculator">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">Gold ↔ Silver Swap Calculator</h2>
-              <div class="panel-subtitle" id="swap-signal-note">See how trading one metal for the other at extreme ratios can earn extra free ounces</div>
-            </div>
-            <div class="segmented" role="group" aria-label="Swap direction">
-              <button type="button" id="swap-dir-g2s" class="active">Gold → Silver</button>
-              <button type="button" id="swap-dir-s2g">Silver → Gold</button>
-            </div>
-          </div>
-          <div class="swap-inputs-grid">
-            <label class="stack-field">
-              <span id="swap-oz-label">Gold to Trade (oz)</span>
-              <input type="number" id="input-swap-oz" class="text-input stack-input" min="0.01" step="any" value="1" />
-            </label>
-            <label class="stack-field">
-              <span id="swap-target-label">Goal Ratio to Trade Back</span>
-              <input type="number" id="input-swap-target-ratio" class="text-input stack-input" min="15" max="150" step="1" value="65" />
-            </label>
-            <label class="stack-field">
-              <span>Shop Fees Both Ways (%)</span>
-              <input type="number" id="input-swap-friction" class="text-input stack-input" min="0" max="20" step="0.5" value="4.0" />
-            </label>
-          </div>
-          <div class="swap-results-grid">
-            <div class="stack-stat">
-              <span class="stack-stat-k">Today's Ratio</span>
-              <strong class="stack-stat-v" id="swap-live-ratio">— : 1</strong>
-              <span class="stack-stat-s" id="swap-live-bias">Checking value…</span>
-            </div>
-            <div class="stack-stat">
-              <span class="stack-stat-k" id="swap-receive-k">Silver You Get Today</span>
-              <strong class="stack-stat-v" id="swap-receive-now">— oz</strong>
-              <span class="stack-stat-s">After dealer fee</span>
-            </div>
-            <div class="stack-stat">
-              <span class="stack-stat-k" id="swap-return-k">Extra Free Ounces</span>
-              <strong class="stack-stat-v up" id="swap-free-oz">— oz</strong>
-              <span class="stack-stat-s" id="swap-roundtrip-total">End total —</span>
-            </div>
-          </div>
-        </section>
-
         <!-- Metal-by-Metal Breakdown -->
-        <section class="panel" id="panel-stack-breakdown" aria-label="Gold and Silver holdings breakdown">
+        <section class="panel" id="panel-stack-breakdown" data-sub="overview" aria-label="Gold and Silver holdings breakdown">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Gold vs. Silver Breakdown</h2>
@@ -1038,7 +1293,7 @@
         </section>
 
         <!-- FX Dollar Impact & Price Milestones -->
-        <section class="panel" id="panel-stack-scenarios" aria-label="Dollar impact and what-if stack values">
+        <section class="panel" id="panel-stack-scenarios" data-sub="goals" aria-label="Dollar impact and what-if stack values">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Dollar Impact &amp; What-If Values</h2>
@@ -1051,13 +1306,20 @@
         </section>
       </section>
 
-      <!-- VIEW 4: ALERTS -->
-      <section class="view-panel" id="view-alerts" aria-label="Alert configuration">
+      <!-- SETTINGS & ALERTS (OPENED FROM HEADER GEAR ICON) -->
+      <section class="view-panel" id="view-alerts" aria-label="Settings, alerts, and 24/7 phone setup">
         <div class="toolbar-row">
-          <span class="section-label">Price Alert Settings</span>
+          <span class="section-label">Settings &amp; Alerts</span>
+          <button type="button" class="chip-toggle" id="btn-close-settings">← Back</button>
         </div>
 
-        <section class="panel">
+        <div class="sub-nav" data-parent-view="alerts" role="tablist" aria-label="Alerts sections">
+          <button type="button" class="sub-tab-btn active" data-sub-target="rules" role="tab" aria-selected="true">Alert Rules</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="phone" role="tab" aria-selected="false">Phone &amp; Log</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="setup" role="tab" aria-selected="false">Install &amp; 24/7</button>
+        </div>
+
+        <section class="panel" id="panel-alert-rules" data-sub="rules">
           <div class="control-group">
             <div class="control-top">
               <label class="control-label" for="input-gold-threshold">Gold Daily Move Alert</label>
@@ -1163,6 +1425,13 @@
                   <span>Alerts when a sharp US Dollar move is pushing Gold &amp; Silver prices up or down.</span>
                 </div>
               </label>
+              <label class="confirm-toggle-row" for="chk-morning-digest">
+                <input type="checkbox" id="chk-morning-digest" />
+                <div>
+                  <strong>Daily 8:00 AM Morning Brief (Phone Push)</strong>
+                  <span>Sends one clean morning recap every weekday with overnight prices, China gap, Dollar mood &amp; Buy/Wait verdict.</span>
+                </div>
+              </label>
               <label class="confirm-toggle-row" for="chk-quiet-hours">
                 <input type="checkbox" id="chk-quiet-hours" />
                 <div>
@@ -1196,7 +1465,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="panel-ntfy-push" data-sub="phone">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Free Phone Alerts (ntfy App)</h2>
@@ -1217,7 +1486,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="panel-recent-alerts" data-sub="phone">
           <div class="panel-header">
             <h2 class="panel-title">Recent Alerts</h2>
             <button type="button" class="btn" id="btn-clear-log" style="padding: 6px 10px; font-size: 12px;">Clear</button>
@@ -1226,15 +1495,8 @@
             <li class="empty-state">No alerts yet. Tap "Test Big Move" above to see how alerts look.</li>
           </ul>
         </section>
-      </section>
 
-      <!-- VIEW 4: SETUP -->
-      <section class="view-panel" id="view-setup" aria-label="Phone installation and background monitor setup">
-        <div class="toolbar-row">
-          <span class="section-label">Install &amp; 24/7 Background Alerts</span>
-        </div>
-
-        <section class="panel">
+        <section class="panel" id="panel-setup-install" data-sub="setup">
           <div class="panel-header">
             <h2 class="panel-title">1. Add App to Your Phone</h2>
           </div>
@@ -1256,7 +1518,7 @@
           </ol>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="panel-setup-background" data-sub="setup">
           <div class="panel-header">
             <h2 class="panel-title">2. Free Phone Push &amp; News Engine</h2>
           </div>
@@ -1265,7 +1527,7 @@
               <span class="step-num">1</span>
               <div class="step-body">
                 <h3>Install the free ntfy app</h3>
-                <p>Download <strong>ntfy</strong> from the Apple App Store or Google Play, tap <strong>+</strong>, and subscribe to your private topic from the Alerts tab.</p>
+                <p>Download <strong>ntfy</strong> from the Apple App Store or Google Play, tap <strong>+</strong>, and subscribe to your private channel name entered above.</p>
               </div>
             </li>
             <li class="step-item">
@@ -1309,6 +1571,15 @@ CATALYST_ALERTS=true</div>
         </svg>
         <span>Outlook</span>
       </button>
+      <button type="button" class="nav-btn" data-view="trade" id="nav-trade">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="17 1 21 5 17 9" />
+          <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+          <polyline points="7 23 3 19 7 15" />
+          <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+        </svg>
+        <span>Trade</span>
+      </button>
       <button type="button" class="nav-btn" data-view="stack" id="nav-stack">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="12 2 2 7 12 12 22 7 12 2" />
@@ -1317,23 +1588,9 @@ CATALYST_ALERTS=true</div>
         </svg>
         <span>Stack</span>
       </button>
-      <button type="button" class="nav-btn" data-view="alerts" id="nav-alerts">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
-        <span>Alerts</span>
-      </button>
-      <button type="button" class="nav-btn" data-view="setup" id="nav-setup">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-          <line x1="12" y1="18" x2="12.01" y2="18" />
-        </svg>
-        <span>Setup</span>
-      </button>
     </nav>
   </div>
 
-  <script src="./app.js?v=26" defer></script>
+  <script src="./app.js?v=31" defer></script>
 </body>
 </html>

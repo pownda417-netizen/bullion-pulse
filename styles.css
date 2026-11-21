@@ -318,6 +318,7 @@ body {
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
+  white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
   padding: 5px 10px;
@@ -428,7 +429,8 @@ body {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   margin-bottom: 14px;
 }
 
@@ -440,6 +442,10 @@ body {
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
   transition: color 0.25s ease;
+}
+
+.metal-price.long-val {
+  font-size: 25px;
 }
 
 .metal-price.flash-up {
@@ -2037,7 +2043,7 @@ input[type="range"].silver-range::-webkit-slider-thumb {
   -webkit-backdrop-filter: blur(18px);
   border-top: 1px solid var(--border);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   z-index: 30;
 }
 
@@ -3183,9 +3189,9 @@ button.sector-chip.selected {
   /* Multi-column responsive grids per tab */
   #view-markets.active,
   #view-outlook.active,
+  #view-trade.active,
   #view-stack.active,
-  #view-alerts.active,
-  #view-setup.active {
+  #view-alerts.active {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
@@ -3193,6 +3199,7 @@ button.sector-chip.selected {
   }
 
   #view-markets > .toolbar-row,
+  #view-markets > .sub-nav,
   #view-markets > #panel-futures,
   #view-markets > #panel-session-clock,
   #view-markets > #panel-chart,
@@ -3203,15 +3210,23 @@ button.sector-chip.selected {
     grid-column: 1 / -1;
   }
 
+  #view-trade > * {
+    grid-column: 1 / -1;
+  }
+
   #view-stack > .toolbar-row,
+  #view-stack > .sub-nav,
   #view-stack > #panel-stack,
+  #view-stack > #panel-stack-goals,
   #view-stack > #panel-stack-lots,
-  #view-stack > #panel-ratio-swap {
+  #view-stack > #panel-stack-breakdown,
+  #view-stack > #panel-stack-scenarios {
     grid-column: 1 / -1;
   }
 
   .stack-breakdown-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
   }
 
   .header-melt-btn {
@@ -3241,12 +3256,15 @@ button.sector-chip.selected {
   }
 
   #view-alerts > .toolbar-row,
-  #view-alerts > .panel:last-child,
-  #view-setup > .toolbar-row {
+  #view-alerts > .sub-nav,
+  #view-alerts > #panel-alert-rules {
     grid-column: 1 / -1;
   }
 
-  #view-setup > .panel {
+  #view-alerts > #panel-ntfy-push,
+  #view-alerts > #panel-recent-alerts,
+  #view-alerts > #panel-setup-install,
+  #view-alerts > #panel-setup-background {
     height: 100%;
   }
 
@@ -3277,6 +3295,10 @@ button.sector-chip.selected {
 
   .metal-price {
     font-size: 40px;
+  }
+
+  .metal-price.long-val {
+    font-size: 31px;
   }
 
   .metal-delta-usd {
@@ -4241,5 +4263,625 @@ button.sector-chip.selected {
 
   .sl-canvas-wrap {
     height: 175px;
+  }
+}
+
+/* ---------- v27 Upgrades: Privacy Mode, Multi-Currency, Buy-the-Dip Ladder, Audio/Share Card, Purchasing Power, Deal Grader & Stack Goals ---------- */
+
+/* Compact Header Fit on Narrow Phones & 840-1099px Desktop with Privacy + Settings Buttons */
+@media (max-width: 519px) {
+  .top-bar {
+    padding: 10px 10px;
+    gap: 5px;
+  }
+
+  .brand {
+    gap: 7px;
+  }
+
+  .brand-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .brand-title {
+    font-size: 15.5px;
+  }
+
+  .status-line {
+    font-size: 11px;
+  }
+
+  .header-actions {
+    gap: 4px;
+  }
+
+  .header-melt-btn {
+    padding: 4px 6px;
+  }
+
+  .header-melt-v {
+    font-size: 11px;
+  }
+
+  .icon-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  .icon-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+@media (min-width: 840px) and (max-width: 1099px) {
+  .header-actions {
+    gap: 5px;
+  }
+
+  .top-nav .nav-btn {
+    padding: 7px 10px;
+    font-size: 12.5px;
+    gap: 5px;
+  }
+
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .header-melt-btn {
+    padding: 5px 7px;
+    height: 32px;
+  }
+}
+
+/* Privacy Mode & Settings Gear Active Toggles */
+#btn-privacy-toggle.active,
+#btn-settings.active {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  color: var(--gold-bright);
+}
+
+/* Multi-Currency + Unit Toolbar */
+.toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.currency-select {
+  height: 32px;
+  max-width: 148px;
+  padding: 0 8px 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.currency-select:hover,
+.currency-select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+/* Spoken Brief & Shareable Market Card Buttons */
+.brief-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 650;
+}
+
+.brief-action-btn.speaking {
+  background: var(--gold-soft);
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+
+/* Smart Buy-the-Dip Ladder */
+.ladder-alert-btn {
+  padding: 7px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ladder-inputs-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ladder-steps-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ladder-step-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ladder-step-card.step-1 { border-color: rgba(212, 168, 67, 0.42); }
+.ladder-step-card.step-2 { border-color: rgba(56, 189, 248, 0.38); }
+.ladder-step-card.step-3 { border-color: rgba(34, 197, 94, 0.42); }
+
+.ladder-step-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ladder-step-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gold-bright);
+}
+
+.ladder-step-card.step-2 .ladder-step-tag { color: #38BDF8; }
+.ladder-step-card.step-3 .ladder-step-tag { color: var(--up); }
+
+.ladder-step-amt {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ladder-step-trigger {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.ladder-step-detail {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.ladder-step-detail strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.ladder-foot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.ladder-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Purchasing Power: Gold vs. Cash Reality Check */
+.pp-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pp-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pp-k {
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+}
+
+.pp-v {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-s {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.pp-compare-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.pp-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.pp-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pp-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pp-bar-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pp-bar-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-bar-val.up { color: var(--up); }
+.pp-bar-val.down { color: var(--down); }
+
+.pp-bar-track {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.pp-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.pp-bar-fill.cash { background: var(--down); }
+.pp-bar-fill.gold { background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+.pp-bar-fill.silver { background: linear-gradient(90deg, #94A3B8, #E2E8F0); }
+
+/* Coin Shop Deal Grader */
+.deal-inputs-grid,
+.deal-results-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.deal-verdict-note {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.deal-verdict-note.great {
+  border-color: rgba(34, 197, 94, 0.42);
+  background: color-mix(in srgb, var(--up-soft) 50%, var(--bg));
+  color: var(--text);
+}
+
+.deal-verdict-note.fair {
+  border-color: rgba(212, 168, 67, 0.42);
+  background: color-mix(in srgb, var(--gold-soft) 45%, var(--bg));
+  color: var(--text);
+}
+
+.deal-verdict-note.high {
+  border-color: rgba(239, 68, 68, 0.42);
+  background: color-mix(in srgb, var(--down-soft) 50%, var(--bg));
+  color: var(--text);
+}
+
+/* Stack Goals & Future Price Sliders */
+.goals-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.goals-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.goal-prog-row {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.goal-prog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.goal-prog-label {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.goal-prog-nums {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-prog-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  overflow: hidden;
+}
+
+.goal-prog-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold), var(--up));
+  transition: width 0.3s ease;
+}
+
+.goal-prog-fill.silver {
+  background: linear-gradient(90deg, #94A3B8, #38BDF8);
+}
+
+.whatif-box {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 13px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.whatif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.whatif-head strong {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.whatif-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.whatif-sliders-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.whatif-sliders-grid .control-group {
+  padding: 0;
+  border-bottom: none;
+}
+
+.whatif-readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.whatif-big {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.whatif-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.whatif-gain {
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.whatif-gain.up { color: var(--up); }
+.whatif-gain.down { color: var(--down); }
+
+.whatif-ratio {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+/* Desktop Multi-Column Layouts for v27 (placed AFTER base rules for proper cascade) */
+@media (min-width: 840px) {
+  .currency-select {
+    height: 36px;
+    font-size: 13px;
+    padding: 0 10px 0 12px;
+  }
+
+  .ladder-inputs-row {
+    grid-template-columns: 1fr 1.3fr;
+    gap: 14px;
+  }
+
+  .ladder-steps-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .pp-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .pp-v {
+    font-size: 21px;
+  }
+
+  .deal-inputs-grid,
+  .deal-results-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .goals-inputs-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .whatif-sliders-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .whatif-big {
+    font-size: 28px;
+  }
+}
+
+/* ---------- v30 Upgrades: Modular Sub-Page Pills Inside Every Main Tab ---------- */
+.sub-nav {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+  border-radius: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sub-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.sub-tab-btn {
+  flex: 1 0 auto;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sub-tab-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--gold-soft) 40%, transparent);
+}
+
+.sub-tab-btn.active {
+  color: var(--gold-bright);
+  background: color-mix(in srgb, var(--gold-soft) 72%, transparent);
+  border-color: color-mix(in srgb, var(--gold) 38%, transparent);
+}
+
+.view-panel > [data-sub].sub-hidden {
+  display: none !important;
+}
+
+@media (max-width: 519px) {
+  .sub-tab-btn {
+    font-size: 11.5px;
+    padding: 6px 9px;
+  }
+}
+
+@media (min-width: 840px) {
+  .currency-select {
+    max-width: 215px;
+  }
+
+  .sub-nav {
+    gap: 6px;
+    padding: 5px;
+    border-radius: 15px;
+  }
+
+  .sub-tab-btn {
+    font-size: 13.5px;
+    padding: 8px 18px;
+    min-height: 38px;
   }
 }

@@ -539,12 +539,55 @@ async function sendNtfy(serverUrl, payload, token) {
   return res.json().catch(() => ({}));
 }
 
+export function buildMorningDigestPayload({
+  topic,
+  market,
+  shanghai = null,
+  outlook = null,
+  appUrl = '',
+}) {
+  const g = market.gold;
+  const s = market.silver;
+  const ratio = s.price > 0 ? g.price / s.price : 0;
+  const gSign = g.pct >= 0 ? '+' : '';
+  const sSign = s.pct >= 0 ? '+' : '';
+
+  const lines = [
+    `Gold: $${g.price.toFixed(2)}/oz (${gSign}${g.pct.toFixed(2)}%)`,
+    `Silver: $${s.price.toFixed(2)}/oz (${sSign}${s.pct.toFixed(2)}%)`,
+    `Gold/Silver Ratio: ${ratio.toFixed(1)} : 1${outlook?.ratioAnalytics?.swapBias ? ` (${outlook.ratioAnalytics.swapBias})` : ''}`,
+  ];
+  if (shanghai?.gold?.premiumUsdOz != null) {
+    const prem = shanghai.gold.premiumUsdOz;
+    lines.push(`China Gold vs US/London: ${prem >= 0 ? '+' : '-'}$${Math.abs(prem).toFixed(2)}/oz`);
+  }
+  if (outlook?.dollarStrength?.dxy != null) {
+    lines.push(
+      `US Dollar: ${outlook.dollarStrength.dxy.toFixed(2)} (${outlook.dollarStrength.score}/100 · ${outlook.dollarStrength.regime})`
+    );
+  }
+  if (outlook?.setupQuality?.gold && outlook?.setupQuality?.silver) {
+    lines.push(`Gold Setup: ${outlook.setupQuality.gold.label} (${outlook.setupQuality.gold.score}/100)`);
+    lines.push(`Silver Setup: ${outlook.setupQuality.silver.label} (${outlook.setupQuality.silver.score}/100)`);
+  }
+
+  return {
+    topic: topic || 'dry-run-topic',
+    title: `Good Morning · Gold $${Math.round(g.price).toLocaleString('en-US')} | Silver $${s.price.toFixed(2)}`,
+    message: lines.join('\n'),
+    priority: 3,
+    tags: ['sunrise', 'coin'],
+    ...(appUrl ? { click: appUrl } : {}),
+  };
+}
+
 /* ---------- Main Runner ---------- */
 
 async function main() {
   const args = new Set(process.argv.slice(2));
   const dryRun = args.has('--dry-run');
   const sendTest = args.has('--test');
+  const sendDigest = args.has('--digest');
 
   const ntfyTopic = (process.env.NTFY_TOPIC || '').trim();
   const ntfyServer = (process.env.NTFY_SERVER || 'https://ntfy.sh').trim();
@@ -616,6 +659,29 @@ async function main() {
     } else {
       await sendNtfy(ntfyServer, testPayload, ntfyToken);
       console.log(`Test push sent to ${ntfyServer}/${ntfyTopic}`);
+    }
+    return;
+  }
+
+  if (sendDigest) {
+    let outlookDigest = null;
+    try {
+      outlookDigest = JSON.parse(await fs.readFile(path.resolve('data/outlook.json'), 'utf8'));
+    } catch {
+      // Optional outlook snapshot unavailable
+    }
+    const digestPayload = buildMorningDigestPayload({
+      topic: ntfyTopic || 'dry-run-topic',
+      market,
+      shanghai,
+      outlook: outlookDigest,
+      appUrl,
+    });
+    if (dryRun) {
+      console.log('DRY RUN morning digest payload:', JSON.stringify(digestPayload, null, 2));
+    } else {
+      await sendNtfy(ntfyServer, digestPayload, ntfyToken);
+      console.log(`Morning digest sent to ${ntfyServer}/${ntfyTopic}`);
     }
     return;
   }
