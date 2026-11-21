@@ -3257,7 +3257,8 @@ button.sector-chip.selected {
 
   #view-alerts > .toolbar-row,
   #view-alerts > .sub-nav,
-  #view-alerts > #panel-alert-rules {
+  #view-alerts > #panel-alert-rules,
+  #view-alerts > #panel-voice-settings {
     grid-column: 1 / -1;
   }
 
@@ -4883,5 +4884,19 @@ button.sector-chip.selected {
     font-size: 13.5px;
     padding: 8px 18px;
     min-height: 38px;
+  }
+}
+
+/* Audio Summary Voice Settings Grid */
+.voice-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 840px) {
+  .voice-settings-grid {
+    grid-template-columns: 1.6fr 1fr;
+    gap: 14px;
   }
 }

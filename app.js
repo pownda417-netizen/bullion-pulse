@@ -59,8 +59,10 @@ const DEFAULT_SETTINGS = {
   direction: 'both', // 'both' | 'up' | 'down'
   ntfyTopic: '',
   unit: 'oz', // 'oz' | 'g'
-  currency: 'USD', // 'USD' | 'CAD' | 'EUR' | 'GBP' | 'AUD' | 'MXN'
+  currency: 'USD', // 'USD' | 'CAD' | 'EUR' | 'GBP' | 'CHF' | 'AUD' | 'MXN' | 'INR' | ...
   privacyMode: false,
+  ttsVoice: 'auto',
+  ttsRate: 0.96,
   theme: 'dark',
   selectedMetal: 'gold',
   chartMode: 'gold', // 'gold' | 'silver' | 'ratio'
@@ -303,27 +305,27 @@ function savePersistedState() {
 /* ---------- Multi-Currency, Privacy & Formatting Helpers ---------- */
 
 const CURRENCY_META = {
-  USD: { symbol: '$', label: 'USD', zeroDecimals: false },
-  CAD: { symbol: 'C$', label: 'CAD', zeroDecimals: false },
-  EUR: { symbol: '€', label: 'EUR', zeroDecimals: false },
-  GBP: { symbol: '£', label: 'GBP', zeroDecimals: false },
-  CHF: { symbol: 'Fr', label: 'CHF', zeroDecimals: false },
-  AUD: { symbol: 'A$', label: 'AUD', zeroDecimals: false },
-  MXN: { symbol: 'MX$', label: 'MXN', zeroDecimals: false },
-  INR: { symbol: '₹', label: 'INR', zeroDecimals: false },
-  CNY: { symbol: 'CN¥', label: 'CNY', zeroDecimals: false },
-  JPY: { symbol: '¥', label: 'JPY', zeroDecimals: true },
-  THB: { symbol: '฿', label: 'THB', zeroDecimals: false },
-  LAK: { symbol: '₭', label: 'LAK', zeroDecimals: true },
-  SGD: { symbol: 'S$', label: 'SGD', zeroDecimals: false },
-  HKD: { symbol: 'HK$', label: 'HKD', zeroDecimals: false },
-  KRW: { symbol: '₩', label: 'KRW', zeroDecimals: true },
-  VND: { symbol: '₫', label: 'VND', zeroDecimals: true },
-  IDR: { symbol: 'Rp', label: 'IDR', zeroDecimals: true },
-  AED: { symbol: 'DH ', label: 'AED', zeroDecimals: false },
-  SAR: { symbol: 'SR ', label: 'SAR', zeroDecimals: false },
-  TRY: { symbol: '₺', label: 'TRY', zeroDecimals: false },
-  ZAR: { symbol: 'R', label: 'ZAR', zeroDecimals: false },
+  USD: { symbol: '$', label: 'USD', zeroDecimals: false, spoken: 'dollars', spokenSub: 'cents' },
+  CAD: { symbol: 'C$', label: 'CAD', zeroDecimals: false, spoken: 'Canadian dollars', spokenSub: 'cents' },
+  EUR: { symbol: '€', label: 'EUR', zeroDecimals: false, spoken: 'euros', spokenSub: 'cents' },
+  GBP: { symbol: '£', label: 'GBP', zeroDecimals: false, spoken: 'pounds', spokenSub: 'pence' },
+  CHF: { symbol: 'Fr', label: 'CHF', zeroDecimals: false, spoken: 'Swiss francs', spokenSub: 'centimes' },
+  AUD: { symbol: 'A$', label: 'AUD', zeroDecimals: false, spoken: 'Australian dollars', spokenSub: 'cents' },
+  MXN: { symbol: 'MX$', label: 'MXN', zeroDecimals: false, spoken: 'pesos', spokenSub: 'centavos' },
+  INR: { symbol: '₹', label: 'INR', zeroDecimals: false, spoken: 'rupees', spokenSub: 'paise' },
+  CNY: { symbol: 'CN¥', label: 'CNY', zeroDecimals: false, spoken: 'yuan', spokenSub: '' },
+  JPY: { symbol: '¥', label: 'JPY', zeroDecimals: true, spoken: 'yen', spokenSub: '' },
+  THB: { symbol: '฿', label: 'THB', zeroDecimals: false, spoken: 'baht', spokenSub: '' },
+  LAK: { symbol: '₭', label: 'LAK', zeroDecimals: true, spoken: 'kip', spokenSub: '' },
+  SGD: { symbol: 'S$', label: 'SGD', zeroDecimals: false, spoken: 'Singapore dollars', spokenSub: 'cents' },
+  HKD: { symbol: 'HK$', label: 'HKD', zeroDecimals: false, spoken: 'Hong Kong dollars', spokenSub: 'cents' },
+  KRW: { symbol: '₩', label: 'KRW', zeroDecimals: true, spoken: 'won', spokenSub: '' },
+  VND: { symbol: '₫', label: 'VND', zeroDecimals: true, spoken: 'dong', spokenSub: '' },
+  IDR: { symbol: 'Rp', label: 'IDR', zeroDecimals: true, spoken: 'rupiah', spokenSub: '' },
+  AED: { symbol: 'DH ', label: 'AED', zeroDecimals: false, spoken: 'dirhams', spokenSub: '' },
+  SAR: { symbol: 'SR ', label: 'SAR', zeroDecimals: false, spoken: 'riyals', spokenSub: '' },
+  TRY: { symbol: '₺', label: 'TRY', zeroDecimals: false, spoken: 'Turkish lira', spokenSub: '' },
+  ZAR: { symbol: 'R', label: 'ZAR', zeroDecimals: false, spoken: 'rand', spokenSub: '' },
 };
 
 function getCurrencyCode() {
@@ -2704,6 +2706,7 @@ function renderSettingsControls() {
   const selCurrency = document.getElementById('select-currency');
   if (selCurrency) selCurrency.value = getCurrencyCode();
   applyPrivacyMode();
+  populateVoiceSelector();
 
   const goals = state.settings.stackGoals || DEFAULT_SETTINGS.stackGoals;
   const goalFieldMap = [
@@ -4528,62 +4531,472 @@ function applyLadderDipAlerts() {
   }
 }
 
-function toggleBriefingSpeech() {
+let speechRunSeq = 0;
+let ttsWorker = null;
+let ttsWorkerBroken = false;
+let ttsReqSeq = 0;
+let activeAudioEl = null;
+let activeAudioUrl = null;
+const ttsPending = new Map();
+
+const NEURAL_VOICES = [
+  { id: 'en_US-lessac-medium', label: 'Lessac — Natural US Female (Recommended)' },
+  { id: 'en_US-ryan-medium', label: 'Ryan — Natural US Male' },
+  { id: 'en_US-amy-medium', label: 'Amy — Warm US Female' },
+  { id: 'en_US-hfc_female-medium', label: 'Claire — Clear US Female' },
+  { id: 'en_US-hfc_male-medium', label: 'Mark — Clear US Male' },
+  { id: 'en_GB-alba-medium', label: 'Alba — Natural UK Female' },
+];
+
+function getTtsWorker() {
+  if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
+  if (ttsWorker) return ttsWorker;
+  try {
+    ttsWorker = new Worker('./tts_worker.js?v=32', { type: 'module' });
+    ttsWorker.onmessage = (e) => {
+      const msg = e.data || {};
+      const entry = ttsPending.get(msg.id);
+      if (!entry) return;
+      if (msg.type === 'progress') {
+        entry.onProgress?.(msg.pct);
+      } else if (msg.type === 'audio') {
+        ttsPending.delete(msg.id);
+        entry.resolve(msg.buffer);
+      } else if (msg.type === 'error') {
+        ttsPending.delete(msg.id);
+        entry.reject(new Error(msg.message || 'Neural voice failed'));
+      }
+    };
+    ttsWorker.onerror = () => {
+      ttsWorkerBroken = true;
+      for (const [, entry] of ttsPending) {
+        entry.reject(new Error('Neural voice worker unavailable'));
+      }
+      ttsPending.clear();
+      ttsWorker = null;
+    };
+    return ttsWorker;
+  } catch {
+    ttsWorkerBroken = true;
+    return null;
+  }
+}
+
+function synthesizeNeuralChunk(text, voiceId, onProgress) {
+  const worker = getTtsWorker();
+  if (!worker) return Promise.reject(new Error('Neural worker unsupported'));
+  return new Promise((resolve, reject) => {
+    const id = ++ttsReqSeq;
+    ttsPending.set(id, { resolve, reject, onProgress });
+    worker.postMessage({ id, type: 'speak', text, voiceId });
+  });
+}
+
+function scoreEnglishVoice(v) {
+  if (!v || !v.lang) return -999;
+  const lang = String(v.lang).toLowerCase();
+  if (!lang.startsWith('en')) return -999;
+  const low = String(v.name || '').toLowerCase();
+  let score = 0;
+
+  // Top tier: Neural / Online Natural voices (Edge Azure Neural)
+  if (low.includes('natural') || low.includes('neural')) score += 145;
+  if (/(ava|andrew|emma|brian|aria|jenny|guy|sonia|ryan|libby)\b/.test(low) && low.includes('natural')) {
+    score += 35;
+  }
+  // Apple Premium / Enhanced / Siri Neural voices (macOS / iOS)
+  if (low.includes('premium')) score += 135;
+  else if (low.includes('enhanced') || low.includes('siri')) score += 118;
+
+  // Google Cloud Neural voices (Chrome / Android)
+  if (low.startsWith('google us english')) score += 112;
+  else if (low.startsWith('google uk english')) score += 104;
+  else if (low.startsWith('google') && low.includes('english')) score += 96;
+
+  // Cloud / remote neural voices generally sound much smoother than legacy local SAPI5
+  if (v.localService === false) score += 22;
+
+  // Modern warm English voice profiles
+  if (/(ava|zoe|allison|samantha|nicky|aria|jenny|andrew|brian|emma|daniel|karen|serena|moira)/.test(low)) {
+    score += 20;
+  }
+
+  if (lang === 'en-us') score += 18;
+  else if (lang === 'en-gb') score += 12;
+  else if (lang === 'en-ca' || lang === 'en-au') score += 8;
+
+  // Strongly demote robotic legacy desktop SAPI5 / eSpeak voices
+  if (/(david|zira|mark|hazel|george|susan|heera|ravi|richard|linda|catherine|james|espeak|festival|compact|fred|albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|pipe organ|trinoids|whisper|zarvox)/.test(low)) {
+    score -= 95;
+  }
+  return score;
+}
+
+function getRankedEnglishVoices() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return [];
+  const all = window.speechSynthesis.getVoices() || [];
+  return all
+    .map((voice) => ({ voice, score: scoreEnglishVoice(voice) }))
+    .filter((item) => item.score > -500)
+    .sort((a, b) => b.score - a.score);
+}
+
+async function ensureVoicesLoaded() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return [];
+  const immediate = getRankedEnglishVoices();
+  if (immediate.length > 0) return immediate;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.speechSynthesis.removeEventListener?.('voiceschanged', finish);
+      resolve(getRankedEnglishVoices());
+    };
+    window.speechSynthesis.addEventListener?.('voiceschanged', finish);
+    setTimeout(finish, 450);
+  });
+}
+
+function resolveVoiceChoice(ranked = null) {
+  const list = ranked || getRankedEnglishVoices();
+  const pref = state.settings.ttsVoice || 'auto';
+
+  // Explicit AI Neural voice chosen
+  if (pref.startsWith('neural:')) {
+    const id = pref.slice('neural:'.length);
+    const meta = NEURAL_VOICES.find((v) => v.id === id) || NEURAL_VOICES[0];
+    return { engine: 'neural', voiceId: meta.id, label: `AI Neural · ${meta.label.split(' — ')[0]}` };
+  }
+
+  // Explicit Browser voice chosen
+  if (pref && pref !== 'auto') {
+    const exact = list.find((item) => item.voice.name === pref);
+    if (exact) {
+      return {
+        engine: 'browser',
+        voice: exact.voice,
+        score: exact.score,
+        label: exact.voice.name.replace(/\s*-\s*English.*$/i, ''),
+      };
+    }
+  }
+
+  // Smart Auto: if browser already has a zero-download Studio Neural/Premium voice (e.g. Edge Ava Natural), use it;
+  // otherwise use our on-device Piper AI Neural voice (Lessac) so you never hear robotic Microsoft David/Zira!
+  const bestBrowser = list[0] || null;
+  if (bestBrowser && bestBrowser.score >= 130) {
+    return {
+      engine: 'browser',
+      voice: bestBrowser.voice,
+      score: bestBrowser.score,
+      label: bestBrowser.voice.name.replace(/\s*-\s*English.*$/i, ''),
+    };
+  }
+  return {
+    engine: 'neural',
+    voiceId: 'en_US-lessac-medium',
+    label: 'AI Neural · Lessac (Natural US English)',
+  };
+}
+
+function populateVoiceSelector() {
+  const sel = document.getElementById('select-tts-voice');
+  const rateSel = document.getElementById('select-tts-rate');
+  const fb = document.getElementById('voice-feedback');
+  if (rateSel) rateSel.value = String(state.settings.ttsRate ?? 0.96);
+  if (!sel) return;
+
+  const ranked = getRankedEnglishVoices();
+  const curPref = state.settings.ttsVoice || 'auto';
+  const resolved = resolveVoiceChoice(ranked);
+
+  const neuralOpts = NEURAL_VOICES.map(
+    (nv) => `<option value="neural:${escapeHtml(nv.id)}">★ AI Natural · ${escapeHtml(nv.label)}</option>`
+  ).join('');
+
+  const browserOpts = ranked
+    .slice(0, 20)
+    .map(({ voice, score }) => {
+      const badge = score >= 110 ? '★ Natural · ' : score >= 40 ? 'Good · ' : '';
+      const cleanName = voice.name.replace(/\s*-\s*English.*$/i, '');
+      return `<option value="${escapeHtml(voice.name)}">${escapeHtml(badge + cleanName)} (${escapeHtml(voice.lang)})</option>`;
+    })
+    .join('');
+
+  sel.innerHTML =
+    `<option value="auto">Auto — Best Natural English (${escapeHtml(resolved.label)})</option>` +
+    `<optgroup label="AI Human Voices (Runs Locally · Free · Cached Offline)">${neuralOpts}</optgroup>` +
+    (browserOpts ? `<optgroup label="Browser Built-In Voices (Instant)">${browserOpts}</optgroup>` : '');
+
+  const hasExact = Array.from(sel.options).some((o) => o.value === curPref);
+  sel.value = hasExact ? curPref : 'auto';
+
+  if (fb && !state.speechActive) {
+    fb.className = 'feedback-note ok';
+    fb.textContent =
+      resolved.engine === 'neural'
+        ? `Ready with ${resolved.label} (100% private on-device AI voice — caches offline after first play).`
+        : `Ready with built-in natural voice: ${resolved.label}.`;
+  }
+}
+
+function formatSpokenMoney(usdVal, includeSubunit = false) {
+  const code = getCurrencyCode();
+  const meta = CURRENCY_META[code] || CURRENCY_META.USD;
+  const converted = Math.abs((Number(usdVal) || 0) * getFxRate());
+  if (meta.zeroDecimals || !includeSubunit || !meta.spokenSub || converted >= 250) {
+    return `${Math.round(converted).toLocaleString('en-US')} ${meta.spoken}`;
+  }
+  const whole = Math.floor(converted);
+  const sub = Math.round((converted - whole) * 100);
+  if (sub === 0) return `${whole.toLocaleString('en-US')} ${meta.spoken}`;
+  if (sub === 100) return `${(whole + 1).toLocaleString('en-US')} ${meta.spoken}`;
+  return `${whole.toLocaleString('en-US')} ${meta.spoken} and ${sub} ${meta.spokenSub}`;
+}
+
+function cleanTextForNaturalSpeech(rawText) {
+  return String(rawText || '')
+    .replace(/(\d+)\s*\/\s*100/g, '$1 out of 100')
+    .replace(/[−-]\s*\$([\d,]+)\.(\d{2})\s*\/\s*oz/gi, (_, w, c) =>
+      c === '00' ? `minus ${w} dollars per ounce` : `minus ${w} dollars and ${parseInt(c, 10)} cents per ounce`
+    )
+    .replace(/\$([\d,]+)\.(\d{2})\s*\/\s*oz/gi, (_, w, c) =>
+      c === '00' ? `${w} dollars per ounce` : `${w} dollars and ${parseInt(c, 10)} cents per ounce`
+    )
+    .replace(/[−-]\s*\$([\d,]+(?:\.\d+)?)/g, 'minus $1 dollars')
+    .replace(/\$([\d,]+)\.(\d{2})/g, (_, w, c) =>
+      c === '00' ? `${w} dollars` : `${w} dollars and ${parseInt(c, 10)} cents`
+    )
+    .replace(/\/\s*oz\b/gi, ' per ounce')
+    .replace(/\/\s*g\b/gi, ' per gram')
+    .replace(/\b1\s*oz\b/gi, '1 ounce')
+    .replace(/\boz\b/gi, 'ounces')
+    .replace(/\bvs\.?\b/gi, 'versus')
+    .replace(/\b7D\b/g, '7 day')
+    .replace(/\b30D\b/g, '30 day')
+    .replace(/\s*\/\s*/g, ' and ')
+    .replace(/\s*[·—–]\s*/g, ', ')
+    .replace(/\(([^)]+)\)/g, ', $1,')
+    .replace(/"/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/,\s*,/g, ',')
+    .trim();
+}
+
+function stopAllSpeech() {
+  speechRunSeq += 1;
+  state.speechActive = false;
+  if (activeAudioEl) {
+    try {
+      activeAudioEl.pause();
+      activeAudioEl.src = '';
+    } catch {}
+    activeAudioEl = null;
+  }
+  if (activeAudioUrl) {
+    URL.revokeObjectURL(activeAudioUrl);
+    activeAudioUrl = null;
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
   const btn = document.getElementById('btn-listen-brief');
-  const feedback = document.getElementById('share-card-feedback');
+  if (btn) {
+    btn.textContent = '🔊 Listen';
+    btn.classList.remove('speaking');
+  }
+}
+
+function playWavBuffer(arrayBuffer, rate, runId) {
+  return new Promise((resolve, reject) => {
+    if (runId !== speechRunSeq) {
+      resolve(false);
+      return;
+    }
+    const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.playbackRate = clampNum(rate, 0.75, 1.35);
+    activeAudioEl = audio;
+    activeAudioUrl = url;
+    const cleanup = () => {
+      if (activeAudioUrl === url) {
+        URL.revokeObjectURL(url);
+        activeAudioUrl = null;
+      }
+      if (activeAudioEl === audio) activeAudioEl = null;
+    };
+    audio.onended = () => {
+      cleanup();
+      resolve(true);
+    };
+    audio.onerror = () => {
+      cleanup();
+      reject(new Error('Audio playback failed'));
+    };
+    audio.play().catch((err) => {
+      cleanup();
+      reject(err);
+    });
+  });
+}
+
+function speakWithBrowserFallback(queue, voiceObj, rate, runId, isBriefBtn, feedbackEl, fallbackNote = null) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    if (feedback) {
-      feedback.className = 'feedback-note err';
-      feedback.textContent = 'Spoken audio is not supported in this browser.';
+    stopAllSpeech();
+    if (feedbackEl) {
+      feedbackEl.className = 'feedback-note err';
+      feedbackEl.textContent = 'Audio playback unavailable in this browser.';
     }
     return;
   }
-
-  if (state.speechActive || window.speechSynthesis.speaking) {
-    window.speechSynthesis.cancel();
-    state.speechActive = false;
-    if (btn) {
-      btn.textContent = '🔊 Listen';
-      btn.classList.remove('speaking');
+  if (feedbackEl) {
+    const cleanVoice = voiceObj ? voiceObj.name.replace(/\s*-\s*English.*$/i, '') : 'Browser Voice';
+    feedbackEl.className = 'feedback-note ok';
+    feedbackEl.textContent = fallbackNote || `🎙 Speaking with ${cleanVoice}`;
+  }
+  window.speechSynthesis.cancel();
+  let idx = 0;
+  const speakNext = () => {
+    if (runId !== speechRunSeq) return;
+    if (idx >= queue.length) {
+      stopAllSpeech();
+      return;
     }
+    const utter = new SpeechSynthesisUtterance(queue[idx]);
+    if (voiceObj) {
+      utter.voice = voiceObj;
+      utter.lang = voiceObj.lang || 'en-US';
+    } else {
+      utter.lang = 'en-US';
+    }
+    utter.rate = rate;
+    utter.pitch = 1.0;
+    utter.volume = 1.0;
+    utter.onend = () => {
+      idx += 1;
+      setTimeout(speakNext, 110);
+    };
+    utter.onerror = () => {
+      if (runId === speechRunSeq) stopAllSpeech();
+    };
+    window.speechSynthesis.speak(utter);
+  };
+  speakNext();
+}
+
+async function speakSentencesNaturally(sentences, { isBriefBtn = false, feedbackEl = null } = {}) {
+  const ranked = await ensureVoicesLoaded();
+  populateVoiceSelector();
+  const choice = resolveVoiceChoice(ranked);
+  const rate = clampNum(parseFloat(state.settings.ttsRate) || 0.96, 0.75, 1.35);
+
+  const runId = ++speechRunSeq;
+  state.speechActive = true;
+  const btn = document.getElementById('btn-listen-brief');
+  if (isBriefBtn && btn) {
+    btn.textContent = '⏹ Stop';
+    btn.classList.add('speaking');
+  }
+
+  const queue = sentences
+    .map((s) => cleanTextForNaturalSpeech(s))
+    .filter((s) => s.length > 0);
+  if (!queue.length) {
+    stopAllSpeech();
+    return;
+  }
+
+  // Path 1: On-Device Piper AI Neural English Voice (real human voice in every browser!)
+  if (choice.engine === 'neural') {
+    const shortName = choice.label.replace(/^AI Neural · /, '');
+    try {
+      if (feedbackEl) {
+        feedbackEl.className = 'feedback-note ok';
+        feedbackEl.textContent = `🎙 Loading ${choice.label}…`;
+      }
+      const onProg = (pct) => {
+        if (runId !== speechRunSeq || !feedbackEl) return;
+        feedbackEl.className = 'feedback-note ok';
+        feedbackEl.textContent =
+          pct < 100
+            ? `⬇ Downloading natural AI voice (${shortName}) ${pct}% — saved offline after this…`
+            : `🎙 Generating natural English audio (${shortName})…`;
+      };
+
+      // Pipeline pre-generation: synthesize sentence i+1 while sentence i plays!
+      let nextPromise = synthesizeNeuralChunk(queue[0], choice.voiceId, onProg);
+      for (let i = 0; i < queue.length; i += 1) {
+        if (runId !== speechRunSeq) return;
+        const wavBuf = await nextPromise;
+        if (runId !== speechRunSeq) return;
+
+        if (i + 1 < queue.length) {
+          nextPromise = synthesizeNeuralChunk(queue[i + 1], choice.voiceId, null);
+        }
+        if (feedbackEl) {
+          feedbackEl.className = 'feedback-note ok';
+          feedbackEl.textContent = `🎙 Speaking with ${choice.label} (${i + 1}/${queue.length})`;
+        }
+        await playWavBuffer(wavBuf, rate, runId);
+      }
+      if (runId === speechRunSeq) {
+        stopAllSpeech();
+        if (feedbackEl) {
+          feedbackEl.className = 'feedback-note ok';
+          feedbackEl.textContent = `✓ Finished briefing (${choice.label})`;
+        }
+      }
+      return;
+    } catch {
+      if (runId !== speechRunSeq) return;
+      // Seamless automatic fallback to best available browser English voice
+      const fallbackVoice = ranked[0]?.voice || null;
+      speakWithBrowserFallback(
+        queue,
+        fallbackVoice,
+        rate,
+        runId,
+        isBriefBtn,
+        feedbackEl,
+        `🎙 AI voice offline — speaking with ${fallbackVoice ? fallbackVoice.name.replace(/\s*-\s*English.*$/i, '') : 'Browser Voice'}`
+      );
+      return;
+    }
+  }
+
+  // Path 2: Browser Built-In Voice (Edge Natural / Apple Enhanced / Google English / User Selected)
+  speakWithBrowserFallback(queue, choice.voice || null, rate, runId, isBriefBtn, feedbackEl);
+}
+
+function toggleBriefingSpeech() {
+  const feedback = document.getElementById('share-card-feedback');
+  if (state.speechActive || activeAudioEl || (typeof window !== 'undefined' && window.speechSynthesis?.speaking)) {
+    stopAllSpeech();
+    if (feedback) feedback.textContent = '';
     return;
   }
 
   const res = computeInteractiveOutlook();
   const gPct = state.quotes.gold.pct || 0;
   const sPct = state.quotes.silver.pct || 0;
-  const dirPct = (p) => `${p >= 0 ? 'up' : 'down'} ${Math.abs(p).toFixed(1)} percent`;
-  const script =
-    `Bullion Pulse market briefing. ` +
-    `Gold is trading at ${formatMoney(res.gold.spot, 0)} per ounce, ${dirPct(gPct)} today, rated ${res.setupQuality.gold.label}. ` +
-    `Silver is at ${formatMoney(res.silver.spot, 2)} per ounce, ${dirPct(sPct)} today, rated ${res.setupQuality.silver.label}. ` +
-    `${res.narrative}`;
+  const dirPct = (p) =>
+    Math.abs(p) < 0.05 ? 'roughly flat' : `${p > 0 ? 'up' : 'down'} ${Math.abs(p).toFixed(1)} percent`;
 
-  const utter = new SpeechSynthesisUtterance(script);
-  utter.rate = 1.02;
-  utter.pitch = 1.0;
-  utter.onend = () => {
-    state.speechActive = false;
-    if (btn) {
-      btn.textContent = '🔊 Listen';
-      btn.classList.remove('speaking');
-    }
-  };
-  utter.onerror = () => {
-    state.speechActive = false;
-    if (btn) {
-      btn.textContent = '🔊 Listen';
-      btn.classList.remove('speaking');
-    }
-  };
+  const narrativeSentences = String(res.narrative || '')
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-  state.speechActive = true;
-  if (btn) {
-    btn.textContent = '⏹ Stop';
-    btn.classList.add('speaking');
-  }
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utter);
+  const sentences = [
+    'Here is your Bullion Pulse market update.',
+    `Gold is at ${formatSpokenMoney(res.gold.spot, false)} per ounce, ${dirPct(gPct)} today, with a ${res.setupQuality.gold.label} rating.`,
+    `Silver is at ${formatSpokenMoney(res.silver.spot, true)} per ounce, ${dirPct(sPct)} today, with a ${res.setupQuality.silver.label} rating.`,
+    ...narrativeSentences,
+  ];
+
+  speakSentencesNaturally(sentences, { isBriefBtn: true, feedbackEl: feedback });
 }
 
 function exportShareMarketCard() {
@@ -7379,6 +7792,28 @@ function wireEvents() {
   document.getElementById('btn-listen-brief')?.addEventListener('click', () => {
     toggleBriefingSpeech();
   });
+  document.getElementById('select-tts-voice')?.addEventListener('change', (e) => {
+    state.settings.ttsVoice = e.target.value || 'auto';
+    populateVoiceSelector();
+    savePersistedState();
+  });
+  document.getElementById('select-tts-rate')?.addEventListener('change', (e) => {
+    state.settings.ttsRate = clampNum(parseFloat(e.target.value) || 0.96, 0.75, 1.35);
+    savePersistedState();
+  });
+  document.getElementById('btn-test-voice')?.addEventListener('click', () => {
+    const fb = document.getElementById('voice-feedback');
+    const c = getCanonicalSpotPrices();
+    speakSentencesNaturally(
+      [
+        `Hello! Gold is currently at ${formatSpokenMoney(c.gold, false)} per ounce, and your Bullion Pulse audio briefing is ready.`,
+      ],
+      { isBriefBtn: false, feedbackEl: fb }
+    );
+  });
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.addEventListener?.('voiceschanged', populateVoiceSelector);
+  }
   document.getElementById('btn-share-card')?.addEventListener('click', () => {
     exportShareMarketCard();
   });
@@ -8153,6 +8588,7 @@ function init() {
   applyPrivacyMode();
   applyAllSubViews();
   wireEvents();
+  populateVoiceSelector();
   renderAll();
   fetchSpotQuotes();
   fetchOutlookData();

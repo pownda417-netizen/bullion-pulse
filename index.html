@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=31" />
+  <link rel="stylesheet" href="./styles.css?v=32" />
 </head>
 <body>
   <div class="app-shell">
@@ -1496,6 +1496,34 @@
           </ul>
         </section>
 
+        <section class="panel" id="panel-voice-settings" data-sub="phone">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Audio Summary Voice</h2>
+              <div class="panel-subtitle">Automatically chooses the most natural human English voice available on your browser</div>
+            </div>
+            <button type="button" class="btn btn-primary" id="btn-test-voice" style="padding: 7px 12px; font-size: 12px; white-space: nowrap;">🔊 Test Voice</button>
+          </div>
+          <div class="voice-settings-grid">
+            <label class="stack-field">
+              <span>Voice Model</span>
+              <select id="select-tts-voice" class="select-input">
+                <option value="auto">Auto — Best Natural English Voice</option>
+              </select>
+            </label>
+            <label class="stack-field">
+              <span>Speaking Pace</span>
+              <select id="select-tts-rate" class="select-input">
+                <option value="0.9">Relaxed (0.90×)</option>
+                <option value="0.96" selected>Natural (0.96×)</option>
+                <option value="1.05">Standard (1.05×)</option>
+                <option value="1.15">Brisk (1.15×)</option>
+              </select>
+            </label>
+          </div>
+          <div class="feedback-note" id="voice-feedback" role="status"></div>
+        </section>
+
         <section class="panel" id="panel-setup-install" data-sub="setup">
           <div class="panel-header">
             <h2 class="panel-title">1. Add App to Your Phone</h2>
@@ -1591,6 +1619,6 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=31" defer></script>
+  <script src="./app.js?v=32" defer></script>
 </body>
 </html>
