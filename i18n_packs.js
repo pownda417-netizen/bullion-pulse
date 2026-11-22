@@ -635,6 +635,18 @@
         hi: `5-मिनट बार · पिछले 4 घंटे · लाइव अपडेट ${m[1]} में`,
       })[l],
     ],
+    // "30-min price bars · 24 hours · Next live update in 00:14"
+    [
+      /^30-min price bars · 24 hours · Next live update in (.+)$/,
+      (m, l) => ({
+        th: `แท่งราคา 30 นาที · 24 ชม. · อัปเดตสดใน ${m[1]}`,
+        lo: `ແທ່ງລາຄາ 30 ນາທີ · 24 ຊມ. · ອັບເດດສົດໃນ ${m[1]}`,
+        es: `Velas de 30 min · 24 horas · Próxima actualización en ${m[1]}`,
+        zh: `30分钟K线 · 24小时 · ${m[1]} 后实时更新`,
+        ja: `30分足チャート・24時間・次回ライブ更新まで ${m[1]}`,
+        hi: `30-मिनट बार · 24 घंटे · अगला लाइव अपडेट ${m[1]} में`,
+      })[l],
+    ],
     // "5-min price bars · Next live update in 00:14"
     [
       /^5-min price bars · Next live update in (.+)$/,

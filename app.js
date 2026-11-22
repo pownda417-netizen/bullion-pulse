@@ -275,9 +275,17 @@ const state = {
     gold: [],
     silver: [],
   },
+  candlesSource: {
+    gold: 'seed',
+    silver: 'seed',
+  },
   candles1m: {
     gold: [],
     silver: [],
+  },
+  candles1mSource: {
+    gold: 'seed',
+    silver: 'seed',
   },
   chartZoom: {
     startIdx: null,
@@ -1610,11 +1618,11 @@ function renderStats() {
 /* ---------- Multi-Timeframe OHLC Candlesticks & Forecast Fan Chart ---------- */
 
 const CHART_TF_META = {
-  '15min': { label: '15m', interval: '1m',  barMs: 60000,       subtitle: '1-min price bars · Live 15 mins', fcHorizon: '7d', fcLabel: '+7d', maxBars: 60,  defaultVisible: 18 },
+  '15min': { label: '15m', interval: '1m',  barMs: 60000,       subtitle: '1-min price bars · Live 15 mins', fcHorizon: '7d', fcLabel: '+7d', maxBars: 120, defaultVisible: 15 },
   '1h':    { label: '1H',  interval: '1m',  barMs: 60000,       subtitle: '1-min price bars · Past 1 hour',  fcHorizon: '7d', fcLabel: '+7d', maxBars: 120, defaultVisible: 60 },
-  '4h':    { label: '4H',  interval: '5m',  barMs: 300000,      subtitle: '5-min price bars · Past 4 hours', fcHorizon: '7d', fcLabel: '+7d', maxBars: 96,  defaultVisible: 48 },
-  '1d':    { label: '1D',  interval: '5m',  barMs: 300000,      subtitle: '5-min price bars · Today',        fcHorizon: '7d', fcLabel: '+7d', maxBars: 144, defaultVisible: 40 },
-  '7d':    { label: '7D',  interval: '1h',  barMs: 3600000,     subtitle: 'Hourly bars · 7 days',            fcHorizon: '7d', fcLabel: '+7d', maxBars: 84,  defaultVisible: 36 },
+  '4h':    { label: '4H',  interval: '5m',  barMs: 300000,      subtitle: '5-min price bars · Past 4 hours', fcHorizon: '7d', fcLabel: '+7d', maxBars: 288, defaultVisible: 48 },
+  '1d':    { label: '1D',  interval: '30m', barMs: 1800000,     subtitle: '30-min price bars · 24 hours',    fcHorizon: '7d', fcLabel: '+7d', maxBars: 48,  defaultVisible: 48 },
+  '7d':    { label: '7D',  interval: '1h',  barMs: 3600000,     subtitle: 'Hourly bars · 7 days',            fcHorizon: '7d', fcLabel: '+7d', maxBars: 84,  defaultVisible: 42 },
   '1m':    { label: '1M',  interval: '1d',  barMs: 86400000,    subtitle: 'Daily bars · 1 month',            fcHorizon: '1m', fcLabel: '+1M', maxBars: 45,  defaultVisible: 28 },
   '6m':    { label: '6M',  interval: '3d',  barMs: 259200000,   subtitle: '3-day bars · 6 months',           fcHorizon: '6m', fcLabel: '+6M', maxBars: 60,  defaultVisible: 36 },
   '1y':    { label: '1Y',  interval: '1wk', barMs: 604800000,   subtitle: 'Weekly bars · 1 year',            fcHorizon: '1y', fcLabel: '+1Y', maxBars: 60,  defaultVisible: 52 },
@@ -1662,12 +1670,39 @@ function bucket1m(ts = Date.now()) {
   return Math.floor(ts / CANDLE_1M_MS) * CANDLE_1M_MS;
 }
 
+function aggregateBarsByInterval(bars, intervalMs) {
+  if (!Array.isArray(bars) || !bars.length || !(intervalMs > 0)) return bars || [];
+  const out = [];
+  let cur = null;
+  let curBucket = null;
+  for (const b of bars) {
+    if (!b || !Number.isFinite(b.t) || !(b.o > 0) || !(b.c > 0)) continue;
+    const bkt = Math.floor(b.t / intervalMs) * intervalMs;
+    if (cur && bkt === curBucket) {
+      cur.h = +Math.max(cur.h, b.h).toFixed(2);
+      cur.l = +Math.min(cur.l, b.l).toFixed(2);
+      cur.c = +b.c.toFixed(2);
+    } else {
+      curBucket = bkt;
+      cur = {
+        t: bkt,
+        o: +b.o.toFixed(2),
+        h: +b.h.toFixed(2),
+        l: +b.l.toFixed(2),
+        c: +b.c.toFixed(2),
+      };
+      out.push(cur);
+    }
+  }
+  return out;
+}
+
 function seed5mCandlesIfEmpty(metal, spotPrice, prevClose, force = false) {
-  if (!force && state.candles[metal].length >= 8) return;
+  if (!force && (state.candlesSource[metal] === 'live' || state.candles[metal].length >= 8)) return;
   const nowBucket = bucket5m(Date.now());
-  const count = 48;
+  const count = 96;
   const startPrice = prevClose || spotPrice;
-  const vol = metal === 'silver' ? 0.0038 : 0.0018;
+  const vol = metal === 'silver' ? 0.0028 : 0.0014;
   const bars = [];
   let cursor = startPrice;
 
@@ -1686,10 +1721,11 @@ function seed5mCandlesIfEmpty(metal, spotPrice, prevClose, force = false) {
     cursor = c;
   }
   state.candles[metal] = bars;
+  state.candlesSource[metal] = 'seed';
 }
 
 function seed1mCandlesIfEmpty(metal, spotPrice, prevClose, force = false) {
-  if (!force && state.candles1m[metal].length >= 15) return;
+  if (!force && (state.candles1mSource[metal] === 'live' || state.candles1m[metal].length >= 15)) return;
   const nowBucket = bucket1m(Date.now());
   const src5m = state.candles[metal];
   const bars = [];
@@ -1778,7 +1814,9 @@ function seed1mCandlesIfEmpty(metal, spotPrice, prevClose, force = false) {
 
 function updateActive1mCandle(metal, price, prevClose) {
   if (price == null) return;
-  seed1mCandlesIfEmpty(metal, price, prevClose);
+  if (state.candles1mSource[metal] !== 'live') {
+    seed1mCandlesIfEmpty(metal, price, prevClose);
+  }
   const bars = state.candles1m[metal];
   const currentBucket = bucket1m(Date.now());
   const last = bars[bars.length - 1];
@@ -1796,10 +1834,12 @@ function updateActive1mCandle(metal, price, prevClose) {
   if (last.t < currentBucket) {
     // Avoid appending flat synthetic bars across weekend/market-closed gaps when price is unchanged
     const minDiff = metal === 'silver' ? 0.005 : 0.05;
-    if (currentBucket - last.t > 10 * CANDLE_1M_MS && Math.abs(price - last.c) < minDiff) {
+    const gapMs = currentBucket - last.t;
+    if (gapMs > 10 * CANDLE_1M_MS && Math.abs(price - last.c) < minDiff) {
       return;
     }
-    const open = last.c;
+    // Across a multi-minute/weekend gap, open at the fresh session price instead of stretching a fake vertical bar
+    const open = gapMs <= 2 * CANDLE_1M_MS ? last.c : price;
     bars.push({
       t: currentBucket,
       o: +open.toFixed(2),
@@ -1909,32 +1949,62 @@ function getCandlesForTimeframe(metal, tf) {
   const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
 
   if (tf === '15min' || tf === '1h') {
-    seed5mCandlesIfEmpty(metal, spot, prevClose);
+    if (state.candlesSource[metal] !== 'live') seed5mCandlesIfEmpty(metal, spot, prevClose);
     const bars1m = state.candles1m[metal];
     if (
+      state.candles1mSource[metal] !== 'live' &&
       bars1m.length >= 6 &&
       quote.price != null &&
-      Math.abs(bars1m[bars1m.length - 1].c - quote.price) / quote.price > 0.03
+      Math.abs(bars1m[bars1m.length - 1].c - quote.price) / quote.price > 0.05
     ) {
       seed1mCandlesIfEmpty(metal, spot, prevClose, true);
-    } else {
+    } else if (state.candles1mSource[metal] !== 'live') {
       seed1mCandlesIfEmpty(metal, spot, prevClose);
     }
     return state.candles1m[metal].slice(-meta.maxBars);
   }
 
-  if (tf === '4h' || tf === '1d') {
+  if (tf === '4h') {
     const bars = state.candles[metal];
     if (
+      state.candlesSource[metal] !== 'live' &&
       bars.length >= 4 &&
       quote.price != null &&
-      Math.abs(bars[bars.length - 1].c - quote.price) / quote.price > 0.03
+      Math.abs(bars[bars.length - 1].c - quote.price) / quote.price > 0.05
     ) {
       seed5mCandlesIfEmpty(metal, spot, prevClose, true);
-    } else {
+    } else if (state.candlesSource[metal] !== 'live') {
       seed5mCandlesIfEmpty(metal, spot, prevClose);
     }
     return state.candles[metal].slice(-meta.maxBars);
+  }
+
+  if (tf === '1d') {
+    const bars = state.candles[metal];
+    if (
+      state.candlesSource[metal] !== 'live' &&
+      bars.length >= 4 &&
+      quote.price != null &&
+      Math.abs(bars[bars.length - 1].c - quote.price) / quote.price > 0.05
+    ) {
+      seed5mCandlesIfEmpty(metal, spot, prevClose, true);
+    } else if (state.candlesSource[metal] !== 'live') {
+      seed5mCandlesIfEmpty(metal, spot, prevClose);
+    }
+    const raw5m = state.candles[metal];
+    // Roll true 5m bars into exact 30-minute bars (up to 48 bars = full 24h trading day) when 5+ hours exist
+    if (raw5m.length >= 60) {
+      return aggregateBarsByInterval(raw5m, 30 * 60 * 1000).slice(-meta.maxBars);
+    }
+    // If the fresh session just opened (e.g., Sunday evening with <16 bars), bridge with prior real Yahoo 7d hourly bars instead of faking closed hours
+    const hist7d = state.timeframes?.['7d']?.[metal];
+    if (raw5m.length < 24 && Array.isArray(hist7d) && hist7d.length >= 6) {
+      const first5mT = raw5m[0]?.t || Date.now();
+      const priorReal = hist7d.filter((b) => b.t < first5mT - 60000).slice(-20);
+      const bridged = [...priorReal, ...aggregateBarsByInterval(raw5m, 30 * 60 * 1000)];
+      if (bridged.length >= 4) return bridged.slice(-meta.maxBars);
+    }
+    return raw5m.slice(-meta.maxBars);
   }
   const loaded = state.timeframes?.[tf]?.[metal];
   const src =
@@ -1954,10 +2024,15 @@ function getCandlesForTimeframe(metal, tf) {
   return src;
 }
 
-function formatCandleTimestamp(ts, tf, compact = false) {
+function formatCandleTimestamp(ts, tf, compact = false, showWeekday = false) {
   const d = new Date(ts);
   if (tf === '15min' || tf === '1h' || tf === '4h' || tf === '1d') {
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const tStr = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (showWeekday) {
+      const wd = d.toLocaleDateString([], { weekday: 'short' });
+      return `${wd} ${tStr}`;
+    }
+    return tStr;
   }
   if (tf === '7d') {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + (compact ? '' : ' ' + d.toLocaleTimeString([], { hour: 'numeric' }));
@@ -1971,30 +2046,53 @@ function formatCandleTimestamp(ts, tf, compact = false) {
   return String(d.getUTCFullYear());
 }
 
-function formatCandleRangeLabel(ts, tf) {
+function formatCandleRangeLabel(ts, tf, barMsOverride = null, showWeekday = false) {
   if (tf === '15min' || tf === '1h' || tf === '4h' || tf === '1d') {
-    const stepMs = tf === '15min' || tf === '1h' ? CANDLE_1M_MS : CANDLE_INTERVAL_MS;
-    const sStr = new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const stepMs =
+      barMsOverride && barMsOverride >= 60000 && barMsOverride <= 3600000
+        ? barMsOverride
+        : (CHART_TF_META[tf]?.barMs || CANDLE_INTERVAL_MS);
+    const dStart = new Date(ts);
+    const sStr = dStart.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const eStr = new Date(ts + stepMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const sMer = sStr.match(/\s*([AP]M)$/i);
     const eMer = eStr.match(/\s*([AP]M)$/i);
+    const prefix = showWeekday ? `${dStart.toLocaleDateString([], { weekday: 'short' })} ` : '';
     if (sMer && eMer && sMer[1].toUpperCase() === eMer[1].toUpperCase()) {
-      return `${sStr.replace(/\s*[AP]M$/i, '')}–${eStr}`;
+      return `${prefix}${sStr.replace(/\s*[AP]M$/i, '')}–${eStr}`;
     }
-    return `${sStr}–${eStr}`;
+    return `${prefix}${sStr}–${eStr}`;
   }
   return formatCandleTimestamp(ts, tf, false);
 }
 
 function updateActive5mCandle(metal, price, prevClose) {
   if (price == null) return;
-  seed5mCandlesIfEmpty(metal, price, prevClose);
+  if (state.candlesSource[metal] !== 'live') {
+    seed5mCandlesIfEmpty(metal, price, prevClose);
+  }
   const bars = state.candles[metal];
   const currentBucket = bucket5m(Date.now());
   const last = bars[bars.length - 1];
 
-  if (!last || last.t < currentBucket) {
-    const open = last ? last.c : price;
+  if (!last) {
+    bars.push({
+      t: currentBucket,
+      o: +price.toFixed(2),
+      h: +price.toFixed(2),
+      l: +price.toFixed(2),
+      c: +price.toFixed(2),
+    });
+    return;
+  }
+  if (last.t < currentBucket) {
+    const gapMs = currentBucket - last.t;
+    const minDiff = metal === 'silver' ? 0.005 : 0.05;
+    if (gapMs > 6 * CANDLE_INTERVAL_MS && Math.abs(price - last.c) < minDiff) {
+      return;
+    }
+    // Across a weekend or session gap, open cleanly at the new live session price rather than stretching Friday's close
+    const open = gapMs <= 2 * CANDLE_INTERVAL_MS ? last.c : price;
     bars.push({
       t: currentBucket,
       o: +open.toFixed(2),
@@ -2002,7 +2100,7 @@ function updateActive5mCandle(metal, price, prevClose) {
       l: +Math.min(open, price).toFixed(2),
       c: +price.toFixed(2),
     });
-    if (bars.length > 144) bars.shift();
+    if (bars.length > 300) bars.shift();
   } else {
     last.h = +Math.max(last.h, price).toFixed(2);
     last.l = +Math.min(last.l, price).toFixed(2);
@@ -2109,8 +2207,9 @@ async function fetchCandlesData() {
     }
     const g1d = data.timeframes?.['1d']?.gold || data.gold;
     const s1d = data.timeframes?.['1d']?.silver || data.silver;
-    if (Array.isArray(g1d) && g1d.length >= 4) {
-      state.candles.gold = g1d.slice(-144);
+    if (Array.isArray(g1d) && g1d.length >= 1) {
+      state.candles.gold = g1d.slice(-288);
+      state.candlesSource.gold = 'live';
       if (state.quotes.gold.price != null && state.quotes.gold.prevClose === state.quotes.gold.price && state.candles.gold[0]?.o > 0) {
         state.quotes.gold.prevClose = +state.candles.gold[0].o.toFixed(2);
         state.quotes.gold.chg = +(state.quotes.gold.price - state.quotes.gold.prevClose).toFixed(2);
@@ -2120,8 +2219,9 @@ async function fetchCandlesData() {
         renderStackTracker();
       }
     }
-    if (Array.isArray(s1d) && s1d.length >= 4) {
-      state.candles.silver = s1d.slice(-144);
+    if (Array.isArray(s1d) && s1d.length >= 1) {
+      state.candles.silver = s1d.slice(-288);
+      state.candlesSource.silver = 'live';
       if (state.quotes.silver.price != null && state.quotes.silver.prevClose === state.quotes.silver.price && state.candles.silver[0]?.o > 0) {
         state.quotes.silver.prevClose = +state.candles.silver[0].o.toFixed(2);
         state.quotes.silver.chg = +(state.quotes.silver.price - state.quotes.silver.prevClose).toFixed(2);
@@ -2133,14 +2233,16 @@ async function fetchCandlesData() {
     }
     const g1m = data.bars1m?.gold;
     const s1m = data.bars1m?.silver;
-    if (Array.isArray(g1m) && g1m.length >= 10) {
+    if (Array.isArray(g1m) && g1m.length >= 1) {
       state.candles1m.gold = g1m.slice(-120);
-    } else if (state.quotes.gold.price) {
+      state.candles1mSource.gold = 'live';
+    } else if (state.quotes.gold.price && state.candles1mSource.gold !== 'live') {
       seed1mCandlesIfEmpty('gold', state.quotes.gold.price, state.quotes.gold.prevClose, true);
     }
-    if (Array.isArray(s1m) && s1m.length >= 10) {
+    if (Array.isArray(s1m) && s1m.length >= 1) {
       state.candles1m.silver = s1m.slice(-120);
-    } else if (state.quotes.silver.price) {
+      state.candles1mSource.silver = 'live';
+    } else if (state.quotes.silver.price && state.candles1mSource.silver !== 'live') {
       seed1mCandlesIfEmpty('silver', state.quotes.silver.price, state.quotes.silver.prevClose, true);
     }
     if (state.quotes.gold.price) {
@@ -2153,7 +2255,8 @@ async function fetchCandlesData() {
     }
     renderChart();
     const activeTf = state.settings.chartTimeframe || '1d';
-    if (!INTRADAY_TIMEFRAMES.has(activeTf) && !histCandlesLoaded) {
+    const needsHistBridge = (Array.isArray(g1d) && g1d.length < 48) || (Array.isArray(s1d) && s1d.length < 48);
+    if ((!INTRADAY_TIMEFRAMES.has(activeTf) || needsHistBridge) && !histCandlesLoaded) {
       ensureHistoricalCandlesLoaded();
     }
   } catch {
@@ -2206,7 +2309,7 @@ function updateCandleCountdown() {
     const remaining = Math.max(0, nextTickAt - now);
     const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
     if (tf === '1d') {
-      el.textContent = `5-min price bars · Next live update in ${formatCountdown(remaining)}`;
+      el.textContent = `30-min price bars · 24 hours · Next live update in ${formatCountdown(remaining)}`;
     } else if (tf === '15min' || tf === '1h') {
       el.textContent = `${meta.subtitle} · Next live update in ${formatCountdown(remaining)}`;
     } else {
@@ -2248,10 +2351,15 @@ function zoomChartBy(factor, anchorFrac = 0.5) {
   const curVis = g.visCount;
   const curStart = g.viewStart;
 
-  // Seamless drill-down into 1-minute live bars when already zoomed to max on 4H/1D
+  // Seamless drill-down hierarchy: 1D (30m) -> 4H (5m) -> 1H (1m) when zooming past max zoom
   if (factor < 1 && curVis <= minVis && (tf === '1d' || tf === '4h')) {
-    state.settings.chartTimeframe = '1h';
-    state.chartZoom.visibleCount = 20;
+    if (tf === '1d') {
+      state.settings.chartTimeframe = '4h';
+      state.chartZoom.visibleCount = 24;
+    } else {
+      state.settings.chartTimeframe = '1h';
+      state.chartZoom.visibleCount = 20;
+    }
     state.chartZoom.startIdx = null;
     state.hoverCandleIdx = null;
     renderChart();
@@ -3027,29 +3135,33 @@ function renderChart() {
   }
 
   // Bottom X-axis date/time labels across historical candlestick zone
+  const multiDayIntraday =
+    INTRADAY_TIMEFRAMES.has(tf) &&
+    converted.length >= 2 &&
+    new Date(converted[0].t).toDateString() !== new Date(converted[converted.length - 1].t).toDateString();
   ctx.font = `500 ${desktopCanvas ? 11 : 9.5}px "JetBrains Mono", monospace`;
   ctx.fillStyle = mutedCol;
   ctx.textBaseline = 'bottom';
   ctx.textAlign = 'left';
-  ctx.fillText(formatCandleTimestamp(converted[0].t, tf, true), padLeft, h - 2);
+  ctx.fillText(formatCandleTimestamp(converted[0].t, tf, true, multiDayIntraday), padLeft, h - 2);
   if (!showFc && desktopCanvas && converted.length >= 10) {
     const q1 = Math.floor(converted.length * 0.25);
     const q2 = Math.floor(converted.length * 0.5);
     const q3 = Math.floor(converted.length * 0.75);
     ctx.textAlign = 'center';
-    ctx.fillText(formatCandleTimestamp(converted[q1].t, tf, true), xCandle(q1), h - 2);
-    ctx.fillText(formatCandleTimestamp(converted[q2].t, tf, true), xCandle(q2), h - 2);
-    ctx.fillText(formatCandleTimestamp(converted[q3].t, tf, true), xCandle(q3), h - 2);
+    ctx.fillText(formatCandleTimestamp(converted[q1].t, tf, true, false), xCandle(q1), h - 2);
+    ctx.fillText(formatCandleTimestamp(converted[q2].t, tf, true, false), xCandle(q2), h - 2);
+    ctx.fillText(formatCandleTimestamp(converted[q3].t, tf, true, false), xCandle(q3), h - 2);
   } else {
     const midIdx = Math.floor(converted.length / 2);
     if (converted[midIdx]) {
       ctx.textAlign = 'center';
-      ctx.fillText(formatCandleTimestamp(converted[midIdx].t, tf, true), padLeft + candleAreaW / 2, h - 2);
+      ctx.fillText(formatCandleTimestamp(converted[midIdx].t, tf, true, false), padLeft + candleAreaW / 2, h - 2);
     }
   }
   if (!showFc) {
     ctx.textAlign = 'right';
-    ctx.fillText(formatCandleTimestamp(converted[converted.length - 1].t, tf, true), padLeft + candleAreaW, h - 2);
+    ctx.fillText(formatCandleTimestamp(converted[converted.length - 1].t, tf, true, multiDayIntraday), padLeft + candleAreaW, h - 2);
   }
 
   // Jump-Diffusion Forecast Fan (P10-P90 outer fat-tail + P25-P75 core cone)
@@ -3459,6 +3571,20 @@ function renderChart() {
     });
   }
 
+  // Infer actual bar duration for tooltip time range (handles 1m, 5m, 30m, or bridged 1h bars truthfully)
+  let inferredBarMs = CHART_TF_META[tf]?.barMs || CANDLE_INTERVAL_MS;
+  if (INTRADAY_TIMEFRAMES.has(tf) && converted.length >= 2) {
+    const diffs = [];
+    for (let i = 1; i < converted.length; i++) {
+      const d = converted[i].t - converted[i - 1].t;
+      if (d >= 60000 && d <= 3600000) diffs.push(d);
+    }
+    if (diffs.length) {
+      diffs.sort((a, b) => a - b);
+      inferredBarMs = diffs[Math.floor(diffs.length / 2)];
+    }
+  }
+
   state.chartGeom = {
     w,
     h,
@@ -3480,6 +3606,8 @@ function renderChart() {
     defaultVis: win.defaultVis,
     isAtLiveEdge: win.isAtLiveEdge,
     isZoomed: win.isZoomed,
+    multiDayIntraday,
+    inferredBarMs,
     liveClose,
     showFc,
     sma20,
@@ -3670,7 +3798,7 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
 
   const activeIdx = idx != null && g.converted[idx] ? idx : null;
   const bar = g.converted[activeIdx != null ? activeIdx : g.converted.length - 1];
-  const tLabel = formatCandleRangeLabel(bar.t, g.tf);
+  const tLabel = formatCandleRangeLabel(bar.t, g.tf, g.inferredBarMs, g.multiDayIntraday);
   const dec = g.isRatio
     ? 2
     : (INTRADAY_TIMEFRAMES.has(g.tf) || g.isZoomed ? 2 : (bar.c >= 500 ? 0 : 2));
@@ -5788,7 +5916,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=44', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=45', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -9963,7 +10091,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 44,
+      version: 45,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),

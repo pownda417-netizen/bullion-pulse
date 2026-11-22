@@ -253,7 +253,7 @@ assert.equal(historical.timeframes['1d'], undefined);
 assert.equal(Object.keys(historical.timeframes).length, 7);
 const fullBytes = JSON.stringify(seededAll).length;
 const intradayBytes = JSON.stringify(intraday1d).length;
-assert.ok(intradayBytes < fullBytes * 0.35, `1D+1m payload (${intradayBytes}B) should stay compact vs full (${fullBytes}B)`);
+assert.ok(intradayBytes < fullBytes * 0.48, `1D+1m payload (${intradayBytes}B) should stay compact vs full (${fullBytes}B)`);
 
 // 14. Custom absolute USD & Au/Ag ratio target price alerts + same-day deduplication
 const tgt1 = evaluatePriceTargets({

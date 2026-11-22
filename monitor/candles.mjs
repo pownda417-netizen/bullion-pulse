@@ -9,7 +9,7 @@ const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) BullionPulseCandles/1.1';
 
 export const TIMEFRAME_SPECS = {
-  '1d': { label: '1D', interval: '5m', range: '1d', yahooInterval: '5m', maxBars: 96 },
+  '1d': { label: '1D', interval: '5m', range: '5d', yahooInterval: '5m', maxBars: 288, aggregate: false },
   '7d': { label: '7D', interval: '1h', range: '5d', yahooInterval: '60m', maxBars: 42 },
   '1m': { label: '1M', interval: '1d', range: '1mo', yahooInterval: '1d', maxBars: 30 },
   '6m': { label: '6M', interval: '3d', range: '6mo', yahooInterval: '1d', maxBars: 42 },
@@ -19,7 +19,7 @@ export const TIMEFRAME_SPECS = {
   all: { label: 'ALL', interval: '1yr', range: 'max', yahooInterval: '3mo', maxBars: 52 },
 };
 
-export const INTRADAY_1M_SPEC = { interval: '1m', range: '1d', yahooInterval: '1m', maxBars: 90 };
+export const INTRADAY_1M_SPEC = { interval: '1m', range: '2d', yahooInterval: '1m', maxBars: 90, aggregate: false };
 
 /**
  * Verified annual/multi-year historical anchors (USD/troy oz) from 1975–2026.
@@ -266,7 +266,7 @@ export function buildSeededMultiTimeframeCandles({
     };
 
     const configs = {
-      '1d': { count: 28, stepMs: 5 * 60 * 1000, spanYears: null, vol: isSilver ? 0.0038 : 0.0018 },
+      '1d': { count: 96, stepMs: 5 * 60 * 1000, spanYears: null, vol: isSilver ? 0.0028 : 0.0014 },
       '7d': { count: 36, stepMs: 4 * 60 * 60 * 1000, spanYears: 7 / 365, vol: isSilver ? 0.011 : 0.0055 },
       '1m': { count: 24, stepMs: 1.25 * dayMs, spanYears: 30 / 365, vol: isSilver ? 0.02 : 0.011 },
       '6m': { count: 36, stepMs: 5 * dayMs, spanYears: 0.5, vol: isSilver ? 0.036 : 0.019 },
@@ -373,7 +373,10 @@ export function buildSeededMultiTimeframeCandles({
   };
 }
 
-export async function fetchYahooCandles(symbol, { range = '1d', interval = '5m', maxBars = 48 } = {}) {
+export async function fetchYahooCandles(
+  symbol,
+  { range = '1d', interval = '5m', maxBars = 48, aggregate = true } = {}
+) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT },
@@ -381,14 +384,15 @@ export async function fetchYahooCandles(symbol, { range = '1d', interval = '5m',
   });
   if (!res.ok) throw new Error(`Yahoo candles ${symbol} (${range}/${interval}) HTTP ${res.status}`);
   const raw = parseYahooCandles(await res.json(), 0);
+  if (!aggregate) return maxBars ? raw.slice(-maxBars) : raw;
   return aggregateCandles(raw, maxBars);
 }
 
-export async function fetchYahoo5mCandles(symbol, maxBars = 48) {
-  return fetchYahooCandles(symbol, { range: '1d', interval: '5m', maxBars });
+export async function fetchYahoo5mCandles(symbol, maxBars = 288) {
+  return fetchYahooCandles(symbol, { range: '5d', interval: '5m', maxBars, aggregate: false });
 }
 
-export async function fetchMetal5mCandles(maxBars = 48) {
+export async function fetchMetal5mCandles(maxBars = 288) {
   const [gold, silver] = await Promise.all([
     fetchYahoo5mCandles('GC=F', maxBars),
     fetchYahoo5mCandles('SI=F', maxBars),
@@ -409,8 +413,18 @@ export async function fetchMetalMultiTimeframeCandles() {
   await Promise.all(
     entries.map(async ([key, spec]) => {
       const [gRes, sRes] = await Promise.allSettled([
-        fetchYahooCandles('GC=F', { range: spec.range, interval: spec.yahooInterval, maxBars: spec.maxBars }),
-        fetchYahooCandles('SI=F', { range: spec.range, interval: spec.yahooInterval, maxBars: spec.maxBars }),
+        fetchYahooCandles('GC=F', {
+          range: spec.range,
+          interval: spec.yahooInterval,
+          maxBars: spec.maxBars,
+          aggregate: spec.aggregate !== false,
+        }),
+        fetchYahooCandles('SI=F', {
+          range: spec.range,
+          interval: spec.yahooInterval,
+          maxBars: spec.maxBars,
+          aggregate: spec.aggregate !== false,
+        }),
       ]);
       let gold = gRes.status === 'fulfilled' ? gRes.value : [];
       let silver = sRes.status === 'fulfilled' ? sRes.value : [];
@@ -430,8 +444,18 @@ export async function fetchMetalMultiTimeframeCandles() {
   );
 
   const [g1mRes, s1mRes] = await Promise.allSettled([
-    fetchYahooCandles('GC=F', { range: INTRADAY_1M_SPEC.range, interval: INTRADAY_1M_SPEC.yahooInterval, maxBars: INTRADAY_1M_SPEC.maxBars }),
-    fetchYahooCandles('SI=F', { range: INTRADAY_1M_SPEC.range, interval: INTRADAY_1M_SPEC.yahooInterval, maxBars: INTRADAY_1M_SPEC.maxBars }),
+    fetchYahooCandles('GC=F', {
+      range: INTRADAY_1M_SPEC.range,
+      interval: INTRADAY_1M_SPEC.yahooInterval,
+      maxBars: INTRADAY_1M_SPEC.maxBars,
+      aggregate: false,
+    }),
+    fetchYahooCandles('SI=F', {
+      range: INTRADAY_1M_SPEC.range,
+      interval: INTRADAY_1M_SPEC.yahooInterval,
+      maxBars: INTRADAY_1M_SPEC.maxBars,
+      aggregate: false,
+    }),
   ]);
   const bars1m = {
     interval: '1m',
