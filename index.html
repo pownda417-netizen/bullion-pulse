@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./styles.css?v=39" />
+  <link rel="stylesheet" href="./styles.css?v=40" />
 </head>
 <body>
   <div class="app-shell">
@@ -63,6 +63,11 @@
       </nav>
 
       <div class="header-actions">
+        <div class="desk-mode-bar" id="desk-mode-bar" role="group" aria-label="Wide-screen desk layout">
+          <button type="button" class="desk-pill-btn active" data-desk-mode="single" aria-pressed="true" title="Standard single view">Single</button>
+          <button type="button" class="desk-pill-btn" data-desk-mode="split" aria-pressed="false" title="Split-Desk (1440px+): pin live chart on the left">Split</button>
+          <button type="button" class="desk-pill-btn" data-desk-mode="ultrawide" aria-pressed="false" title="Ultrawide 3-Column Desk: Markets, Outlook & Trade side-by-side">3-Col</button>
+        </div>
         <button type="button" class="header-melt-btn" id="btn-header-melt" aria-label="Open My Stack" title="My Stack Total — click to open My Stack">
           <span class="header-melt-k">Stack</span>
           <strong class="header-melt-v" id="header-melt-val">$0.00</strong>
@@ -119,11 +124,31 @@
         <button type="button" class="chip-toggle audio-brief-stop" id="btn-stop-audio-bar">⏹ Stop</button>
       </section>
 
+      <!-- Wide-Screen Split-Desk (#131) & Ultrawide 3-Column Trading Desk (#179) Workspace -->
+      <div class="desk-workspace" id="desk-workspace">
+        <aside class="split-desk-left" id="split-desk-left" hidden aria-label="Pinned live price chart">
+          <div class="split-pinned-bar">
+            <span class="split-pinned-label">Pinned Live Chart · Split-Desk</span>
+            <button type="button" class="chip-toggle" id="btn-exit-split-desk">Exit Split</button>
+          </div>
+          <div class="split-desk-chart-slot" id="split-desk-chart-slot"></div>
+        </aside>
+
+        <div class="desk-views-wrap" id="desk-views-wrap">
       <!-- VIEW 1: MARKETS -->
       <section class="view-panel active" id="view-markets" aria-label="Spot metal markets">
         <div class="toolbar-row">
           <span class="section-label">Live Gold &amp; Silver Prices</span>
           <div class="toolbar-controls">
+            <select id="select-language" class="lang-select" aria-label="App language" title="Switch app language">
+              <option value="en">EN · English</option>
+              <option value="th">ไทย · Thai</option>
+              <option value="lo">ລາວ · Lao</option>
+              <option value="es">ES · Español</option>
+              <option value="zh">中文 · Chinese</option>
+              <option value="ja">日本語 · Japanese</option>
+              <option value="hi">हिन्दी · Hindi</option>
+            </select>
             <select id="select-currency" class="currency-select" aria-label="Display currency">
               <optgroup label="Americas &amp; Europe">
                 <option value="USD">USD $ · US</option>
@@ -276,6 +301,7 @@
         </section>
 
         <!-- Multi-Timeframe OHLC Candlestick & Prediction Fan Chart -->
+        <div id="panel-chart-anchor" hidden></div>
         <section class="panel" id="panel-chart" data-sub="live" aria-label="Price chart with forecast and timeframe selector">
           <div class="panel-header">
             <div class="chart-title-block">
@@ -1592,11 +1618,84 @@
           <button type="button" class="chip-toggle" id="btn-close-settings">← Back</button>
         </div>
 
-        <div class="sub-nav" data-parent-view="alerts" role="tablist" aria-label="Alerts sections">
-          <button type="button" class="sub-tab-btn active" data-sub-target="rules" role="tab" aria-selected="true">Alert Rules</button>
+        <div class="sub-nav" data-parent-view="alerts" role="tablist" aria-label="Settings and alerts sections">
+          <button type="button" class="sub-tab-btn active" data-sub-target="display" role="tab" aria-selected="true">Display</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="rules" role="tab" aria-selected="false">Alert Rules</button>
           <button type="button" class="sub-tab-btn" data-sub-target="phone" role="tab" aria-selected="false">Phone &amp; Log</button>
-          <button type="button" class="sub-tab-btn" data-sub-target="setup" role="tab" aria-selected="false">Install &amp; 24/7</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="setup" role="tab" aria-selected="false">Install</button>
         </div>
+
+        <!-- #112 Multi-Language UI Switcher -->
+        <section class="panel" id="panel-display-lang" data-sub="display" aria-label="Multi-language UI switcher">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">App Language</h2>
+              <div class="panel-subtitle">Instant plain-language switch to pair with our 21 global currencies</div>
+            </div>
+          </div>
+          <div class="lang-pill-grid" id="settings-lang-pills" role="group" aria-label="Choose app language"></div>
+        </section>
+
+        <!-- #121 5 Designer Vault Themes + Classic Dark & Light -->
+        <section class="panel" id="panel-display-themes" data-sub="display" aria-label="Designer vault themes">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Designer Vault Themes</h2>
+              <div class="panel-subtitle">Pick a custom look — or tap the sun icon in the top bar anytime to cycle themes</div>
+            </div>
+          </div>
+          <div class="vault-theme-grid" id="vault-theme-grid" role="group" aria-label="Vault display themes"></div>
+        </section>
+
+        <!-- #131 Wide-Screen Split-Desk (1440px+) & #179 Ultrawide 3-Column Trading Desk -->
+        <section class="panel" id="panel-display-desk" data-sub="display" aria-label="Wide-screen split-desk and ultrawide 3-column trading desk">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Wide-Screen &amp; Ultrawide Desk</h2>
+              <div class="panel-subtitle">Pin the live candlestick chart on the left (1440px+) or show Markets, Outlook &amp; Trade side-by-side on ultrawide monitors</div>
+            </div>
+          </div>
+          <div class="desk-opt-grid" id="settings-desk-btns" role="group" aria-label="Desk layout mode">
+            <button type="button" class="desk-opt-btn active" data-desk-mode="auto" aria-pressed="true">
+              <strong>Auto</strong>
+              <span>Standard normally; auto 3-Column on 21:9 / 32:9 ultrawides (2200px+)</span>
+            </button>
+            <button type="button" class="desk-opt-btn" data-desk-mode="single" aria-pressed="false">
+              <strong>Single View</strong>
+              <span>Clean focused single workspace on any screen size</span>
+            </button>
+            <button type="button" class="desk-opt-btn" data-desk-mode="split" aria-pressed="false">
+              <strong>Split-Desk (1440px+)</strong>
+              <span>Pins the live chart on the left while you use Outlook, Trade, or Stack on the right</span>
+            </button>
+            <button type="button" class="desk-opt-btn" data-desk-mode="ultrawide" aria-pressed="false">
+              <strong>3-Col Ultrawide</strong>
+              <span>Shows Markets, Outlook, and Trade side-by-side at once (1680px+)</span>
+            </button>
+          </div>
+          <div class="intel-note" id="desk-screen-status">Detecting screen size…</div>
+        </section>
+
+        <!-- #181 OLED Burn-In-Safe Pixel-Shift Display -->
+        <section class="panel" id="panel-display-oled" data-sub="display" aria-label="OLED burn-in pixel shift protection">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">OLED Burn-In Protection (Pixel-Shift)</h2>
+              <div class="panel-subtitle">Gently drifts the screen by 1–3 pixels every minute so leaving Bullion Pulse open 24/7 never causes OLED burn-in</div>
+            </div>
+            <span class="signal-pill" id="oled-shift-status">Off</span>
+          </div>
+          <div class="oled-shift-controls">
+            <label class="confirm-toggle-row" for="chk-oled-pixel-shift">
+              <input type="checkbox" id="chk-oled-pixel-shift" />
+              <div>
+                <strong>Enable Subtle 60-Second Pixel-Shift</strong>
+                <span>Recommended when using OLED Pitch Black or leaving a wall/desk monitor running all day.</span>
+              </div>
+            </label>
+            <button type="button" class="btn" id="btn-oled-shift-now">Shift Now</button>
+          </div>
+        </section>
 
         <section class="panel" id="panel-alert-rules" data-sub="rules">
           <div class="control-group">
@@ -1860,7 +1959,11 @@ CATALYST_ALERTS=true</div>
           <div class="feedback-note" id="copy-feedback" role="status"></div>
         </section>
       </section>
+        </div><!-- /.desk-views-wrap -->
+      </div><!-- /.desk-workspace -->
     </main>
+
+    <div id="display-toast" class="display-toast" role="status" aria-live="polite" hidden></div>
 
     <!-- Bottom Tab Navigation -->
     <nav class="bottom-nav" aria-label="Primary navigation">
@@ -1890,7 +1993,8 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=39" defer></script>
-  <script src="./intel.js?v=39" defer></script>
+  <script src="./app.js?v=40" defer></script>
+  <script src="./intel.js?v=40" defer></script>
+  <script src="./display_i18n.js?v=40" defer></script>
 </body>
 </html>

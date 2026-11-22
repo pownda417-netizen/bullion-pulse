@@ -97,6 +97,9 @@ const DEFAULT_SETTINGS = {
   ttsVoice: 'auto',
   ttsRate: 0.96,
   theme: 'dark',
+  language: 'en', // 'en' | 'th' | 'lo' | 'es' | 'zh' | 'ja' | 'hi'
+  deskLayout: 'auto', // 'auto' | 'single' | 'split' | 'ultrawide'
+  oledPixelShift: false,
   selectedMetal: 'gold',
   chartMode: 'gold', // 'gold' | 'silver' | 'ratio'
   confirmMoves: false,
@@ -159,7 +162,7 @@ const DEFAULT_SETTINGS = {
     outlook: 'forecast',
     trade: 'swap',
     stack: 'overview',
-    alerts: 'rules',
+    alerts: 'display',
   },
 };
 
@@ -302,6 +305,9 @@ const ALLOWED_CURRENCIES = new Set([
 ]);
 const ALLOWED_TIMEFRAMES = new Set(['1d', '7d', '1m', '6m', '1y', '5y', '10y', 'all']);
 const ALLOWED_LOG_DIRS = new Set(['up', 'down', 'neutral']);
+const ALLOWED_THEMES = new Set(['dark', 'light', 'oled', 'swiss-gold', 'mint-silver', 'terminal-amber', 'daylight-paper']);
+const ALLOWED_LANGUAGES = new Set(['en', 'th', 'lo', 'es', 'zh', 'ja', 'hi']);
+const ALLOWED_DESK_LAYOUTS = new Set(['auto', 'single', 'split', 'ultrawide']);
 const ALLOWED_NEURAL_VOICE_IDS = new Set([
   'en_US-lessac-medium',
   'en_US-ryan-medium',
@@ -315,7 +321,7 @@ const ALLOWED_SUBVIEWS = {
   outlook: new Set(['forecast', 'drivers', 'vaults', 'sim']),
   trade: new Set(['swap', 'ladder', 'grader']),
   stack: new Set(['overview', 'goals', 'lots']),
-  alerts: new Set(['rules', 'phone', 'setup']),
+  alerts: new Set(['display', 'rules', 'phone', 'setup']),
 };
 
 function isPlainObject(v) {
@@ -423,7 +429,10 @@ function sanitizePersistedSettings(raw) {
     privacyMode: Boolean(s.privacyMode),
     ttsVoice: sanitizeTtsVoicePref(s.ttsVoice),
     ttsRate: sanitizeBoundedNum(s.ttsRate, DEFAULT_SETTINGS.ttsRate, 0.7, 1.4),
-    theme: s.theme === 'light' ? 'light' : 'dark',
+    theme: ALLOWED_THEMES.has(s.theme) ? s.theme : 'dark',
+    language: ALLOWED_LANGUAGES.has(s.language) ? s.language : 'en',
+    deskLayout: ALLOWED_DESK_LAYOUTS.has(s.deskLayout) ? s.deskLayout : 'auto',
+    oledPixelShift: Boolean(s.oledPixelShift),
     selectedMetal,
     chartMode,
     confirmMoves: Boolean(s.confirmMoves),
@@ -2363,7 +2372,7 @@ function renderChart() {
   const fibCol = styles.getPropertyValue('--fib').trim() || '#A78BFA';
   const discCol = '#10B981';
   const sqzCol = '#F43F5E';
-  const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+  const isLightTheme = isLightThemeName(document.documentElement.getAttribute('data-theme'));
   const fibData = showFib ? computeFibonacciLevels(converted) : null;
   const sma20 = showSma ? computeSmaSeries(converted, 20) : null;
   const sma50 = showSma ? computeSmaSeries(converted, 50) : null;
@@ -5295,7 +5304,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=39', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=40', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -7207,7 +7216,7 @@ function drawMcPathsCanvas(sim, metal, targetOz) {
   const textCol = styles.getPropertyValue('--text').trim() || '#F4F5F7';
   const mutedCol = styles.getPropertyValue('--text-subtle').trim() || '#777';
   const gridCol = styles.getPropertyValue('--border').trim() || 'rgba(255,255,255,0.06)';
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const isLight = isLightThemeName(document.documentElement.getAttribute('data-theme'));
 
   const steps = sim.steps;
   let minVal = Math.min(...sim.curves.p10, targetOz || sim.spot);
@@ -7653,15 +7662,34 @@ function renderShanghai() {
   }
 }
 
+const THEME_META_COLORS = {
+  dark: '#0D0E11',
+  light: '#F6F4EF',
+  oled: '#000000',
+  'swiss-gold': '#0F0D09',
+  'mint-silver': '#0A0F14',
+  'terminal-amber': '#090704',
+  'daylight-paper': '#FBF8F1',
+};
+
+function isLightThemeName(theme) {
+  return theme === 'light' || theme === 'daylight-paper';
+}
+
 function applyTheme(theme) {
-  state.settings.theme = theme;
-  document.documentElement.setAttribute('data-theme', theme);
+  const safeTheme = ALLOWED_THEMES.has(theme) ? theme : 'dark';
+  state.settings.theme = safeTheme;
+  document.documentElement.setAttribute('data-theme', safeTheme);
   const meta = document.getElementById('meta-theme-color');
-  if (meta) meta.setAttribute('content', theme === 'light' ? '#F6F4EF' : '#0D0E11');
+  if (meta) meta.setAttribute('content', THEME_META_COLORS[safeTheme] || '#0D0E11');
   renderChart();
   renderAccuracyReplayChart(computeInteractiveOutlook());
-  if (mcState.lastSim) renderMcTargetReadout();
+  if (mcState.lastSim) {
+    renderJumpDiffusion();
+    renderMcTargetReadout();
+  }
   window.BullionIntel?.renderAll?.();
+  window.BullionDisplay?.syncThemeUi?.();
 }
 
 function escapeHtml(str) {
@@ -8548,7 +8576,9 @@ function switchSubView(viewName, subName) {
   } else if (viewName === 'alerts') {
     renderSettingsControls();
     renderAlertLog();
+    window.BullionDisplay?.syncAll?.();
   }
+  window.BullionDisplay?.onViewChange?.(viewName);
 }
 
 function switchView(viewName) {
@@ -8619,7 +8649,9 @@ function switchView(viewName) {
   } else if (viewName === 'alerts') {
     renderSettingsControls();
     renderAlertLog();
+    window.BullionDisplay?.syncAll?.();
   }
+  window.BullionDisplay?.onViewChange?.(viewName);
 }
 
 function wireEvents() {
@@ -9029,8 +9061,12 @@ function wireEvents() {
     fetchComexData();
   });
   document.getElementById('btn-theme')?.addEventListener('click', () => {
-    applyTheme(state.settings.theme === 'dark' ? 'light' : 'dark');
-    savePersistedState();
+    if (window.BullionDisplay?.cycleTheme) {
+      window.BullionDisplay.cycleTheme();
+    } else {
+      applyTheme(state.settings.theme === 'dark' ? 'light' : 'dark');
+      savePersistedState();
+    }
   });
   document.getElementById('btn-settings')?.addEventListener('click', () => {
     if (state.activeView === 'alerts') {
@@ -9290,7 +9326,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 39,
+      version: 40,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
@@ -9329,6 +9365,7 @@ function wireEvents() {
         }
         applyTheme(state.settings.theme);
         applyPrivacyMode();
+        window.BullionDisplay?.syncAll?.();
         renderAll();
         savePersistedState();
       }
@@ -9628,7 +9665,18 @@ window.__BP_BRIDGE = {
   fetchSpotQuotes,
   computeInteractiveOutlook,
   getCandlesForTimeframe,
+  applyTheme,
+  applyAllSubViews,
+  switchView,
+  renderAll,
   renderChart,
+  renderOutlook,
+  renderJumpDiffusion,
+  renderRatioAnalytics,
+  renderRatioSwapCalculator,
+  renderBuyLadder,
+  renderDealGrader,
+  renderStackTracker,
 };
 
 function init() {
@@ -9640,6 +9688,7 @@ function init() {
   populateVoiceSelector();
   window.BullionIntel?.init?.();
   renderAll();
+  window.BullionDisplay?.init?.();
   fetchSpotQuotes(true);
   fetchOutlookData();
   fetchShanghaiData();

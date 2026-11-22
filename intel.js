@@ -26,7 +26,8 @@
   }
 
   function isLight() {
-    return document.documentElement.getAttribute('data-theme') === 'light';
+    const t = document.documentElement.getAttribute('data-theme');
+    return t === 'light' || t === 'daylight-paper';
   }
 
   /* ---------- #4 World Physical Gold Board (7 Global Street Units) ---------- */

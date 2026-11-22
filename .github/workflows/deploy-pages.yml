@@ -46,7 +46,7 @@ jobs:
       - name: Stage static PWA files
         run: |
           mkdir -p _site/icons _site/data
-          cp index.html styles.css app.js intel.js mc_worker.js tts_worker.js manifest.json sw.js _site/
+          cp index.html styles.css app.js intel.js display_i18n.js mc_worker.js tts_worker.js manifest.json sw.js _site/
           cp icons/*.png icons/*.jpg _site/icons/
           if [ -d data ]; then cp data/*.json _site/data/ 2>/dev/null || true; fi
 

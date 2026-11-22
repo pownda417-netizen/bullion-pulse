@@ -35,7 +35,7 @@
   --radius-lg: 22px;
   --nav-height: 68px;
 
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Noto Sans Thai', 'Leelawadee UI', 'Noto Sans Lao', 'PingFang SC', 'Hiragino Sans', 'Noto Sans Devanagari', sans-serif;
   --font-serif: 'Instrument Serif', Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 }
@@ -71,6 +71,180 @@
   --fib-soft: rgba(124, 58, 237, 0.12);
 }
 
+/* #121 Designer Vault Theme 1: OLED Pitch Black (True #000000 saves OLED battery) */
+[data-theme="oled"] {
+  --bg: #000000;
+  --surface: #07080B;
+  --surface-elevated: #0E1016;
+  --surface-press: #161922;
+  --border: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --inner-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.85);
+
+  --text: #FFFFFF;
+  --text-muted: #A1A8B8;
+  --text-subtle: #6E7586;
+
+  --gold: #E8C15A;
+  --gold-bright: #F7D77A;
+  --gold-soft: rgba(232, 193, 90, 0.14);
+
+  --silver: #D5DCE8;
+  --silver-soft: rgba(213, 220, 232, 0.13);
+
+  --up: #22C55E;
+  --up-soft: rgba(34, 197, 94, 0.15);
+  --down: #F43F5E;
+  --down-soft: rgba(244, 63, 94, 0.15);
+  --warn: #F59E0B;
+  --warn-soft: rgba(245, 158, 11, 0.15);
+  --fib: #B794F4;
+  --fib-soft: rgba(183, 148, 244, 0.15);
+}
+
+[data-theme="oled"] body {
+  background-image: none;
+}
+
+/* #121 Designer Vault Theme 2: Swiss Gold (Zurich Vault Champagne & Obsidian) */
+[data-theme="swiss-gold"] {
+  --bg: #0F0D09;
+  --surface: #18140E;
+  --surface-elevated: #231D14;
+  --surface-press: #2D2519;
+  --border: rgba(236, 198, 102, 0.15);
+  --border-strong: rgba(236, 198, 102, 0.3);
+  --inner-sheen: inset 0 1px 0 rgba(255, 232, 168, 0.08);
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  --text: #FAF5E8;
+  --text-muted: #BEB299;
+  --text-subtle: #887D67;
+
+  --gold: #E6BE58;
+  --gold-bright: #F7DA88;
+  --gold-soft: rgba(230, 190, 88, 0.18);
+
+  --silver: #D6D1C6;
+  --silver-soft: rgba(214, 209, 198, 0.14);
+
+  --up: #34D399;
+  --up-soft: rgba(52, 211, 153, 0.15);
+  --down: #F87171;
+  --down-soft: rgba(248, 113, 113, 0.15);
+  --warn: #FBBF24;
+  --warn-soft: rgba(251, 191, 36, 0.16);
+  --fib: #C4B5FD;
+  --fib-soft: rgba(196, 181, 253, 0.15);
+}
+
+/* #121 Designer Vault Theme 3: Mint Silver (Cool Arctic Platinum & Silver) */
+[data-theme="mint-silver"] {
+  --bg: #0A0F14;
+  --surface: #111922;
+  --surface-elevated: #182330;
+  --surface-press: #202E3F;
+  --border: rgba(148, 197, 224, 0.14);
+  --border-strong: rgba(148, 197, 224, 0.28);
+  --inner-sheen: inset 0 1px 0 rgba(226, 240, 255, 0.07);
+  --shadow: 0 12px 32px rgba(2, 8, 18, 0.5);
+
+  --text: #EEF6FC;
+  --text-muted: #98AEBF;
+  --text-subtle: #647B8E;
+
+  --gold: #5EEAD4;
+  --gold-bright: #99F6E4;
+  --gold-soft: rgba(94, 234, 212, 0.14);
+
+  --silver: #E2E8F0;
+  --silver-soft: rgba(226, 232, 240, 0.16);
+
+  --up: #34D399;
+  --up-soft: rgba(52, 211, 153, 0.16);
+  --down: #FB7185;
+  --down-soft: rgba(251, 113, 133, 0.16);
+  --warn: #FBBF24;
+  --warn-soft: rgba(251, 191, 36, 0.15);
+  --fib: #7DD3FC;
+  --fib-soft: rgba(125, 211, 252, 0.16);
+}
+
+/* #121 Designer Vault Theme 4: Retro Terminal Amber (Phosphor Desk Terminal) */
+[data-theme="terminal-amber"] {
+  --bg: #090704;
+  --surface: #120E07;
+  --surface-elevated: #1B1409;
+  --surface-press: #261C0C;
+  --border: rgba(255, 176, 0, 0.22);
+  --border-strong: rgba(255, 176, 0, 0.42);
+  --inner-sheen: inset 0 1px 0 rgba(255, 196, 64, 0.08);
+  --shadow: 0 0 24px rgba(255, 160, 0, 0.08);
+
+  --text: #FFD57A;
+  --text-muted: #C9953B;
+  --text-subtle: #8C6322;
+
+  --gold: #FFB000;
+  --gold-bright: #FFD166;
+  --gold-soft: rgba(255, 176, 0, 0.16);
+
+  --silver: #E6B96E;
+  --silver-soft: rgba(230, 185, 110, 0.14);
+
+  --up: #7CFF6B;
+  --up-soft: rgba(124, 255, 107, 0.13);
+  --down: #FF5C5C;
+  --down-soft: rgba(255, 92, 92, 0.15);
+  --warn: #FFB000;
+  --warn-soft: rgba(255, 176, 0, 0.18);
+  --fib: #FF9F43;
+  --fib-soft: rgba(255, 159, 67, 0.16);
+}
+
+[data-theme="terminal-amber"] body {
+  background-image:
+    radial-gradient(circle at 50% -10%, rgba(255, 176, 0, 0.13), transparent 55%),
+    repeating-linear-gradient(0deg, rgba(255, 176, 0, 0.025) 0px, rgba(255, 176, 0, 0.025) 1px, transparent 1px, transparent 3px);
+}
+
+/* #121 Designer Vault Theme 5: Daylight Paper (Warm High-Contrast Broadsheet) */
+[data-theme="daylight-paper"] {
+  --bg: #FBF8F1;
+  --surface: #FFFDF8;
+  --surface-elevated: #F2ECE0;
+  --surface-press: #E7DEC9;
+  --border: rgba(36, 29, 18, 0.12);
+  --border-strong: rgba(36, 29, 18, 0.24);
+  --inner-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --shadow: 0 6px 20px rgba(36, 29, 18, 0.07);
+
+  --text: #141210;
+  --text-muted: #4E4639;
+  --text-subtle: #786F5E;
+
+  --gold: #9A6B12;
+  --gold-bright: #7A5208;
+  --gold-soft: rgba(154, 107, 18, 0.12);
+
+  --silver: #475569;
+  --silver-soft: rgba(71, 85, 105, 0.12);
+
+  --up: #0F6A3B;
+  --up-soft: rgba(15, 106, 59, 0.12);
+  --down: #B91C1C;
+  --down-soft: rgba(185, 28, 28, 0.12);
+  --warn: #B45309;
+  --warn-soft: rgba(180, 83, 9, 0.13);
+  --fib: #6D28D9;
+  --fib-soft: rgba(109, 40, 217, 0.12);
+}
+
+[data-theme="daylight-paper"] body {
+  background-image: radial-gradient(circle at 50% -10%, rgba(154, 107, 18, 0.08), transparent 55%);
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -92,6 +266,7 @@ html, body {
 body {
   background-image: radial-gradient(circle at 50% -10%, var(--gold-soft), transparent 55%);
   background-attachment: fixed;
+  overflow-x: clip;
 }
 
 .app-shell {
@@ -1186,9 +1361,10 @@ input[type="range"].silver-range::-webkit-slider-thumb {
 
 .acc-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px 10px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   background: var(--bg);
@@ -1196,16 +1372,22 @@ input[type="range"].silver-range::-webkit-slider-thumb {
   font-size: 11px;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  min-width: 0;
 }
 
 .acc-row > span:first-child {
   white-space: nowrap;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .acc-row > span:last-child {
   text-align: right;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  flex: 1 1 200px;
+  min-width: 0;
+  line-height: 1.4;
 }
 
 #sl-status-badge {
@@ -3533,13 +3715,13 @@ button.sector-chip.selected {
 
   .news-list {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 12px;
   }
 
   #accuracy-breakdown {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
     gap: 10px 12px;
     align-items: stretch;
   }
@@ -5765,4 +5947,408 @@ button.sector-chip.selected {
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* ==========================================================================
+   v40 Display, Multi-Language (#112), 5 Vault Themes (#121),
+   Wide-Screen Split-Desk (#131), Ultrawide 3-Col Desk (#179) &
+   OLED Burn-In-Safe Pixel-Shift (#181)
+   ========================================================================== */
+
+/* #112 Multi-Language Selector beside 21 currencies */
+.lang-select {
+  height: 32px;
+  max-width: 118px;
+  padding: 0 7px 0 9px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.lang-select:hover,
+.lang-select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.lang-pill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(122px, 1fr));
+  gap: 8px;
+}
+
+.lang-pill-btn {
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.lang-pill-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.lang-pill-btn.active {
+  color: var(--gold-bright);
+  background: var(--gold-soft);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+/* #121 5 Designer Vault Themes Gallery */
+.vault-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  gap: 10px;
+}
+
+.vault-theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s ease, background-color 0.15s ease;
+}
+
+.vault-theme-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.vault-theme-card.active {
+  border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold-soft) 55%, var(--bg));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent);
+}
+
+.vt-swatches {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.vt-swatch {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  display: inline-block;
+}
+
+.vt-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.vt-desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* #131 & #179 Desk Layout Controls & Workspace Wrapper */
+.desk-workspace {
+  display: block;
+}
+
+.desk-views-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.desk-mode-bar {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+}
+
+.desk-pill-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 650;
+  padding: 5px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.desk-pill-btn:hover {
+  color: var(--text);
+}
+
+.desk-pill-btn.active {
+  color: var(--gold-bright);
+  background: var(--gold-soft);
+  border-color: color-mix(in srgb, var(--gold) 40%, transparent);
+}
+
+.desk-opt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.desk-opt-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.desk-opt-btn:hover {
+  border-color: var(--border-strong);
+}
+
+.desk-opt-btn.active {
+  border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold-soft) 55%, var(--bg));
+}
+
+.desk-opt-btn strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.desk-opt-btn span {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.split-desk-left[hidden] {
+  display: none !important;
+}
+
+.split-pinned-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--gold-soft) 65%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+}
+
+.split-pinned-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-bright);
+}
+
+/* #181 OLED Burn-In-Safe Pixel-Shift Controls & Safe Transform Layers */
+.oled-shift-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.oled-shift-controls .confirm-toggle-row {
+  flex: 1 1 240px;
+}
+
+body.pixel-shift-on .top-bar > *,
+body.pixel-shift-on .main-content,
+body.pixel-shift-on .bottom-nav > * {
+  transform: translate3d(var(--oled-shift-x, 0px), var(--oled-shift-y, 0px), 0);
+  transition: transform 2.2s ease-in-out;
+  will-change: transform;
+}
+
+/* Floating Confirmation Toast */
+.display-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 18px);
+  transform: translate(-50%, 10px);
+  z-index: 60;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--gold) 50%, var(--border-strong));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.display-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (min-width: 840px) {
+  .lang-select {
+    height: 36px;
+    max-width: 136px;
+    font-size: 12.5px;
+    padding: 0 9px 0 10px;
+  }
+
+  #view-alerts > [data-sub="display"] {
+    grid-column: 1 / -1;
+  }
+
+  .display-toast {
+    bottom: 26px;
+  }
+}
+
+/* #131 Wide-Screen Split-Desk Mode (1440px+) */
+@media (min-width: 1440px) {
+  .desk-mode-bar {
+    display: inline-flex;
+  }
+
+  body[data-desk-active="split"] .app-shell {
+    max-width: 1760px;
+  }
+
+  body[data-desk-active="split"] .desk-workspace {
+    display: grid;
+    grid-template-columns: minmax(460px, 0.96fr) minmax(520px, 1.04fr);
+    gap: 22px;
+    align-items: start;
+  }
+
+  body[data-desk-active="split"] .split-desk-left {
+    display: block;
+    position: sticky;
+    top: 84px;
+    max-height: calc(100dvh - 108px);
+    overflow-y: auto;
+    padding-right: 2px;
+    min-width: 0;
+  }
+
+  body[data-desk-active="split"] .split-desk-left #panel-chart {
+    margin: 0;
+  }
+
+  body[data-desk-active="split"] .desk-views-wrap {
+    min-width: 0;
+  }
+
+  body[data-desk-active="split"] #accuracy-breakdown {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-desk-active="split"] .pro-grid,
+  body[data-desk-active="split"] .inst-grid,
+  body[data-desk-active="split"] .sl-meta-grid,
+  body[data-desk-active="split"] .macro-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* #179 Ultrawide 21:9 / 32:9 3-Column Trading Desk (1680px+) */
+@media (min-width: 1680px) {
+  body[data-desk-active="ultrawide"] .app-shell {
+    max-width: 2680px;
+  }
+
+  body[data-desk-active="ultrawide"] .desk-views-wrap {
+    display: grid;
+    grid-template-columns: minmax(440px, 1.15fr) minmax(410px, 1.05fr) minmax(370px, 0.92fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* Show Markets (Col 1), Outlook (Col 2), and Trade/Stack/Settings (Col 3) simultaneously */
+  body[data-desk-active="ultrawide"] #view-markets,
+  body[data-desk-active="ultrawide"] #view-outlook {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  body[data-desk-active="ultrawide"] #view-markets > #card-gold,
+  body[data-desk-active="ultrawide"] #view-markets > #card-silver {
+    grid-column: 1 / -1;
+  }
+
+  body[data-desk-active="ultrawide"] #view-outlook > #panel-drivers,
+  body[data-desk-active="ultrawide"] #view-outlook > #panel-analogs {
+    grid-column: 1 / -1;
+  }
+
+  body[data-desk-active="ultrawide"] #accuracy-breakdown,
+  body[data-desk-active="ultrawide"] .news-list {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-desk-active="ultrawide"] .pro-grid,
+  body[data-desk-active="ultrawide"] .inst-grid,
+  body[data-desk-active="ultrawide"] .sl-meta-grid,
+  body[data-desk-active="ultrawide"] .macro-strip,
+  body[data-desk-active="ultrawide"] .forecast-grid,
+  body[data-desk-active="ultrawide"] .comex-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body[data-desk-active="ultrawide"] .ladder-steps {
+    grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  }
+
+  body[data-desk-active="ultrawide"] #view-trade,
+  body[data-desk-active="ultrawide"] #view-stack,
+  body[data-desk-active="ultrawide"] #view-alerts {
+    display: none !important;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  body[data-desk-active="ultrawide"][data-desk-col3="trade"] #view-trade,
+  body[data-desk-active="ultrawide"][data-desk-col3="stack"] #view-stack,
+  body[data-desk-active="ultrawide"][data-desk-col3="alerts"] #view-alerts {
+    display: grid !important;
+  }
 }

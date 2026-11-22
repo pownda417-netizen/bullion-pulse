@@ -1,10 +1,11 @@
-const CACHE_NAME = 'bullion-pulse-v39';
+const CACHE_NAME = 'bullion-pulse-v40';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=39',
-  './app.js?v=39',
-  './intel.js?v=39',
+  './styles.css?v=40',
+  './app.js?v=40',
+  './intel.js?v=40',
+  './display_i18n.js?v=40',
   './mc_worker.js',
   './tts_worker.js',
   './manifest.json',
