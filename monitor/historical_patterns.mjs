@@ -898,6 +898,9 @@ export function computeQuantSignals(series = {}) {
   const spx5dPct = pctChangeOver(spxCloses, 5);
   const cuCloses = series.copper || [];
   const platCloses = series.platinum || [];
+  const oilCloses = series.oil || [];
+  const btcCloses = series.btc || [];
+  const dowCloses = series.dow || [];
   const cu5dPct = pctChangeOver(cuCloses, 5);
   const plat5dPct = pctChangeOver(platCloses, 5);
   const vixLast = vixCloses[vixCloses.length - 1] ?? 16.5;
@@ -991,6 +994,9 @@ export function computeQuantSignals(series = {}) {
       cu5dPct: +cu5dPct.toFixed(2),
       platinum: platCloses.length ? +platCloses[platCloses.length - 1].toFixed(1) : null,
       platinum5dPct: +plat5dPct.toFixed(2),
+      oil: oilCloses.length ? +oilCloses[oilCloses.length - 1].toFixed(2) : null,
+      btc: btcCloses.length ? +btcCloses[btcCloses.length - 1].toFixed(0) : null,
+      dow: dowCloses.length ? +dowCloses[dowCloses.length - 1].toFixed(0) : null,
       vix: vixCloses.length ? +vixLast.toFixed(1) : null,
       goldRsi14,
       silverRsi14,

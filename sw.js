@@ -1,15 +1,17 @@
-const CACHE_NAME = 'bullion-pulse-v35';
+const CACHE_NAME = 'bullion-pulse-v38';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=35',
-  './app.js?v=35',
+  './styles.css?v=38',
+  './app.js?v=38',
+  './intel.js?v=38',
   './mc_worker.js',
   './tts_worker.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/world-map-night.jpg'
 ];
 
 function isCacheableSameOriginResponse(response) {
@@ -62,6 +64,7 @@ self.addEventListener('fetch', (event) => {
     p.endsWith('/') ||
     p.endsWith('/index.html') ||
     p.endsWith('/app.js') ||
+    p.endsWith('/intel.js') ||
     p.endsWith('/styles.css') ||
     p.endsWith('/mc_worker.js') ||
     p.endsWith('/tts_worker.js') ||
@@ -83,7 +86,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const isStaticAsset = /\.(?:png|svg|ico|webp|woff2?)$/i.test(p);
+  const isStaticAsset = /\.(?:png|jpe?g|svg|ico|webp|woff2?)$/i.test(p);
   if (!isStaticAsset) return;
 
   event.respondWith(

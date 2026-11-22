@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./styles.css?v=35" />
+  <link rel="stylesheet" href="./styles.css?v=38" />
 </head>
 <body>
   <div class="app-shell">
@@ -60,18 +60,11 @@
           </svg>
           <span>Trade</span>
         </a>
-        <a href="#stack" class="nav-btn" data-view="stack" id="top-nav-stack">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 2 7 12 12 22 7 12 2" />
-            <polyline points="2 17 12 22 22 17" />
-            <polyline points="2 12 12 17 22 12" />
-          </svg>
-          <span>Stack</span>
-        </a>
       </nav>
 
       <div class="header-actions">
-        <button type="button" class="header-melt-btn" id="btn-header-melt" aria-label="Open My Bullion Stack" title="Total Stack Value — click to open Stack">
+        <button type="button" class="header-melt-btn" id="btn-header-melt" aria-label="Open My Stack" title="My Stack Total — click to open My Stack">
+          <span class="header-melt-k">Stack</span>
           <strong class="header-melt-v" id="header-melt-val">$0.00</strong>
         </button>
         <button type="button" class="icon-btn" id="btn-privacy-toggle" aria-label="Hide or show my stack balance" aria-pressed="false" title="Privacy Mode — hide your stack amounts">
@@ -169,8 +162,9 @@
 
         <div class="sub-nav" data-parent-view="markets" role="tablist" aria-label="Markets sections">
           <button type="button" class="sub-tab-btn active" data-sub-target="live" role="tab" aria-selected="true">Live &amp; Chart</button>
-          <button type="button" class="sub-tab-btn" data-sub-target="global" role="tab" aria-selected="false">Futures &amp; Global</button>
-          <button type="button" class="sub-tab-btn" data-sub-target="macro" role="tab" aria-selected="false">Macro &amp; Feeds</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="global" role="tab" aria-selected="false">Global &amp; Maps</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="charts" role="tab" aria-selected="false">Deep Charts</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="macro" role="tab" aria-selected="false">More &amp; Trust</button>
         </div>
 
         <!-- Gold Card -->
@@ -267,6 +261,19 @@
           </div>
         </section>
 
+        <!-- #140 Live Glowing Global Vault World Map (Placed Above World Trading Hours) -->
+        <section class="panel" id="panel-global-vault-map" data-sub="global" aria-label="Live global bullion trading hubs map">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Live Global Vault World Map</h2>
+              <div class="panel-subtitle" id="vault-map-subtitle">Glowing green dots show which major gold &amp; silver markets are open right now</div>
+            </div>
+            <span class="signal-pill bullish" id="vault-map-badge">24h World Pulse</span>
+          </div>
+          <div class="vault-map-wrap" id="vault-map-svg-wrap"></div>
+          <div class="vault-hub-grid" id="vault-hub-grid"></div>
+        </section>
+
         <!-- Global Bullion Session Clock & Liquidity Risk Strip -->
         <section class="panel session-panel" id="panel-session-clock" data-sub="global" aria-label="World gold and silver trading hours">
           <div class="session-head">
@@ -314,11 +321,15 @@
             </div>
             <div class="chart-controls">
               <button type="button" id="btn-toggle-forecast" class="chip-toggle active" aria-pressed="true">Forecast</button>
-              <button type="button" id="btn-toggle-discovery" class="chip-toggle chip-discovery active" aria-pressed="true" title="Show estimated fair value driven by real physical demand">Price Discovery</button>
-              <button type="button" id="btn-toggle-squeeze" class="chip-toggle chip-squeeze active" aria-pressed="true" title="Show possible short-squeeze breakout path">Short Squeeze</button>
-              <button type="button" id="btn-toggle-fib" class="chip-toggle chip-fib" aria-pressed="false" title="Show key support &amp; resistance levels (Fibonacci)">Key Levels</button>
-              <button type="button" id="btn-toggle-sma" class="chip-toggle chip-sma" aria-pressed="false" title="Show 20-bar and 50-bar moving averages">Avg Trend</button>
-              <button type="button" id="btn-toggle-rsi" class="chip-toggle chip-rsi" aria-pressed="false" title="Show Momentum meter (overheated vs. oversold)">Momentum</button>
+              <button type="button" id="btn-toggle-discovery" class="chip-toggle chip-discovery active" aria-pressed="true" title="Show estimated fair price based on real physical demand">Fair Value</button>
+              <button type="button" id="btn-toggle-squeeze" class="chip-toggle chip-squeeze active" aria-pressed="true" title="Show possible sharp jump if short sellers rush to cover">Squeeze Risk</button>
+              <button type="button" id="btn-toggle-fib" class="chip-toggle chip-fib" aria-pressed="false" title="Show key price floors and ceilings where buyers and sellers often react">Key Levels</button>
+              <button type="button" id="btn-toggle-sma" class="chip-toggle chip-sma" aria-pressed="false" title="Show 20-bar and 50-bar average trend lines">Avg Trend</button>
+              <button type="button" id="btn-toggle-rsi" class="chip-toggle chip-rsi" aria-pressed="false" title="Show Momentum meter (overheated vs. bargain dip)">Momentum</button>
+              <button type="button" id="btn-toggle-mybuys" class="chip-toggle chip-mybuys" aria-pressed="false" title="Show your saved coin and bar purchases right on the chart">My Buys</button>
+              <button type="button" id="btn-toggle-patterns" class="chip-toggle chip-patterns" aria-pressed="false" title="Auto-label easy-to-read chart patterns (double bottoms, breakouts, floors)">Patterns</button>
+              <button type="button" id="btn-toggle-newsdots" class="chip-toggle chip-newsdots" aria-pressed="false" title="Show clickable market news dots right on the price timeline">News Pins</button>
+              <button type="button" id="btn-chart-replay" class="chip-toggle chip-replay" aria-pressed="false" title="Watch an animated bar-by-bar replay of recent price action">▶ Replay</button>
               <div class="segmented" role="group" aria-label="Chart metal selector">
                 <button type="button" id="chart-btn-gold" class="active">Gold</button>
                 <button type="button" id="chart-btn-silver">Silver</button>
@@ -340,6 +351,15 @@
             <div class="ohlc-bar" id="chart-ohlc">Tap or drag on the chart to inspect any price bar</div>
             <span class="tf-return-pill" id="chart-tf-change">+0.7%</span>
           </div>
+          <div class="chart-replay-bar" id="chart-replay-bar" hidden>
+            <div class="replay-bar-left">
+              <button type="button" class="replay-mini-btn" id="btn-replay-playpause" aria-label="Pause or resume replay">⏸</button>
+              <button type="button" class="replay-mini-btn" id="btn-replay-speed" title="Toggle replay speed">1×</button>
+              <span class="replay-status-text" id="chart-replay-status">Replaying market highlight reel…</span>
+            </div>
+            <button type="button" class="replay-mini-btn" id="btn-replay-stop" aria-label="Stop replay">✕</button>
+          </div>
+          <div class="chart-patterns-strip" id="chart-patterns-strip" hidden></div>
           <div class="chart-ratio-banner" id="chart-ratio-banner" hidden>
             <span id="chart-ratio-stats">5-Yr Average — · Comparing Gold vs. Silver</span>
             <strong id="chart-ratio-signal">Fairly Priced</strong>
@@ -364,10 +384,13 @@
             <span><i class="line-bull"></i> High Est.</span>
             <span><i class="line-base"></i> Likely</span>
             <span><i class="line-bear"></i> Low Est.</span>
-            <span id="legend-discovery"><i class="line-discovery"></i> Price Discovery</span>
-            <span id="legend-squeeze"><i class="line-squeeze"></i> Short Squeeze</span>
+            <span id="legend-discovery"><i class="line-discovery"></i> Fair Value</span>
+            <span id="legend-squeeze"><i class="line-squeeze"></i> Squeeze Risk</span>
             <span id="legend-fib" hidden><i class="line-fib"></i> Key Levels</span>
             <span id="legend-sma" hidden><i class="line-sma20"></i> 20-bar Avg · <i class="line-sma50"></i> 50-bar Avg</span>
+            <span id="legend-mybuys" hidden><i class="dot-mybuy"></i> My Buys</span>
+            <span id="legend-patterns" hidden><i class="line-pattern"></i> Auto Patterns</span>
+            <span id="legend-newsdots" hidden><i class="dot-news"></i> News Pins</span>
           </div>
         </section>
 
@@ -382,8 +405,8 @@
             <div class="stat-value" id="stat-close">$—</div>
           </div>
           <div class="stat-item">
-            <div class="stat-label">Live Refresh</div>
-            <div class="stat-value" id="stat-refresh">Every 15s</div>
+            <div class="stat-label">Feed Trust</div>
+            <div class="stat-value" id="stat-refresh">Verified · 15s</div>
           </div>
         </section>
 
@@ -424,6 +447,120 @@
           </div>
         </section>
 
+        <!-- #4 World Physical Gold Board (Live Local Street-Unit Prices) -->
+        <section class="panel" id="panel-world-gold-board" data-sub="global" aria-label="World physical gold board in local street units">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">World Physical Gold Board</h2>
+              <div class="panel-subtitle" id="world-board-subtitle">Live local street-unit prices across 7 major physical gold markets (US, China, Thailand, Laos, India, Dubai &amp; Japan)</div>
+            </div>
+            <div class="segmented" role="group" aria-label="World board pricing mode">
+              <button type="button" id="wgb-mode-melt" class="active">Pure Melt</button>
+              <button type="button" id="wgb-mode-street" title="Adds typical ~3% local shop/mint spread">Est. Shop</button>
+            </div>
+          </div>
+          <div class="world-board-grid" id="world-gold-board-grid"></div>
+          <div class="intel-note" id="world-board-note">Thai &amp; Lao Baht-weight uses the standard 15.244g bar at 96.5% purity · India 24K &amp; 22K per 10g · Updated live with 21 world currencies.</div>
+        </section>
+
+        <!-- #49 Asia Buying vs. London vs. New York Session Replay -->
+        <section class="panel" id="panel-session-replay" data-sub="global" aria-label="Regional session buying replay">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Who's Buying: Asia vs. London vs. New York</h2>
+              <div class="panel-subtitle" id="session-replay-subtitle">Splits recent price moves by region to show where buying or selling is coming from</div>
+            </div>
+            <div class="segmented" role="group" aria-label="Session replay metal">
+              <button type="button" id="sess-rep-gold" class="active">Gold</button>
+              <button type="button" id="sess-rep-silver">Silver</button>
+            </div>
+          </div>
+          <div class="session-replay-bars" id="session-replay-bars"></div>
+          <div class="session-replay-verdict" id="session-replay-verdict">Checking buying &amp; selling by region…</div>
+        </section>
+
+        <!-- #46 21-Currency Record High Radar -->
+        <section class="panel" id="panel-ath-radar" data-sub="global" aria-label="21-currency record-high radar">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">21-Currency Record High Radar</h2>
+              <div class="panel-subtitle" id="ath-radar-subtitle">When Gold or Silver hits record highs in other currencies first, US Dollar breakouts often follow</div>
+            </div>
+            <div class="segmented" role="group" aria-label="Record high radar metal">
+              <button type="button" id="ath-btn-gold" class="active">Gold</button>
+              <button type="button" id="ath-btn-silver">Silver</button>
+            </div>
+          </div>
+          <div class="ath-summary-strip" id="ath-summary-strip"></div>
+          <div class="ath-grid" id="ath-radar-grid"></div>
+        </section>
+
+        <!-- ===== DEEP CHARTS SUB-PAGE (data-sub="charts") ===== -->
+
+        <!-- #45 Gold Priced in Real Assets Chart -->
+        <section class="panel" id="panel-real-assets" data-sub="charts" aria-label="Gold priced in real assets">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">What 1 oz of Gold Buys (Real Assets)</h2>
+              <div class="panel-subtitle" id="real-assets-subtitle">Measures Gold's real-world buying power beyond paper cash</div>
+            </div>
+            <span class="signal-pill" id="real-assets-badge">Real Value</span>
+          </div>
+          <div class="chip-wrap" id="real-asset-tabs" role="group" aria-label="Choose real-world comparison">
+            <button type="button" class="chip-toggle active" data-asset="oil">Barrels of Oil</button>
+            <button type="button" class="chip-toggle" data-asset="spx">US Stocks (S&amp;P 500)</button>
+            <button type="button" class="chip-toggle" data-asset="btc">Bitcoin</button>
+            <button type="button" class="chip-toggle" data-asset="home">US Median Home</button>
+            <button type="button" class="chip-toggle" data-asset="m2">Total US Dollars Printed</button>
+          </div>
+          <div class="real-asset-hero" id="real-asset-hero"></div>
+          <div class="intel-canvas-wrap">
+            <canvas id="real-assets-canvas" aria-label="Historical Gold vs real asset chart"></canvas>
+          </div>
+          <div class="intel-note" id="real-asset-note"></div>
+        </section>
+
+        <!-- #50 100-Year Gold-to-Dow & Gold-to-Housing Cycle Gauges -->
+        <section class="panel" id="panel-cycle-gauges" data-sub="charts" aria-label="100-year hard asset cycle gauges">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">100-Year Gold vs. Stocks &amp; Homes Gauges</h2>
+              <div class="panel-subtitle">Shows whether Gold is cheap or pricey compared to US stocks and homes over the last 100 years</div>
+            </div>
+            <span class="signal-pill bullish" id="cycle-regime-badge">100-Yr View</span>
+          </div>
+          <div class="cycle-gauge-grid" id="cycle-gauge-grid"></div>
+        </section>
+
+        <!-- #47 20-Year Monthly Seasonality Heatmap -->
+        <section class="panel" id="panel-seasonality" data-sub="charts" aria-label="20-year monthly seasonality heatmap">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Best &amp; Worst Months of the Year (20-Yr Avg)</h2>
+              <div class="panel-subtitle" id="seasonality-subtitle">Average monthly gain or dip over 20 years — green = strong months, red = dip-buying months</div>
+            </div>
+            <div class="segmented" role="group" aria-label="Seasonality metal">
+              <button type="button" id="season-btn-gold" class="active">Gold</button>
+              <button type="button" id="season-btn-silver">Silver</button>
+            </div>
+          </div>
+          <div class="season-grid" id="season-heatmap-grid"></div>
+          <div class="intel-note" id="seasonality-note"></div>
+        </section>
+
+        <!-- #53 Cheapest Hour of the Day Pattern Analyzer -->
+        <section class="panel" id="panel-cheapest-hour" data-sub="charts" aria-label="Cheapest hour of the day pattern analyzer">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Cheapest Time of Day to Buy</h2>
+              <div class="panel-subtitle" id="hourly-subtitle">Combines today's live price bars with classic New York morning &amp; London dip hours (Eastern Time)</div>
+            </div>
+            <span class="signal-pill bullish" id="hourly-best-pill">Best Window</span>
+          </div>
+          <div class="hourly-chart-grid" id="hourly-bars-grid"></div>
+          <div class="intel-note" id="hourly-pattern-note"></div>
+        </section>
+
         <!-- Cross-Market Live Macro Ticker Strip (Relocated Below Shanghai SGE) -->
         <section class="macro-strip" id="macro-ticker-strip" data-sub="macro" aria-label="Related market prices">
           <div class="macro-tile">
@@ -458,6 +595,19 @@
           <span class="fh-pill" id="fh-comex"><i class="fh-dot"></i>Vaults —</span>
           <span class="fh-pill" id="fh-outlook"><i class="fh-dot"></i>Forecast —</span>
         </section>
+
+        <!-- #233 Live Price Check & Backup Protection -->
+        <section class="panel" id="panel-tick-trust" data-sub="macro" aria-label="Live price verification and backup feed monitor">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Live Price Check &amp; Backup Protection</h2>
+              <div class="panel-subtitle">Double-checks live prices across multiple sources and automatically blocks bad price glitches</div>
+            </div>
+            <button type="button" class="btn mc-rerun-btn" id="btn-run-quorum-check">Check Now</button>
+          </div>
+          <div class="trust-grid" id="tick-trust-grid"></div>
+          <div class="intel-note" id="tick-trust-note">Running automatic price checks every 15 seconds.</div>
+        </section>
       </section>
 
       <!-- VIEW 2: OUTLOOK (NEWS + HISTORICAL PATTERNS) -->
@@ -472,7 +622,7 @@
 
         <div class="sub-nav" data-parent-view="outlook" role="tablist" aria-label="Outlook sections">
           <button type="button" class="sub-tab-btn active" data-sub-target="forecast" role="tab" aria-selected="true">Forecast</button>
-          <button type="button" class="sub-tab-btn" data-sub-target="drivers" role="tab" aria-selected="false">Macro &amp; Drivers</button>
+          <button type="button" class="sub-tab-btn" data-sub-target="drivers" role="tab" aria-selected="false">What Moves It</button>
           <button type="button" class="sub-tab-btn" data-sub-target="vaults" role="tab" aria-selected="false">Vaults &amp; Miners</button>
           <button type="button" class="sub-tab-btn" data-sub-target="sim" role="tab" aria-selected="false">Odds &amp; News</button>
         </div>
@@ -562,6 +712,54 @@
           </div>
         </section>
 
+        <!-- #231 Price Swing Weather & #232 Gold & Silver Mood Meter -->
+        <section class="intel-dual-grid" id="intel-weather-fg-grid" data-sub="forecast" aria-label="Price swing weather and market mood meter">
+          <article class="panel intel-mini-panel" id="panel-storm-radar">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Price Swing Weather</h2>
+                <div class="panel-subtitle">Checks market fear &amp; big upcoming dates to warn of bumpy days</div>
+              </div>
+              <span class="signal-pill" id="storm-level-pill">Checking…</span>
+            </div>
+            <div class="storm-hero" id="storm-radar-hero"></div>
+            <div class="storm-factors" id="storm-radar-factors"></div>
+          </article>
+
+          <article class="panel intel-mini-panel" id="panel-fear-greed">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Gold &amp; Silver Mood Meter</h2>
+                <div class="panel-subtitle">Big trader bets, fund buying, China demand &amp; news mood</div>
+              </div>
+              <div class="segmented" role="group" aria-label="Mood meter metal">
+                <button type="button" id="fg-btn-gold" class="active">Gold</button>
+                <button type="button" id="fg-btn-silver">Silver</button>
+              </div>
+            </div>
+            <div class="fg-dial-wrap" id="fg-dial-svg-wrap"></div>
+            <div class="fg-sub-row" id="fg-sub-row"></div>
+          </article>
+        </section>
+
+        <!-- #142 6-Spoke Market Radar Spider Chart -->
+        <section class="panel" id="panel-market-radar" data-sub="forecast" aria-label="6-part market health radar">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">6-Part Market Health Radar</h2>
+              <div class="panel-subtitle">One-glance balance of US Dollar, Vault Supply, Asia Demand, Momentum, Gold vs. Silver &amp; News Mood</div>
+            </div>
+            <div class="segmented" role="group" aria-label="Market radar metal">
+              <button type="button" id="radar-btn-gold" class="active">Gold</button>
+              <button type="button" id="radar-btn-silver">Silver</button>
+            </div>
+          </div>
+          <div class="radar-layout">
+            <div class="radar-svg-wrap" id="market-radar-svg-wrap"></div>
+            <div class="radar-metrics-list" id="market-radar-list"></div>
+          </div>
+        </section>
+
         <!-- Narrative Synthesis -->
         <section class="panel" id="panel-outlook-summary" data-sub="forecast">
           <div class="panel-header outlook-summary-head">
@@ -647,6 +845,37 @@
           <div class="pp-bars" id="pp-bars-list"></div>
         </section>
 
+        <!-- #48 Inflation & Interest Rate "What-If" Slider -->
+        <section class="panel" id="panel-whisper-slider" data-sub="drivers" aria-label="Inflation and Fed interest rate what-if simulator">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Inflation &amp; Interest Rate "What-If" Slider</h2>
+              <div class="panel-subtitle">Slide US inflation or Fed interest rate surprises to preview the likely 1-hour &amp; 7-day price reaction</div>
+            </div>
+            <button type="button" class="btn mc-rerun-btn" id="btn-reset-whisper">Reset</button>
+          </div>
+          <div class="whisper-sliders">
+            <div class="whisper-control">
+              <div class="whisper-head">
+                <label for="input-whisper-cpi">US Inflation Surprise (vs. Expected)</label>
+                <strong id="whisper-cpi-val">0.0% (As Expected)</strong>
+              </div>
+              <input type="range" id="input-whisper-cpi" min="-0.4" max="0.4" step="0.1" value="0" />
+              <div class="whisper-scale"><span>−0.4% Lower</span><span>Expected</span><span>+0.4% Higher</span></div>
+            </div>
+            <div class="whisper-control">
+              <div class="whisper-head">
+                <label for="input-whisper-fed">Fed Interest Rate Surprise</label>
+                <strong id="whisper-fed-val">No Change (As Expected)</strong>
+              </div>
+              <input type="range" id="input-whisper-fed" min="-50" max="50" step="25" value="0" />
+              <div class="whisper-scale"><span>−0.50% Rate Cut</span><span>As Expected</span><span>+0.50% Rate Hike</span></div>
+            </div>
+          </div>
+          <div class="whisper-results-grid" id="whisper-results-grid"></div>
+          <div class="intel-note" id="whisper-note"></div>
+        </section>
+
         <!-- Institutional Pro Quant Signals -->
         <section class="pro-grid" data-sub="drivers" aria-label="Key market health indicators">
           <article class="pro-card">
@@ -668,6 +897,32 @@
             <div class="pro-label">Past Forecast Accuracy</div>
             <div class="pro-value" id="pro-accuracy">—% Right</div>
             <div class="pro-sub" id="pro-accuracy-sub">—% inside forecast range</div>
+          </article>
+        </section>
+
+        <!-- #51 Mining Stocks Early Signal & #52 Big Futures & Delivery Dates -->
+        <section class="intel-dual-grid" id="intel-vault-signals" data-sub="vaults" aria-label="Mining stocks early signal and big delivery dates">
+          <article class="panel intel-mini-panel" id="panel-miner-divergence">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Mining Stocks Early Signal</h2>
+                <div class="panel-subtitle">Mining stocks often move 2–5 days ahead of Gold &amp; Silver prices</div>
+              </div>
+              <span class="signal-pill" id="miner-div-badge">Checking…</span>
+            </div>
+            <div class="miner-div-grid" id="miner-div-grid"></div>
+            <div class="intel-note" id="miner-div-note"></div>
+          </article>
+
+          <article class="panel intel-mini-panel" id="panel-comex-opex">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">Big Futures &amp; Delivery Dates</h2>
+                <div class="panel-subtitle">Monthly contract expiry &amp; vault delivery dates that often trigger sudden price swings</div>
+              </div>
+              <span class="signal-pill" id="opex-status-badge">Calendar</span>
+            </div>
+            <div class="opex-list" id="comex-opex-list"></div>
           </article>
         </section>
 
@@ -732,19 +987,19 @@
           <div class="event-strip" id="inst-event-strip" aria-label="Upcoming market-moving dates">
             <div class="event-pill">
               <span class="event-dot"></span>
-              <span class="event-name">COMEX Silver Delivery Date</span>
+              <span class="event-name">Silver Vault Delivery Date</span>
               <span class="event-eta">11d · Nov 30</span>
             </div>
           </div>
 
           <div class="inst-grid">
             <article class="inst-card">
-              <div class="inst-label">Options Fear Gauge</div>
+              <div class="inst-label">Market Fear Meter</div>
               <div class="inst-val" id="inst-gvz-val">21.4%</div>
               <div class="inst-sub" id="inst-gvz-sub">Expected price swings</div>
             </article>
             <article class="inst-card">
-              <div class="inst-label">Bullion Fund Buying</div>
+              <div class="inst-label">Gold &amp; Silver Fund Buying</div>
               <div class="inst-val" id="inst-etf-val">1.31× Vol</div>
               <div class="inst-sub" id="inst-etf-sub">Physical fund demand</div>
             </article>
@@ -921,15 +1176,44 @@
           <div class="driver-list" id="accuracy-breakdown"></div>
         </section>
 
-        <!-- Scored World & Metals News -->
+        <!-- Scored World & Metals News + #228 AI Signal vs. Clickbait Filter -->
         <section class="panel" id="panel-news" data-sub="sim">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Latest Market News</h2>
-              <div class="panel-subtitle" id="outlook-updated">Recent headlines scored for Gold &amp; Silver impact</div>
+              <div class="panel-subtitle" id="outlook-updated">Recent headlines scored for real market impact vs. clickbait hype</div>
+            </div>
+            <div class="segmented" role="group" aria-label="Filter news by signal quality">
+              <button type="button" id="news-filter-all" class="active">All</button>
+              <button type="button" id="news-filter-signal">Real Signal</button>
+              <button type="button" id="news-filter-nohype">Hide Hype</button>
             </div>
           </div>
+          <div class="news-filter-summary" id="news-filter-summary"></div>
           <ul class="news-list" id="outlook-news"></ul>
+        </section>
+
+        <!-- #54 Personal Forecast Journal vs. AI -->
+        <section class="panel" id="panel-forecast-journal" data-sub="sim" aria-label="Personal forecast journal versus AI">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Personal Forecast Journal vs. AI</h2>
+              <div class="panel-subtitle">Log your own weekly UP/DOWN call alongside Bullion Pulse and track who scores higher</div>
+            </div>
+            <span class="signal-pill" id="journal-score-badge">0 Calls</span>
+          </div>
+          <div class="journal-form-row">
+            <select id="journal-metal" class="currency-select" aria-label="Metal for your prediction">
+              <option value="gold">Gold (7-Day Call)</option>
+              <option value="silver">Silver (7-Day Call)</option>
+            </select>
+            <div class="journal-call-btns">
+              <button type="button" class="btn journal-up-btn" id="btn-journal-up">▲ Call UP</button>
+              <button type="button" class="btn journal-down-btn" id="btn-journal-down">▼ Call DOWN</button>
+            </div>
+          </div>
+          <div class="journal-score-grid" id="journal-score-grid"></div>
+          <div class="journal-list" id="journal-entries-list"></div>
         </section>
       </section>
 
@@ -1198,6 +1482,22 @@
           <div class="stack-scenario-strip" id="stack-scenario-strip" hidden></div>
         </section>
 
+        <!-- #9 Personal Stack Time Machine (Directly Under My Gold & Silver Value) -->
+        <section class="panel" id="panel-stack-timemachine" data-sub="overview" aria-label="Personal stack performance comparison">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Personal Stack Time Machine</h2>
+              <div class="panel-subtitle" id="tm-subtitle">Compares your metal stack against keeping Cash, buying a little every month, and US stocks</div>
+            </div>
+            <span class="signal-pill" id="tm-winner-badge">Comparing…</span>
+          </div>
+          <div class="tm-cards-grid" id="tm-cards-grid"></div>
+          <div class="intel-canvas-wrap">
+            <canvas id="timemachine-canvas" aria-label="Stack performance versus Cash, monthly buying, and US stocks"></canvas>
+          </div>
+          <div class="intel-note" id="tm-note">Tip: Turn on <strong>My Buys</strong> on the main chart to see your exact purchase markers plotted on the price bars.</div>
+        </section>
+
         <!-- Stack Goals & Interactive Future Price Wealth Sliders -->
         <section class="panel" id="panel-stack-goals" data-sub="goals" aria-label="Stacking goals and future price wealth sliders">
           <div class="panel-header">
@@ -1420,15 +1720,15 @@
               <label class="confirm-toggle-row" for="chk-alert-backwardation">
                 <input type="checkbox" id="chk-alert-backwardation" checked />
                 <div>
-                  <strong>Supply Shortage Alert (Backwardation)</strong>
-                  <span>Alerts when futures drop below today's spot price, signaling tight physical supply.</span>
+                  <strong>Physical Supply Shortage Alert</strong>
+                  <span>Alerts you when futures prices drop below today's price — a rare sign of tight metal supply.</span>
                 </div>
               </label>
               <label class="confirm-toggle-row" for="chk-alert-squeeze">
                 <input type="checkbox" id="chk-alert-squeeze" checked />
                 <div>
-                  <strong>Short Squeeze Alert</strong>
-                  <span>Alerts when short-seller pressure builds up enough for sudden upward spikes.</span>
+                  <strong>Sudden Price Jump Alert</strong>
+                  <span>Alerts you when tight vaults and heavy short bets point to a sudden upward jump.</span>
                 </div>
               </label>
               <label class="confirm-toggle-row" for="chk-alert-dxy">
@@ -1621,17 +1921,10 @@ CATALYST_ALERTS=true</div>
         </svg>
         <span>Trade</span>
       </button>
-      <button type="button" class="nav-btn" data-view="stack" id="nav-stack">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="12 2 2 7 12 12 22 7 12 2" />
-          <polyline points="2 17 12 22 22 17" />
-          <polyline points="2 12 12 17 22 12" />
-        </svg>
-        <span>Stack</span>
-      </button>
     </nav>
   </div>
 
-  <script src="./app.js?v=35" defer></script>
+  <script src="./app.js?v=38" defer></script>
+  <script src="./intel.js?v=38" defer></script>
 </body>
 </html>

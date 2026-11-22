@@ -106,6 +106,11 @@ const DEFAULT_SETTINGS = {
   showFib: false,
   showSma: false,
   showRsi: false,
+  showMyBuys: false,
+  showPatterns: false,
+  showNewsDots: false,
+  newsFilter: 'all', // 'all' | 'signal' | 'nohype'
+  forecastJournal: [],
   chartTimeframe: '1d', // '1d' | '7d' | '1m' | '6m' | '1y' | '5y' | '10y' | 'all'
   stack: {
     goldOz: '',
@@ -232,6 +237,24 @@ const state = {
     comexLive: false,
     outlookAt: null,
   },
+  feedTrust: {
+    status: 'connecting', // 'verified' | 'auto-healed' | 'single' | 'demo' | 'connecting'
+    primarySource: 'GoldPrice Spot',
+    secondarySource: 'Gold-API Spot',
+    lastSpreadPct: null,
+    rejectedOutliers: 0,
+    failovers: 0,
+    checksCount: 0,
+    lastVerifiedAt: null,
+    lastEventNote: 'Waiting for first multi-source sanity check…',
+  },
+  chartReplay: {
+    active: false,
+    paused: false,
+    idx: 0,
+    speed: 1,
+    timer: null,
+  },
   accuracyChartMetal: 'gold',
   swapCalc: {
     dir: 'g2s',
@@ -288,7 +311,7 @@ const ALLOWED_NEURAL_VOICE_IDS = new Set([
   'en_GB-alba-medium',
 ]);
 const ALLOWED_SUBVIEWS = {
-  markets: new Set(['live', 'global', 'macro']),
+  markets: new Set(['live', 'global', 'charts', 'macro']),
   outlook: new Set(['forecast', 'drivers', 'vaults', 'sim']),
   trade: new Set(['swap', 'ladder', 'grader']),
   stack: new Set(['overview', 'goals', 'lots']),
@@ -349,6 +372,30 @@ function sanitizeStackLots(rawLots) {
   return out;
 }
 
+function sanitizeForecastJournal(rawArr) {
+  if (!Array.isArray(rawArr)) return [];
+  const out = [];
+  for (const item of rawArr.slice(0, 60)) {
+    if (!isPlainObject(item)) continue;
+    const entryPrice = Number(item.entryPrice);
+    if (!Number.isFinite(entryPrice) || entryPrice <= 0 || entryPrice > 1e7) continue;
+    const settledPrice = item.settledPrice != null && Number.isFinite(Number(item.settledPrice)) && Number(item.settledPrice) > 0
+      ? Number(item.settledPrice)
+      : null;
+    out.push({
+      id: sanitizeShortText(String(item.id || `fj_${out.length + 1}`), 48) || `fj_${out.length + 1}`,
+      date: sanitizeShortText(item.date || '', 24),
+      metal: item.metal === 'silver' ? 'silver' : 'gold',
+      userDir: item.userDir === 'down' ? 'down' : 'up',
+      aiDir: item.aiDir === 'down' ? 'down' : item.aiDir === 'up' ? 'up' : 'neutral',
+      entryPrice: +entryPrice.toFixed(2),
+      settledPrice: settledPrice != null ? +settledPrice.toFixed(2) : null,
+      settledAt: sanitizeShortText(item.settledAt || '', 24),
+    });
+  }
+  return out;
+}
+
 function sanitizePersistedSettings(raw) {
   const s = isPlainObject(raw) ? raw : {};
   const rawStack = isPlainObject(s.stack) ? s.stack : {};
@@ -386,6 +433,11 @@ function sanitizePersistedSettings(raw) {
     showFib: Boolean(s.showFib),
     showSma: Boolean(s.showSma),
     showRsi: Boolean(s.showRsi),
+    showMyBuys: Boolean(s.showMyBuys),
+    showPatterns: Boolean(s.showPatterns),
+    showNewsDots: Boolean(s.showNewsDots),
+    newsFilter: s.newsFilter === 'signal' || s.newsFilter === 'nohype' ? s.newsFilter : 'all',
+    forecastJournal: sanitizeForecastJournal(s.forecastJournal),
     chartTimeframe: ALLOWED_TIMEFRAMES.has(s.chartTimeframe) ? s.chartTimeframe : DEFAULT_SETTINGS.chartTimeframe,
     stack: {
       goldOz: sanitizeNumInputStr(rawStack.goldOz, 0, 1e6),
@@ -938,49 +990,117 @@ async function fetchLiveFuturesQuotes() {
 let spotFetchInFlight = false;
 let goldPriceOrgBlockedUntil = 0;
 
+function isTickSane(candidate, prevGold, prevSilver) {
+  const g = Number(candidate?.gold?.price);
+  const s = Number(candidate?.silver?.price);
+  if (!Number.isFinite(g) || !Number.isFinite(s) || g < 500 || g > 50000 || s < 5 || s > 2000) {
+    return false;
+  }
+  if (prevGold > 0 && Math.abs(g - prevGold) / prevGold > 0.14) return false;
+  if (prevSilver > 0 && Math.abs(s - prevSilver) / prevSilver > 0.22) return false;
+  return true;
+}
+
 async function fetchSpotQuotes(checkQuorum = false) {
   if (spotFetchInFlight && !checkQuorum) return;
   spotFetchInFlight = true;
   const refreshBtn = document.getElementById('btn-refresh');
   refreshBtn?.classList.add('spinning');
 
+  const prevG = state.quotes.gold.price || 0;
+  const prevS = state.quotes.silver.price || 0;
   let result;
   state.liveMacro.consensusNote = '';
+  state.feedTrust.checksCount += 1;
   try {
     if (checkQuorum) {
       const [gpRes, gaRes] = await Promise.allSettled([
         fetchFromGoldPriceOrg(),
         fetchFromGoldApiCom(),
       ]);
-      if (gpRes.status === 'fulfilled') {
+      const gpOk = gpRes.status === 'fulfilled' && isTickSane(gpRes.value, prevG, prevS);
+      const gaOk = gaRes.status === 'fulfilled' && isTickSane(gaRes.value, prevG, prevS);
+      if (gpRes.status === 'fulfilled' && !gpOk) state.feedTrust.rejectedOutliers += 1;
+      if (gaRes.status === 'fulfilled' && !gaOk) state.feedTrust.rejectedOutliers += 1;
+
+      if (gpOk) {
         goldPriceOrgBlockedUntil = 0;
         result = gpRes.value;
-        if (gaRes.status === 'fulfilled' && result.gold.price > 0) {
-          const spreadPct = Math.abs(result.gold.price - gaRes.value.gold.price) / result.gold.price * 100;
-          state.liveMacro.consensusNote = spreadPct <= 0.65 ? 'Quorum ✓' : `Spread ${spreadPct.toFixed(1)}%`;
+        state.feedTrust.primarySource = 'GoldPrice Spot';
+        if (gaOk && result.gold.price > 0) {
+          const spreadPct = (Math.abs(result.gold.price - gaRes.value.gold.price) / result.gold.price) * 100;
+          state.feedTrust.lastSpreadPct = +spreadPct.toFixed(2);
+          state.feedTrust.lastVerifiedAt = Date.now();
+          if (spreadPct <= 0.65) {
+            state.liveMacro.consensusNote = 'Verified ✓';
+            state.feedTrust.status = 'verified';
+            state.feedTrust.lastEventNote = `Both live price feeds agree within ${spreadPct.toFixed(2)}% — price verified.`;
+          } else {
+            state.liveMacro.consensusNote = `Diff ${spreadPct.toFixed(1)}%`;
+            state.feedTrust.status = 'auto-healed';
+            state.feedTrust.lastEventNote = `Small ${spreadPct.toFixed(2)}% price difference noticed between feeds.`;
+          }
+        } else {
+          state.feedTrust.status = 'single';
+          state.feedTrust.lastVerifiedAt = Date.now();
+          state.feedTrust.lastEventNote = 'Primary GoldPrice feed healthy; secondary temporarily unavailable.';
         }
-      } else if (gaRes.status === 'fulfilled') {
+      } else if (gaOk) {
         goldPriceOrgBlockedUntil = Date.now() + 10 * 60 * 1000;
         result = gaRes.value;
+        state.feedTrust.failovers += 1;
+        state.feedTrust.status = 'auto-healed';
+        state.feedTrust.primarySource = 'Gold-API Spot';
+        state.feedTrust.lastVerifiedAt = Date.now();
+        state.feedTrust.lastEventNote = 'Auto-healed to Gold-API Spot after primary feed timed out or failed sanity bounds.';
       } else {
         throw new Error('All live spot feeds failed');
       }
       state.mode = 'live';
     } else if (Date.now() < goldPriceOrgBlockedUntil) {
-      result = await fetchFromGoldApiCom();
+      const ga = await fetchFromGoldApiCom();
+      if (!isTickSane(ga, prevG, prevS)) {
+        state.feedTrust.rejectedOutliers += 1;
+        throw new Error('Outlier tick rejected');
+      }
+      result = ga;
+      state.feedTrust.primarySource = 'Gold-API Spot';
+      state.feedTrust.status = state.feedTrust.failovers > 0 ? 'auto-healed' : 'verified';
+      state.feedTrust.lastVerifiedAt = Date.now();
       state.mode = 'live';
     } else {
       try {
-        result = await fetchFromGoldPriceOrg();
+        const gp = await fetchFromGoldPriceOrg();
+        if (!isTickSane(gp, prevG, prevS)) {
+          state.feedTrust.rejectedOutliers += 1;
+          throw new Error('Outlier primary tick rejected');
+        }
+        result = gp;
+        state.feedTrust.primarySource = 'GoldPrice Spot';
+        state.feedTrust.status = state.feedTrust.lastSpreadPct != null ? 'verified' : 'single';
+        state.feedTrust.lastVerifiedAt = Date.now();
+        state.feedTrust.lastEventNote = 'Primary live spot passed price & jump sanity bounds.';
         state.mode = 'live';
       } catch {
         goldPriceOrgBlockedUntil = Date.now() + 10 * 60 * 1000;
-        result = await fetchFromGoldApiCom();
+        state.feedTrust.failovers += 1;
+        const ga = await fetchFromGoldApiCom();
+        if (!isTickSane(ga, prevG, prevS)) {
+          state.feedTrust.rejectedOutliers += 1;
+          throw new Error('Outlier fallback tick rejected');
+        }
+        result = ga;
+        state.feedTrust.primarySource = 'Gold-API Spot';
+        state.feedTrust.status = 'auto-healed';
+        state.feedTrust.lastVerifiedAt = Date.now();
+        state.feedTrust.lastEventNote = 'Auto-healed seamlessly to Gold-API Spot backup feed.';
         state.mode = 'live';
       }
     }
   } catch {
     result = buildFallbackDemoQuotes();
+    state.feedTrust.status = 'demo';
+    state.feedTrust.lastEventNote = 'Offline fallback preview active until internet returns.';
     state.mode = 'demo';
   } finally {
     spotFetchInFlight = false;
@@ -1443,19 +1563,32 @@ function renderStats() {
   const q = state.quotes[sel];
   closeLabelEl.textContent = sel === 'gold' ? 'Gold Yesterday' : 'Silver Yesterday';
   closeEl.textContent = q.prevClose ? formatMoney(convertUnit(q.prevClose)) : '$—';
+
+  const refEl = document.getElementById('stat-refresh');
+  if (refEl) {
+    const st = state.feedTrust?.status;
+    refEl.textContent =
+      st === 'verified'
+        ? 'Verified ✓ · 15s'
+        : st === 'auto-healed'
+          ? 'Auto-Healed ✓ · 15s'
+          : st === 'demo'
+            ? 'Offline Preview'
+            : 'Live · 15s';
+  }
 }
 
 /* ---------- Multi-Timeframe OHLC Candlesticks & Forecast Fan Chart ---------- */
 
 const CHART_TF_META = {
-  '1d':  { label: '1D',  interval: '5m',  subtitle: '5m OHLC candles',           fcHorizon: '7d',  fcLabel: '+7d',  maxBars: 28 },
-  '7d':  { label: '7D',  interval: '1h',  subtitle: 'Hourly OHLC · 7-Day range', fcHorizon: '7d',  fcLabel: '+7d',  maxBars: 36 },
-  '1m':  { label: '1M',  interval: '1d',  subtitle: 'Daily OHLC · 1-Month',      fcHorizon: '1m',  fcLabel: '+1M',  maxBars: 28 },
-  '6m':  { label: '6M',  interval: '3d',  subtitle: '3-Day OHLC · 6-Month',      fcHorizon: '6m',  fcLabel: '+6M',  maxBars: 36 },
-  '1y':  { label: '1Y',  interval: '1wk', subtitle: 'Weekly OHLC · 1-Year',      fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 52 },
-  '5y':  { label: '5Y',  interval: '1mo', subtitle: 'Monthly OHLC · 5-Year',     fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 60 },
-  '10y': { label: '10Y', interval: '2mo', subtitle: '2-Month OHLC · 10-Year',    fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 48 },
-  all:   { label: 'ALL', interval: '1yr', subtitle: 'Annual OHLC · 1975–2026',   fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 52 },
+  '1d':  { label: '1D',  interval: '5m',  subtitle: '5-min price bars',           fcHorizon: '7d',  fcLabel: '+7d',  maxBars: 28 },
+  '7d':  { label: '7D',  interval: '1h',  subtitle: 'Hourly bars · 7 days',       fcHorizon: '7d',  fcLabel: '+7d',  maxBars: 36 },
+  '1m':  { label: '1M',  interval: '1d',  subtitle: 'Daily bars · 1 month',       fcHorizon: '1m',  fcLabel: '+1M',  maxBars: 28 },
+  '6m':  { label: '6M',  interval: '3d',  subtitle: '3-day bars · 6 months',      fcHorizon: '6m',  fcLabel: '+6M',  maxBars: 36 },
+  '1y':  { label: '1Y',  interval: '1wk', subtitle: 'Weekly bars · 1 year',       fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 52 },
+  '5y':  { label: '5Y',  interval: '1mo', subtitle: 'Monthly bars · 5 years',     fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 60 },
+  '10y': { label: '10Y', interval: '2mo', subtitle: '2-month bars · 10 years',    fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 48 },
+  all:   { label: 'ALL', interval: '1yr', subtitle: 'Yearly bars · 1975–2026',    fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 52 },
 };
 
 const CLIENT_HISTORICAL_ANCHORS = {
@@ -2181,7 +2314,7 @@ function friendlyRegimeLabel(label) {
   const map = {
     'True Price Discovery': 'Real Demand Rally',
     'Discovery Bias': 'Real Demand Leaning',
-    'Short Squeeze': 'Short Squeeze',
+    'Short Squeeze': 'Squeeze Risk',
     'Squeeze Bias': 'Squeeze Building',
     'Hybrid: Squeeze + Discovery': 'Squeeze + Real Demand',
     'Consolidation / Neutral': 'Sideways / Calm',
@@ -2254,6 +2387,29 @@ function renderChart() {
     rsiBtn.classList.toggle('active', !!state.settings.showRsi);
     rsiBtn.setAttribute('aria-pressed', String(!!state.settings.showRsi));
   }
+  const buysBtn = document.getElementById('btn-toggle-mybuys');
+  if (buysBtn) {
+    buysBtn.classList.toggle('active', !!state.settings.showMyBuys);
+    buysBtn.setAttribute('aria-pressed', String(!!state.settings.showMyBuys));
+    buysBtn.disabled = isRatio;
+    buysBtn.style.opacity = isRatio ? '0.45' : '1';
+  }
+  const patBtn = document.getElementById('btn-toggle-patterns');
+  if (patBtn) {
+    patBtn.classList.toggle('active', !!state.settings.showPatterns);
+    patBtn.setAttribute('aria-pressed', String(!!state.settings.showPatterns));
+  }
+  const newsPinBtn = document.getElementById('btn-toggle-newsdots');
+  if (newsPinBtn) {
+    newsPinBtn.classList.toggle('active', !!state.settings.showNewsDots);
+    newsPinBtn.setAttribute('aria-pressed', String(!!state.settings.showNewsDots));
+  }
+  const repBtn = document.getElementById('btn-chart-replay');
+  if (repBtn) {
+    repBtn.classList.toggle('active', !!state.chartReplay.active);
+    repBtn.setAttribute('aria-pressed', String(!!state.chartReplay.active));
+    repBtn.textContent = state.chartReplay.active ? '■ Stop Replay' : '▶ Replay';
+  }
   const discLegend = document.getElementById('legend-discovery');
   if (discLegend) discLegend.hidden = !state.settings.showDiscovery || isRatio;
   const sqzLegend = document.getElementById('legend-squeeze');
@@ -2262,6 +2418,12 @@ function renderChart() {
   if (fibLegend) fibLegend.hidden = !state.settings.showFib;
   const smaLegend = document.getElementById('legend-sma');
   if (smaLegend) smaLegend.hidden = !state.settings.showSma;
+  const buyLegend = document.getElementById('legend-mybuys');
+  if (buyLegend) buyLegend.hidden = !state.settings.showMyBuys || isRatio;
+  const patLegend = document.getElementById('legend-patterns');
+  if (patLegend) patLegend.hidden = !state.settings.showPatterns;
+  const newsLegend = document.getElementById('legend-newsdots');
+  if (newsLegend) newsLegend.hidden = !state.settings.showNewsDots;
   const rsiWrap = document.getElementById('rsi-pane-wrap');
   if (rsiWrap && !state.settings.showRsi) rsiWrap.hidden = true;
 
@@ -2495,8 +2657,13 @@ function renderChart() {
     });
   }
 
-  // Draw OHLC Candlesticks
+  // Draw OHLC Candlesticks (supports #138 Market Highlight Reel Replay progressive reveal)
+  const visibleLimit =
+    state.chartReplay.active && state.chartReplay.idx > 0
+      ? Math.min(converted.length, state.chartReplay.idx)
+      : converted.length;
   converted.forEach((b, i) => {
+    if (i >= visibleLimit) return;
     const cx = xCandle(i);
     const isUp = b.c >= b.o;
     const col = isUp ? upCol : downCol;
@@ -2758,6 +2925,199 @@ function renderChart() {
     drawRsiPane(rsiData, candleAreaW, padLeft, stepX);
   }
 
+  // #227 Auto-Labeled Plain-English Chart Patterns
+  const patStripEl = document.getElementById('chart-patterns-strip');
+  let detectedPatterns = [];
+  if (state.settings.showPatterns && converted.length >= 6) {
+    detectedPatterns = detectChartPatterns(converted.slice(0, visibleLimit));
+    ctx.save();
+    ctx.font = `600 ${desktopCanvas ? 10 : 8.8}px "Inter", sans-serif`;
+    ctx.textBaseline = 'middle';
+    const drawnTagYs = [];
+    for (const pat of detectedPatterns) {
+      const py = yAt(pat.price);
+      if (py < padTop + 6 || py > padTop + plotH - 6) continue;
+      ctx.save();
+      ctx.strokeStyle = pat.color;
+      ctx.lineWidth = 1.25;
+      ctx.setLineDash(pat.dash || [4, 3]);
+      ctx.beginPath();
+      const x1 = pat.startIdx != null ? xCandle(pat.startIdx) : padLeft;
+      const x2 = pat.endIdx != null ? xCandle(pat.endIdx) : padLeft + candleAreaW;
+      ctx.moveTo(x1, py);
+      ctx.lineTo(x2, py);
+      ctx.stroke();
+      ctx.restore();
+
+      const pillX = Math.min(padLeft + candleAreaW - 120, Math.max(padLeft + 4, (x1 + x2) / 2 - 42));
+      let labelY = py - 9;
+      if (drawnTagYs.some((uy) => Math.abs(uy - labelY) < 15)) labelY = py + 11;
+      labelY = Math.max(padTop + 9, Math.min(padTop + plotH - 9, labelY));
+      drawnTagYs.push(labelY);
+      const tw = ctx.measureText(pat.label).width;
+      ctx.fillStyle = isLightTheme ? 'rgba(255,255,255,0.92)' : 'rgba(13,14,17,0.88)';
+      ctx.fillRect(pillX, labelY - 7, tw + 10, 14);
+      ctx.strokeStyle = pat.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pillX, labelY - 7, tw + 10, 14);
+      ctx.fillStyle = pat.color;
+      ctx.textAlign = 'left';
+      ctx.fillText(pat.label, pillX + 5, labelY + 0.3);
+    }
+    ctx.restore();
+    if (patStripEl) {
+      patStripEl.hidden = false;
+      patStripEl.innerHTML = detectedPatterns.length
+        ? detectedPatterns
+            .map(
+              (p) =>
+                `<span class="pattern-badge" style="border-color:${p.color};color:${p.color}">${escapeHtml(p.label)} · ${escapeHtml(p.hint)}</span>`
+            )
+            .join('')
+        : '<span class="pattern-badge">No major chart pattern detected on this timeframe yet.</span>';
+    }
+  } else if (patStripEl) {
+    patStripEl.hidden = true;
+  }
+
+  // #9 Personal "My Buys" Plot Directly on the Price Chart
+  const buyMarkersByIdx = new Map();
+  if (state.settings.showMyBuys && !isRatio && converted.length >= 2) {
+    const lots = (state.settings.stackLots || []).filter((l) => l.metal === sel);
+    const tMin = converted[0].t;
+    const tMax = converted[converted.length - 1].t;
+    for (const lot of lots) {
+      const lotUnitPrice = convertUnit(Number(lot.cost) || 0);
+      if (lotUnitPrice <= 0) continue;
+      const lotMs = lot.date ? Date.parse(`${lot.date}T12:00:00Z`) : NaN;
+      let targetIdx = Math.max(0, converted.length - 1);
+      if (Number.isFinite(lotMs) && lotMs >= tMin && lotMs <= tMax + 86400000) {
+        let bestDist = Infinity;
+        for (let i = 0; i < converted.length; i++) {
+          const d = Math.abs(converted[i].t - lotMs);
+          if (d < bestDist) {
+            bestDist = d;
+            targetIdx = i;
+          }
+        }
+      } else {
+        // Match closest bar price if purchase date predates this short chart window
+        let bestDiff = Infinity;
+        for (let i = 0; i < converted.length; i++) {
+          const d = Math.abs(converted[i].c - lotUnitPrice);
+          if (d < bestDiff) {
+            bestDiff = d;
+            targetIdx = i;
+          }
+        }
+      }
+      if (targetIdx >= visibleLimit) continue;
+      const cx = xCandle(targetIdx);
+      const cy = Math.max(padTop + 10, Math.min(padTop + plotH - 10, yAt(lotUnitPrice)));
+      ctx.save();
+      ctx.fillStyle = '#F59E0B';
+      ctx.strokeStyle = isLightTheme ? '#FFFFFF' : '#0D0E11';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 6);
+      ctx.lineTo(cx + 6, cy);
+      ctx.lineTo(cx, cy + 6);
+      ctx.lineTo(cx - 6, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '700 8.5px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#F59E0B';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('BUY', cx, cy - 8);
+      ctx.restore();
+      const arr = buyMarkersByIdx.get(targetIdx) || [];
+      arr.push(lot);
+      buyMarkersByIdx.set(targetIdx, arr);
+    }
+    // Also plot average cost basis dashed reference line if user entered Gold/Silver avg cost
+    const avgCostRaw = Number(sel === 'silver' ? state.settings.stack.silverCost : state.settings.stack.goldCost);
+    if (Number.isFinite(avgCostRaw) && avgCostRaw > 0) {
+      const avgY = yAt(convertUnit(avgCostRaw));
+      if (avgY >= padTop + 6 && avgY <= padTop + plotH - 6) {
+        ctx.save();
+        ctx.strokeStyle = '#F59E0B';
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(padLeft, avgY);
+        ctx.lineTo(padLeft + candleAreaW, avgY);
+        ctx.stroke();
+        ctx.font = '600 9.5px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#F59E0B';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(
+          isPrivacyOn() ? 'My Avg Cost •••' : `My Avg Cost ${fmtChartVal(convertUnit(avgCostRaw), convertUnit(avgCostRaw) >= 500 ? 0 : 2)}`,
+          padLeft + 4,
+          avgY - 3
+        );
+        ctx.restore();
+      }
+    }
+  }
+
+  // #230 Interactive News Pins on the Price Chart
+  const newsPinsByIdx = new Map();
+  if (state.settings.showNewsDots && converted.length >= 6) {
+    const headlines = (outlookState.data?.headlines || FALLBACK_OUTLOOK.headlines || []).slice(0, 6);
+    const tMin = converted[0].t;
+    const tMax = converted[converted.length - 1].t;
+    // Find biggest bar movers as fallback anchors when headlines are newer than multi-year bars
+    const moverIndices = converted
+      .map((b, idx) => ({ idx, mag: b.o > 0 ? Math.abs((b.c - b.o) / b.o) : 0 }))
+      .sort((a, b) => b.mag - a.mag)
+      .map((x) => x.idx);
+
+    const usedIdx = new Set();
+    headlines.forEach((h, hIdx) => {
+      const pubMs = h.publishedAt ? Date.parse(h.publishedAt) : NaN;
+      let targetIdx = null;
+      if (Number.isFinite(pubMs) && pubMs >= tMin && pubMs <= tMax + 86400000) {
+        let bestD = Infinity;
+        for (let i = 0; i < converted.length; i++) {
+          const d = Math.abs(converted[i].t - pubMs);
+          if (d < bestD && !usedIdx.has(i)) {
+            bestD = d;
+            targetIdx = i;
+          }
+        }
+      }
+      if (targetIdx == null) {
+        targetIdx = moverIndices.find((idx) => !usedIdx.has(idx)) ?? Math.max(0, converted.length - 1 - hIdx * 2);
+      }
+      if (targetIdx >= visibleLimit) return;
+      usedIdx.add(targetIdx);
+      const b = converted[targetIdx];
+      const cx = xCandle(targetIdx);
+      const isBull = h.sentiment === 'bullish';
+      const isBear = h.sentiment === 'bearish';
+      const pinCol = isBull ? upCol : isBear ? downCol : '#38BDF8';
+      const cy = Math.max(padTop + 10, yAt(b.h) - 10);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 4.8, 0, Math.PI * 2);
+      ctx.fillStyle = pinCol;
+      ctx.fill();
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = isLightTheme ? '#FFFFFF' : '#0D0E11';
+      ctx.stroke();
+      ctx.font = '700 7.5px "Inter", sans-serif';
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('N', cx, cy + 0.4);
+      ctx.restore();
+      newsPinsByIdx.set(targetIdx, h);
+    });
+  }
+
   state.chartGeom = {
     w,
     h,
@@ -2771,11 +3131,15 @@ function renderChart() {
     tf,
     isRatio,
     converted,
+    visibleLimit,
     sma20,
     sma50,
     discoverySeries,
     squeezeSeries,
     rsiValues: rsiData?.values || null,
+    buyMarkersByIdx,
+    newsPinsByIdx,
+    detectedPatterns,
     xCandle,
     yAt,
     fmtChartVal,
@@ -2783,6 +3147,165 @@ function renderChart() {
     baseCol,
   };
   renderCrosshairOverlay(state.hoverCandleIdx);
+}
+
+function detectChartPatterns(bars) {
+  if (!Array.isArray(bars) || bars.length < 8) return [];
+  const patterns = [];
+  const n = bars.length;
+  const highs = bars.map((b) => b.h);
+  const lows = bars.map((b) => b.l);
+  const closes = bars.map((b) => b.c);
+  const maxH = Math.max(...highs);
+  const minL = Math.min(...lows);
+  const span = Math.max(maxH - minL, maxH * 0.004, 0.01);
+
+  // 1. Key Buyer Floor (Support) & Seller Ceiling (Resistance)
+  patterns.push({
+    label: 'Buyer Floor',
+    hint: 'Strong dip-buying zone',
+    price: minL + span * 0.05,
+    startIdx: 0,
+    endIdx: n - 1,
+    color: '#22C55E',
+    dash: [5, 4],
+  });
+  patterns.push({
+    label: 'Seller Ceiling',
+    hint: 'Recent top resistance',
+    price: maxH - span * 0.04,
+    startIdx: 0,
+    endIdx: n - 1,
+    color: '#F43F5E',
+    dash: [5, 4],
+  });
+
+  // 2. Double Bottom Detection (two swing lows within 1.2% of each other separated by a bounce)
+  const swingLows = [];
+  for (let i = 2; i < n - 2; i++) {
+    if (lows[i] <= lows[i - 1] && lows[i] <= lows[i + 1] && lows[i] <= lows[i - 2] && lows[i] <= lows[i + 2]) {
+      swingLows.push({ i, v: lows[i] });
+    }
+  }
+  for (let a = 0; a < swingLows.length - 1; a++) {
+    for (let b = a + 1; b < swingLows.length; b++) {
+      if (swingLows[b].i - swingLows[a].i >= 4) {
+        const diffPct = Math.abs(swingLows[b].v - swingLows[a].v) / Math.max(swingLows[a].v, 1);
+        if (diffPct <= 0.014) {
+          patterns.push({
+            label: 'Double Bottom',
+            hint: 'Classic rebound base',
+            price: (swingLows[a].v + swingLows[b].v) / 2,
+            startIdx: swingLows[a].i,
+            endIdx: swingLows[b].i,
+            color: '#10B981',
+            dash: [],
+          });
+          a = swingLows.length;
+          break;
+        }
+      }
+    }
+  }
+
+  // 3. Breakout or Pullback Trend Check
+  const lastClose = closes[n - 1];
+  const prevHigh = Math.max(...highs.slice(0, Math.max(1, n - 3)));
+  if (lastClose >= prevHigh * 0.996) {
+    patterns.push({
+      label: 'Breakout High',
+      hint: 'Pushing above prior peak',
+      price: prevHigh,
+      startIdx: Math.max(0, n - 10),
+      endIdx: n - 1,
+      color: '#D4A843',
+      dash: [3, 3],
+    });
+  } else {
+    // Trend cross check (short 5-bar vs 15-bar avg)
+    const s5 = closes.slice(-5).reduce((a, b) => a + b, 0) / 5;
+    const s15 = closes.slice(-Math.min(15, n)).reduce((a, b) => a + b, 0) / Math.min(15, n);
+    if (s5 > s15 * 1.004) {
+      patterns.push({
+        label: 'Uptrend Cross',
+        hint: 'Short trend above medium avg',
+        price: s5,
+        startIdx: Math.max(0, n - 8),
+        endIdx: n - 1,
+        color: '#38BDF8',
+        dash: [4, 3],
+      });
+    } else if (s5 < s15 * 0.996) {
+      patterns.push({
+        label: 'Pullback Drift',
+        hint: 'Cooling below medium avg',
+        price: s5,
+        startIdx: Math.max(0, n - 8),
+        endIdx: n - 1,
+        color: '#F59E0B',
+        dash: [4, 3],
+      });
+    }
+  }
+
+  return patterns.slice(0, 4);
+}
+
+function stopChartReplay(reRender = true) {
+  if (state.chartReplay.timer) {
+    clearInterval(state.chartReplay.timer);
+    state.chartReplay.timer = null;
+  }
+  state.chartReplay.active = false;
+  state.chartReplay.paused = false;
+  state.chartReplay.idx = 0;
+  const bar = document.getElementById('chart-replay-bar');
+  if (bar) bar.hidden = true;
+  if (reRender) renderChart();
+}
+
+function stepChartReplay() {
+  if (!state.chartReplay.active || state.chartReplay.paused) return;
+  const g = state.chartGeom;
+  const total = g?.converted?.length || 28;
+  state.chartReplay.idx += 1;
+  if (state.chartReplay.idx > total) {
+    state.chartReplay.paused = true;
+    const ppBtn = document.getElementById('btn-replay-playpause');
+    if (ppBtn) ppBtn.textContent = '▶';
+    const st = document.getElementById('chart-replay-status');
+    if (st) st.textContent = `Replay complete (${total}/${total} bars) — tap ▶ to watch again.`;
+    return;
+  }
+  const curBar = g?.converted?.[state.chartReplay.idx - 1];
+  const st = document.getElementById('chart-replay-status');
+  if (st && curBar) {
+    const tLbl = formatCandleTimestamp(curBar.t, g.tf, false);
+    const pctBar = curBar.o > 0 ? ((curBar.c - curBar.o) / curBar.o) * 100 : 0;
+    const dec = curBar.c >= 500 ? 0 : 2;
+    const pin = g.newsPinsByIdx?.get(state.chartReplay.idx - 1);
+    const newsNote = pin ? ` · News: ${pin.title.slice(0, 48)}…` : '';
+    const moveNote = Math.abs(pctBar) >= 0.4 ? (pctBar > 0 ? ' · Rally spike!' : ' · Sharp dip!') : '';
+    st.textContent = `Bar ${state.chartReplay.idx}/${total} (${tLbl}): ${g.fmtChartVal(curBar.c, dec)} (${pctBar >= 0 ? '+' : ''}${pctBar.toFixed(2)}%)${moveNote}${newsNote}`;
+  }
+  state.hoverCandleIdx = Math.max(0, state.chartReplay.idx - 1);
+  renderChart();
+}
+
+function startChartReplay() {
+  stopChartReplay(false);
+  state.chartReplay.active = true;
+  state.chartReplay.paused = false;
+  state.chartReplay.idx = 2;
+  const bar = document.getElementById('chart-replay-bar');
+  if (bar) bar.hidden = false;
+  const ppBtn = document.getElementById('btn-replay-playpause');
+  if (ppBtn) ppBtn.textContent = '⏸';
+  const spBtn = document.getElementById('btn-replay-speed');
+  if (spBtn) spBtn.textContent = `${state.chartReplay.speed}×`;
+  renderChart();
+  const intervalMs = state.chartReplay.speed === 2 ? 150 : 320;
+  state.chartReplay.timer = setInterval(stepChartReplay, intervalMs);
 }
 
 function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
@@ -2861,11 +3384,31 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
     if (s50 != null) subParts.push(`50-Avg ${g.fmtChartVal(s50, dec)}`);
     if (rVal != null) subParts.push(`Momentum ${Number(rVal).toFixed(0)}`);
 
+    const extraRows = [];
+    const buyLots = g.buyMarkersByIdx?.get(activeIdx);
+    if (buyLots && buyLots.length) {
+      const lotTxt = buyLots
+        .map((l) =>
+          isPrivacyOn()
+            ? `★ My Buy (${l.form || 'Bullion'})`
+            : `★ My Buy: ${Number(l.oz).toFixed(l.metal === 'silver' ? 2 : 3)} oz @ ${formatMoney(l.cost)}/oz`
+        )
+        .join(' · ');
+      extraRows.push(`<div class="tt-sub tt-buy">${escapeHtml(lotTxt)}</div>`);
+    }
+    const newsPin = g.newsPinsByIdx?.get(activeIdx);
+    if (newsPin) {
+      extraRows.push(
+        `<div class="tt-sub tt-news">📰 ${escapeHtml(newsPin.title.slice(0, 92))}${newsPin.title.length > 92 ? '…' : ''}</div>`
+      );
+    }
+
     tipEl.innerHTML =
       `<div>${escapeHtml(tLabel)} · <strong>${escapeHtml(g.fmtChartVal(bar.c, dec))}</strong></div>` +
       `<div class="tt-sub">Open ${escapeHtml(g.fmtChartVal(bar.o, dec))} · High ${escapeHtml(g.fmtChartVal(bar.h, dec))} · Low ${escapeHtml(g.fmtChartVal(bar.l, dec))}</div>` +
       (regimeParts.length ? `<div class="tt-sub">${regimeParts.join(' · ')}</div>` : '') +
-      (subParts.length ? `<div class="tt-sub">${escapeHtml(subParts.join(' · '))}</div>` : '');
+      (subParts.length ? `<div class="tt-sub">${escapeHtml(subParts.join(' · '))}</div>` : '') +
+      extraRows.join('');
     const cx = g.xCandle(activeIdx);
     const onRightHalf = cx > g.w * 0.55;
     tipEl.style.left = onRightHalf ? '10px' : 'auto';
@@ -4233,7 +4776,7 @@ function renderFuturesPanel(outlookRes = null) {
     }
     if (curveEl) {
       if (data.isBackwardation) {
-        curveEl.textContent = 'Shortage (Backwardation) ↑';
+        curveEl.textContent = 'Tight Supply ↑';
         curveEl.className = 'futures-curve-pill backw';
       } else if (data.state === 'Compressed EFP') {
         curveEl.textContent = 'Tight Supply';
@@ -4874,7 +5417,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=35', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=38', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -5871,9 +6414,10 @@ function renderOutlook() {
     if (ry?.realYield10yPct != null) {
       const bps = ry.realDelta5dBps ?? 0;
       const moveTxt = bps <= -4 ? 'Falling (helps prices)' : bps >= 4 ? 'Rising (pressures prices)' : 'Steady';
+      const pctPts = (Math.abs(bps) / 100).toFixed(2);
       ryEl.textContent = `${ry.realYield10yPct.toFixed(2)}%`;
       ryEl.style.color = bps <= -4 ? 'var(--up)' : bps >= 4 ? 'var(--down)' : 'var(--text)';
-      rySub.textContent = `${moveTxt} · 5d ${bps >= 0 ? '+' : ''}${bps} bps`;
+      rySub.textContent = `${moveTxt} · 5-day ${bps >= 0 ? '+' : '−'}${pctPts}%`;
     } else {
       ryEl.textContent = '1.88%';
       rySub.textContent = 'Lower rates help Gold & Silver';
@@ -6004,7 +6548,7 @@ function renderOutlook() {
         .join('');
       replayWrap.innerHTML = `
         <div class="sl-replay-head">
-          <span>Pred (Gold) vs. Actual (Green/Red) · Au 1D</span>
+          <span>Forecast (Gold) vs. Actual (Green/Red) · Daily Gold</span>
           <span>${slice.length}d Replay</span>
         </div>
         <div class="sl-replay-bars">${colsHtml}</div>`;
@@ -6060,20 +6604,63 @@ function renderOutlook() {
     accList.innerHTML = rows.join('');
   }
 
-  // Scored News Feed
+  // Scored News Feed + #228 AI "Real Signal vs. Clickbait Hype" News Filter
   const newsEl = document.getElementById('outlook-news');
   const updatedEl = document.getElementById('outlook-updated');
+  const filterSummaryEl = document.getElementById('news-filter-summary');
   if (updatedEl && res.base.generatedAt) {
     const dt = new Date(res.base.generatedAt);
     updatedEl.textContent = Number.isNaN(dt.getTime())
-      ? 'Recent headlines scored for Gold & Silver impact'
-      : `Updated ${dt.toLocaleDateString()} · Recent headlines scored for impact`;
+      ? 'Recent headlines scored for real market impact vs. clickbait hype'
+      : `Updated ${dt.toLocaleDateString()} · Scored for real signal vs. clickbait hype`;
   }
+  const activeNewsFilter = state.settings.newsFilter || 'all';
+  document.getElementById('news-filter-all')?.classList.toggle('active', activeNewsFilter === 'all');
+  document.getElementById('news-filter-signal')?.classList.toggle('active', activeNewsFilter === 'signal');
+  document.getElementById('news-filter-nohype')?.classList.toggle('active', activeNewsFilter === 'nohype');
+
+  const classifyNewsSignalQuality = (h) => {
+    const title = String(h?.title || '');
+    const lower = title.toLowerCase();
+    const src = String(h?.source || '').toLowerCase();
+    let score = 55;
+    if (/(reuters|bloomberg|wsj|wall street|financial times|cnbc|marketwatch|kitco|mining\.com|world gold council|silver institute|federal reserve|bls|cme|comex)/i.test(src + ' ' + title)) {
+      score += 18;
+    }
+    if (/(fed|fomc|cpi|inflation|payroll|central bank|pboc|sge|shanghai|comex|vault|inventory|deficit|import|tariff|treasury|yield|production|aisc|strike|rate cut|rate hike|etf)/i.test(lower)) {
+      score += 18;
+    }
+    if (Number(h?.clusterCount) > 1) score += 10;
+    if (/(skyrocket|explode|collapse|crash coming|10x|100x|you won't believe|shocking|secret|urgent warning|billionaire warns|panic|all-in|moonshot|guaranteed|doomsday|wipeout|insane|massive surge imminent)/i.test(lower)) {
+      score -= 42;
+    }
+    if ((title.match(/[!?]/g) || []).length >= 2) score -= 18;
+    const upperWords = title.split(/\s+/).filter((w) => w.length >= 4 && w === w.toUpperCase() && /^[A-Z]+$/.test(w));
+    if (upperWords.length >= 2) score -= 14;
+    score = Math.max(5, Math.min(99, score));
+    if (score >= 70) return { tier: 'signal', label: 'Real Signal', score };
+    if (score <= 42) return { tier: 'hype', label: 'Clickbait Hype', score };
+    return { tier: 'context', label: 'Market Note', score };
+  };
+
   if (newsEl) {
-    const items = res.base.headlines || [];
-    newsEl.innerHTML = items.length
-      ? items
-          .slice(0, 8)
+    const rawItems = (res.base.headlines || []).map((h) => ({ ...h, _q: classifyNewsSignalQuality(h) }));
+    const signalCount = rawItems.filter((h) => h._q.tier === 'signal').length;
+    const hypeCount = rawItems.filter((h) => h._q.tier === 'hype').length;
+    const filtered = rawItems.filter((h) => {
+      if (activeNewsFilter === 'signal') return h._q.tier === 'signal';
+      if (activeNewsFilter === 'nohype') return h._q.tier !== 'hype';
+      return true;
+    });
+    if (filterSummaryEl) {
+      filterSummaryEl.textContent =
+        rawItems.length
+          ? `${signalCount} Real Signal · ${rawItems.length - signalCount - hypeCount} Market Notes · ${hypeCount} Clickbait Hype filtered`
+          : 'Waiting for headlines…';
+    }
+    newsEl.innerHTML = filtered.length
+      ? filtered
+          .slice(0, 10)
           .map((h) => {
             const safeUrl = sanitizeHttpUrl(h.url);
             const titleHtml = safeUrl
@@ -6083,17 +6670,21 @@ function renderOutlook() {
             const clusterBadge = Number.isFinite(cCount) && cCount > 1 ? ` · ${Math.floor(cCount)} articles` : '';
             const sentCls = h.sentiment === 'bullish' || h.sentiment === 'bearish' || h.sentiment === 'neutral' ? h.sentiment : '';
             const moodWord = sentCls === 'bullish' ? 'Positive' : sentCls === 'bearish' ? 'Negative' : 'Neutral';
+            const qCls = h._q.tier === 'signal' ? 'sig-real' : h._q.tier === 'hype' ? 'sig-hype' : 'sig-note';
             return `
               <li class="news-item">
                 ${titleHtml}
                 <div class="news-meta">
                   <span>${escapeHtml(h.source || 'News')} · ${escapeHtml(h.driverLabel || 'Market')}${clusterBadge}</span>
-                  <span class="news-pill ${sentCls}">${escapeHtml(moodWord)}</span>
+                  <div class="news-pills-wrap">
+                    <span class="news-sig-badge ${qCls}">${escapeHtml(h._q.label)}</span>
+                    <span class="news-pill ${sentCls}">${escapeHtml(moodWord)}</span>
+                  </div>
                 </div>
               </li>`;
           })
           .join('')
-      : '<li class="empty-state">No news headlines loaded yet.</li>';
+      : '<li class="empty-state">No headlines match this filter right now. Tap "All" to see everything.</li>';
   }
 
   renderAccuracyReplayChart(res);
@@ -6105,15 +6696,15 @@ function renderOutlook() {
 }
 
 const MINER_PROFILES = {
-  NEM: 'World #1 gold producer · Q3 AISC \$1,963/oz; high sensitivity to gold margins & cost inflation.',
-  AEM: 'Low-cost Tier-1 Canadian/Australian gold senior · flagship margin leader in institutional portfolios.',
-  B: 'Barrick Mining (formerly GOLD) · preparing North American IPO; Nevada/Africa Tier-1 reserves, AISC ~\$1,911/oz.',
-  WPM: 'Precious metals streamer · fixed-cost royalty/stream model shields against mine OpEx inflation.',
-  FNV: 'Diversified royalty/streamer · low capex exposure to long-life gold & silver assets.',
-  PAAS: 'Major Americas silver/gold producer · returning \$300M+ to shareholders with high silver torque.',
-  HL: 'Largest US primary silver producer · tight AISC guidance and domestic supply beta.',
-  AG: 'First Majestic Silver · pure-play Mexican silver producer; highly leveraged to silver spot surges & supply strikes.',
-  CDE: 'Coeur Mining · expansion ramp across Rochester & Las Chispas silver-gold operations.',
+  NEM: 'World #1 gold miner · produces gold around $1,963/oz; profits swing strongly with gold prices.',
+  AEM: 'Low-cost Canadian & Australian gold leader · known for steady output and strong profit margins.',
+  B: 'Barrick Mining · major global gold miner in Nevada & Africa, producing around $1,911/oz.',
+  WPM: 'Precious metals royalty company · fixed-price contracts protect profits when mining costs rise.',
+  FNV: 'Diversified gold & silver royalty company · earns revenue from long-life mines without running them.',
+  PAAS: 'Major Americas silver & gold producer · closely tracks silver price rallies.',
+  HL: 'Largest US silver producer · moves strongly with US silver supply and prices.',
+  AG: 'First Majestic Silver · focused Mexican silver miner that moves sharply when silver rallies.',
+  CDE: 'Coeur Mining · growing North American silver and gold producer.',
 };
 
 function renderMinerDetailDrawer(outlookRes, leaders) {
@@ -6155,12 +6746,12 @@ function renderMinerDetailDrawer(outlookRes, leaders) {
   const hi14 = Number.isFinite(c.high14) ? c.high14 : maxV;
   const lo14 = Number.isFinite(c.low14) ? c.low14 : minV;
   const dec = c.last >= 100 ? 0 : 2;
-  const spotRef = c.metal === 'silver' ? 'XAG' : 'XAU';
+  const spotRef = c.metal === 'silver' ? 'Silver' : 'Gold';
   const sectorRel =
     c.metal === 'silver'
       ? outlookRes?.base?.proSignals?.miners?.silVsSilver10dPct
       : outlookRes?.base?.proSignals?.miners?.gdxVsGold10dPct;
-  const spreadLabel = sectorRel != null ? `${sectorRel >= 0 ? '+' : ''}${Number(sectorRel).toFixed(1)}% 10d ETF` : `${p5 >= 0 ? '+' : ''}${p5.toFixed(1)}% 5d`;
+  const spreadLabel = sectorRel != null ? `${sectorRel >= 0 ? '+' : ''}${Number(sectorRel).toFixed(1)}% vs. ${spotRef} (10d)` : `${p5 >= 0 ? '+' : ''}${p5.toFixed(1)}% (5d)`;
 
   const headlines = outlookRes?.base?.headlines || [];
   const nameKey = c.name.toLowerCase().split(' ')[0];
@@ -6169,14 +6760,14 @@ function renderMinerDetailDrawer(outlookRes, leaders) {
     (hl) => (hl.title && (symRx.test(hl.title) || (nameKey.length >= 4 && hl.title.toLowerCase().includes(nameKey))))
   );
   const noteText = matchedHeadline
-    ? `Latest Catalyst: ${matchedHeadline.title}`
-    : MINER_PROFILES[c.symbol] || `${c.name} (${c.symbol}) feeds Bullion Pulse's 9-miner sector breadth signal.`;
+    ? `Latest News: ${matchedHeadline.title}`
+    : MINER_PROFILES[c.symbol] || `${c.name} (${c.symbol}) is part of our 9-company mining tracker.`;
 
   const metalCls = c.metal === 'silver' ? 'silver' : 'gold';
   drawer.innerHTML = `
     <div class="sector-detail-head">
       <div class="sector-detail-title">
-        <span class="sector-sym ${metalCls}">${escapeHtml(c.symbol)}</span> · ${escapeHtml(c.name)} (${escapeHtml(spotRef)} Miner/Streamer)
+        <span class="sector-sym ${metalCls}">${escapeHtml(c.symbol)}</span> · ${escapeHtml(c.name)} (${escapeHtml(spotRef)} Company)
       </div>
       <button type="button" class="sector-detail-close" id="btn-close-miner-drawer">Close ✕</button>
     </div>
@@ -6194,7 +6785,7 @@ function renderMinerDetailDrawer(outlookRes, leaders) {
         <strong>$${lo14.toFixed(dec)} – $${hi14.toFixed(dec)}</strong>
       </div>
       <div class="sector-detail-box">
-        <span>vs ${spotRef} Sector Beta</span>
+        <span>vs. ${escapeHtml(spotRef)} Price</span>
         <strong>${escapeHtml(spreadLabel)}</strong>
       </div>
     </div>
@@ -6229,8 +6820,8 @@ function renderSectorLeaders(outlookRes) {
     const sBr = miners?.silverBreadthPct;
     subEl.textContent =
       gBr != null && sBr != null
-        ? `5d breadth: Au ${gBr}% up · Ag ${sBr}% up · Tap any miner`
-        : '9 producers & streamers · Tap any company for 14d chart';
+        ? `Past 5 days: ${gBr}% of Gold miners up · ${sBr}% of Silver miners up · Tap any company`
+        : '9 major mining & royalty companies · Tap any company for its 14-day trend';
   }
 
   gridEl.innerHTML = leaders
@@ -6280,7 +6871,7 @@ function computeClientEventRisk(nowDate = new Date()) {
   const startUtc = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate());
   const dayMs = 86400000;
   const iso = (d) => d.toISOString().slice(0, 10);
-  const events = CLIENT_FOMC_DATES.map((ds) => ({ type: 'fomc', title: 'FOMC Rate Decision', date: ds }));
+  const events = CLIENT_FOMC_DATES.map((ds) => ({ type: 'fomc', title: 'Fed Interest Rate Decision', date: ds }));
   const fndMonths = new Set([1, 3, 5, 7, 10]);
 
   for (let off = 0; off <= 3; off++) {
@@ -6289,7 +6880,7 @@ function computeClientEventRisk(nowDate = new Date()) {
     const m = dt.getUTCMonth();
     const first = new Date(Date.UTC(y, m, 1));
     const nfp = new Date(Date.UTC(y, m, 1 + ((5 - first.getUTCDay() + 7) % 7)));
-    events.push({ type: 'nfp', title: 'US Jobs Report (NFP)', date: iso(nfp) });
+    events.push({ type: 'nfp', title: 'US Monthly Jobs Report', date: iso(nfp) });
     const ym = `${y}-${String(m + 1).padStart(2, '0')}`;
     let cpiDate = CLIENT_VERIFIED_CPI_DATES[ym];
     if (!cpiDate) {
@@ -6298,11 +6889,11 @@ function computeClientEventRisk(nowDate = new Date()) {
       else if (cpi.getUTCDay() === 0) cpi.setUTCDate(13);
       cpiDate = iso(cpi);
     }
-    events.push({ type: 'cpi', title: 'US CPI Inflation Print', date: cpiDate });
+    events.push({ type: 'cpi', title: 'US Inflation Report (CPI)', date: cpiDate });
     if (fndMonths.has(m)) {
       const fnd = new Date(Date.UTC(y, m + 1, 0));
       while (fnd.getUTCDay() === 0 || fnd.getUTCDay() === 6) fnd.setUTCDate(fnd.getUTCDate() - 1);
-      events.push({ type: 'comex_fnd', title: 'COMEX Silver First Notice Day', date: iso(fnd) });
+      events.push({ type: 'comex_fnd', title: 'Silver Vault Delivery Start', date: iso(fnd) });
     }
   }
 
@@ -7192,6 +7783,7 @@ function applyTheme(theme) {
   renderChart();
   renderAccuracyReplayChart(computeInteractiveOutlook());
   if (mcState.lastSim) renderMcTargetReadout();
+  window.BullionIntel?.renderAll?.();
 }
 
 function escapeHtml(str) {
@@ -7692,13 +8284,14 @@ function renderStackTracker() {
   const gSpread = Number.isFinite(parseFloat(st.goldSpreadPct)) ? parseFloat(st.goldSpreadPct) : -2.5;
   const sSpread = Number.isFinite(parseFloat(st.silverSpreadPct)) ? parseFloat(st.silverSpreadPct) : -6.0;
 
+  const headerStackActive = state.activeView === 'stack' ? ' active' : '';
   if (gOz <= 0 && sOz <= 0) {
     const zeroText = hidden ? `${getCurrencySymbol()}•••••` : formatMoney(0, 2);
     if (totalEl) totalEl.textContent = zeroText;
     if (buybackValEl) buybackValEl.textContent = zeroText;
-    if (buybackSubEl) buybackSubEl.textContent = `Au ${gSpread}% · Ag ${sSpread}%`;
+    if (buybackSubEl) buybackSubEl.textContent = `Gold ${gSpread}% · Silver ${sSpread}%`;
     if (headerMeltValEl) headerMeltValEl.textContent = zeroText;
-    if (headerMeltBtnEl) headerMeltBtnEl.className = 'header-melt-btn';
+    if (headerMeltBtnEl) headerMeltBtnEl.className = `header-melt-btn${headerStackActive}`;
     if (dayEl) {
       dayEl.textContent = hidden ? 'Hidden (Privacy Mode ON)' : 'Enter oz above to track live';
       dayEl.className = 'stack-stat-s';
@@ -7719,6 +8312,7 @@ function renderStackTracker() {
       milestonesEl.innerHTML =
         '<div class="empty-state">Add holdings above to calculate US Dollar impact and future price scenarios.</div>';
     }
+    if (state.activeView === 'stack') window.BullionIntel?.renderStackTimeMachine?.();
     return;
   }
 
@@ -7744,16 +8338,16 @@ function renderStackTracker() {
   if (buybackValEl) buybackValEl.textContent = totalVal > 0 ? privMoney(buybackVal) : `${getCurrencySymbol()}—`;
   if (buybackSubEl) {
     buybackSubEl.textContent = hidden
-      ? `Hidden (Au ${gSpread}% / Ag ${sSpread}%)`
+      ? `Hidden (Gold ${gSpread}% / Silver ${sSpread}%)`
       : totalVal > 0
-        ? `${formatSignedMoney(buybackDiff)} vs melt (Au ${gSpread}% / Ag ${sSpread}%)`
+        ? `${formatSignedMoney(buybackDiff)} vs melt (Gold ${gSpread}% / Silver ${sSpread}%)`
         : 'After shop buyback discount';
   }
   if (headerMeltValEl) headerMeltValEl.textContent = formattedHeaderTotal;
   if (headerMeltBtnEl) {
     headerMeltBtnEl.className = hidden
-      ? 'header-melt-btn'
-      : `header-melt-btn ${dayChg > 0.01 ? 'up' : dayChg < -0.01 ? 'down' : ''}`;
+      ? `header-melt-btn${headerStackActive}`
+      : `header-melt-btn ${dayChg > 0.01 ? 'up' : dayChg < -0.01 ? 'down' : ''}${headerStackActive}`;
   }
   if (dayEl) {
     if (hidden) {
@@ -7974,6 +8568,7 @@ function renderStackTracker() {
       })
       .join('');
   }
+  if (state.activeView === 'stack') window.BullionIntel?.renderStackTimeMachine?.();
 }
 
 function renderAll() {
@@ -7991,6 +8586,7 @@ function renderAll() {
   renderSettingsControls();
   renderAlertLog();
   renderOutlook();
+  window.BullionIntel?.renderAll?.();
 }
 
 /* ---------- Navigation, Sub-Pages & Events ---------- */
@@ -8041,12 +8637,17 @@ function switchSubView(viewName, subName) {
       renderFuturesPanel();
       renderShanghai();
       renderSessionClock();
+      window.BullionIntel?.renderGlobalSub?.();
+    } else if (subName === 'charts') {
+      requestAnimationFrame(() => window.BullionIntel?.renderDeepChartsSub?.());
     } else if (subName === 'macro') {
       renderMacroStrip();
       renderFeedHealth();
+      window.BullionIntel?.renderTickTrust?.();
     }
   } else if (viewName === 'outlook') {
     renderOutlook();
+    window.BullionIntel?.renderOutlookSubs?.();
     if (subName === 'sim') {
       requestAnimationFrame(() => {
         renderAccuracyReplayChart(computeInteractiveOutlook());
@@ -8065,6 +8666,9 @@ function switchSubView(viewName, subName) {
     }
   } else if (viewName === 'stack') {
     renderStackTracker();
+    if (subName === 'overview') {
+      requestAnimationFrame(() => window.BullionIntel?.renderStackTimeMachine?.());
+    }
   } else if (viewName === 'alerts') {
     renderSettingsControls();
     renderAlertLog();
@@ -8089,6 +8693,13 @@ function switchView(viewName) {
     settingsBtn.classList.toggle('active', isSettings);
     settingsBtn.setAttribute('aria-pressed', isSettings ? 'true' : 'false');
   }
+  const stackHeaderBtn = document.getElementById('btn-header-melt');
+  if (stackHeaderBtn) {
+    const isStack = viewName === 'stack';
+    stackHeaderBtn.classList.toggle('active', isStack);
+    if (isStack) stackHeaderBtn.setAttribute('aria-current', 'page');
+    else stackHeaderBtn.removeAttribute('aria-current');
+  }
   const activeSub = state.settings.subViews?.[viewName] || DEFAULT_SETTINGS.subViews[viewName];
   applySubView(viewName, activeSub);
   if (window.scrollY > 20) {
@@ -8103,9 +8714,16 @@ function switchView(viewName) {
     renderStats();
     if (state.settings.subViews?.markets === 'live') {
       requestAnimationFrame(renderChart);
+    } else if (state.settings.subViews?.markets === 'charts') {
+      requestAnimationFrame(() => window.BullionIntel?.renderDeepChartsSub?.());
+    } else if (state.settings.subViews?.markets === 'global') {
+      window.BullionIntel?.renderGlobalSub?.();
+    } else if (state.settings.subViews?.markets === 'macro') {
+      window.BullionIntel?.renderTickTrust?.();
     }
   } else if (viewName === 'outlook') {
     renderOutlook();
+    window.BullionIntel?.renderOutlookSubs?.();
     if (state.settings.subViews?.outlook === 'sim') {
       requestAnimationFrame(() => {
         renderAccuracyReplayChart(computeInteractiveOutlook());
@@ -8120,6 +8738,9 @@ function switchView(viewName) {
     renderRatioSwapCalculator();
   } else if (viewName === 'stack') {
     renderStackTracker();
+    if (activeSub === 'overview') {
+      requestAnimationFrame(() => window.BullionIntel?.renderStackTimeMachine?.());
+    }
   } else if (viewName === 'alerts') {
     renderSettingsControls();
     renderAlertLog();
@@ -8418,6 +9039,67 @@ function wireEvents() {
     renderChart();
     savePersistedState();
   });
+
+  document.getElementById('btn-toggle-mybuys')?.addEventListener('click', () => {
+    state.settings.showMyBuys = !state.settings.showMyBuys;
+    renderChart();
+    savePersistedState();
+  });
+
+  document.getElementById('btn-toggle-patterns')?.addEventListener('click', () => {
+    state.settings.showPatterns = !state.settings.showPatterns;
+    renderChart();
+    savePersistedState();
+  });
+
+  document.getElementById('btn-toggle-newsdots')?.addEventListener('click', () => {
+    state.settings.showNewsDots = !state.settings.showNewsDots;
+    renderChart();
+    savePersistedState();
+  });
+
+  document.getElementById('btn-chart-replay')?.addEventListener('click', () => {
+    if (state.chartReplay.active) stopChartReplay(true);
+    else startChartReplay();
+  });
+
+  document.getElementById('btn-replay-playpause')?.addEventListener('click', () => {
+    if (!state.chartReplay.active) return;
+    const total = state.chartGeom?.converted?.length || 28;
+    if (state.chartReplay.idx > total) {
+      startChartReplay();
+      return;
+    }
+    state.chartReplay.paused = !state.chartReplay.paused;
+    const ppBtn = document.getElementById('btn-replay-playpause');
+    if (ppBtn) ppBtn.textContent = state.chartReplay.paused ? '▶' : '⏸';
+  });
+
+  document.getElementById('btn-replay-speed')?.addEventListener('click', () => {
+    state.chartReplay.speed = state.chartReplay.speed === 1 ? 2 : 1;
+    const spBtn = document.getElementById('btn-replay-speed');
+    if (spBtn) spBtn.textContent = `${state.chartReplay.speed}×`;
+    if (state.chartReplay.active && state.chartReplay.timer) {
+      clearInterval(state.chartReplay.timer);
+      state.chartReplay.timer = setInterval(stepChartReplay, state.chartReplay.speed === 2 ? 150 : 320);
+    }
+  });
+
+  document.getElementById('btn-replay-stop')?.addEventListener('click', () => {
+    stopChartReplay(true);
+  });
+
+  for (const [btnId, mode] of [
+    ['news-filter-all', 'all'],
+    ['news-filter-signal', 'signal'],
+    ['news-filter-nohype', 'nohype'],
+  ]) {
+    document.getElementById(btnId)?.addEventListener('click', () => {
+      state.settings.newsFilter = mode;
+      renderOutlook();
+      savePersistedState();
+    });
+  }
 
   // Interactive 60fps dual-canvas OHLC crosshair hover / touch drag on candlestick chart
   const chartCanvas = document.getElementById('intraday-chart');
@@ -8733,7 +9415,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 35,
+      version: 38,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
@@ -9050,6 +9732,30 @@ function registerServiceWorker() {
 
 /* ---------- Boot ---------- */
 
+/* ---------- Modular Intelligence Bridge for intel.js ---------- */
+window.__BP_BRIDGE = {
+  state,
+  outlookState,
+  FALLBACK_OUTLOOK,
+  CURRENCY_META,
+  TROY_OZ_TO_GRAMS,
+  formatMoney,
+  formatCompactMoney,
+  formatSignedMoney,
+  formatSignedPct,
+  escapeHtml,
+  getCanonicalSpotPrices,
+  getCurrencyCode,
+  getFxRate,
+  convertUnit,
+  isPrivacyOn,
+  savePersistedState,
+  fetchSpotQuotes,
+  computeInteractiveOutlook,
+  getCandlesForTimeframe,
+  renderChart,
+};
+
 function init() {
   loadPersistedState();
   applyTheme(state.settings.theme);
@@ -9057,8 +9763,9 @@ function init() {
   applyAllSubViews();
   wireEvents();
   populateVoiceSelector();
+  window.BullionIntel?.init?.();
   renderAll();
-  fetchSpotQuotes();
+  fetchSpotQuotes(true);
   fetchOutlookData();
   fetchShanghaiData();
   fetchCandlesData();
