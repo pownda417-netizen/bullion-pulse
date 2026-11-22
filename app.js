@@ -4,6 +4,8 @@ const TROY_OZ_TO_GRAMS = 31.1034768;
 const REFRESH_MS = 15000;
 const SLOW_REFRESH_MS = 60000;
 const CANDLE_INTERVAL_MS = 5 * 60 * 1000;
+const CANDLE_1M_MS = 60 * 1000;
+const MIN_ZOOM_BARS = 6;
 const STORAGE_KEY = 'bullion_pulse_state_v2';
 const ANON_FETCH_OPTS = {
   cache: 'no-store',
@@ -273,6 +275,21 @@ const state = {
     gold: [],
     silver: [],
   },
+  candles1m: {
+    gold: [],
+    silver: [],
+  },
+  chartZoom: {
+    startIdx: null,
+    visibleCount: null,
+    dragging: false,
+    dragStartX: 0,
+    dragStartIdx: 0,
+    didDrag: false,
+    pinchDist: null,
+    pinchCount: null,
+    pinchCenterFrac: 0.5,
+  },
   timeframes: {},
   hoverCandleIdx: null,
   chartGeom: null,
@@ -303,7 +320,8 @@ const ALLOWED_CURRENCIES = new Set([
   'USD', 'CAD', 'EUR', 'GBP', 'CHF', 'AUD', 'MXN', 'INR', 'CNY', 'JPY',
   'THB', 'LAK', 'SGD', 'HKD', 'KRW', 'VND', 'IDR', 'AED', 'SAR', 'TRY', 'ZAR',
 ]);
-const ALLOWED_TIMEFRAMES = new Set(['1d', '7d', '1m', '6m', '1y', '5y', '10y', 'all']);
+const ALLOWED_TIMEFRAMES = new Set(['15min', '1h', '4h', '1d', '7d', '1m', '6m', '1y', '5y', '10y', 'all']);
+const INTRADAY_TIMEFRAMES = new Set(['15min', '1h', '4h', '1d']);
 const ALLOWED_LOG_DIRS = new Set(['up', 'down', 'neutral']);
 const ALLOWED_THEMES = new Set(['dark', 'light', 'oled', 'swiss-gold', 'mint-silver', 'terminal-amber', 'daylight-paper']);
 const ALLOWED_LANGUAGES = new Set(['en', 'th', 'lo', 'es', 'zh', 'ja', 'hi']);
@@ -1163,6 +1181,8 @@ function applyQuotes(result) {
 
   updateActive5mCandle('gold', result.gold.price, result.gold.prevClose);
   updateActive5mCandle('silver', result.silver.price, result.silver.prevClose);
+  updateActive1mCandle('gold', result.gold.price, result.gold.prevClose);
+  updateActive1mCandle('silver', result.silver.price, result.silver.prevClose);
 
   renderAll();
   flashPrice(document.getElementById('gold-price'), oldGold, result.gold.price);
@@ -1590,14 +1610,17 @@ function renderStats() {
 /* ---------- Multi-Timeframe OHLC Candlesticks & Forecast Fan Chart ---------- */
 
 const CHART_TF_META = {
-  '1d':  { label: '1D',  interval: '5m',  subtitle: '5-min price bars',           fcHorizon: '7d',  fcLabel: '+7d',  maxBars: 28 },
-  '7d':  { label: '7D',  interval: '1h',  subtitle: 'Hourly bars · 7 days',       fcHorizon: '7d',  fcLabel: '+7d',  maxBars: 36 },
-  '1m':  { label: '1M',  interval: '1d',  subtitle: 'Daily bars · 1 month',       fcHorizon: '1m',  fcLabel: '+1M',  maxBars: 28 },
-  '6m':  { label: '6M',  interval: '3d',  subtitle: '3-day bars · 6 months',      fcHorizon: '6m',  fcLabel: '+6M',  maxBars: 36 },
-  '1y':  { label: '1Y',  interval: '1wk', subtitle: 'Weekly bars · 1 year',       fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 52 },
-  '5y':  { label: '5Y',  interval: '1mo', subtitle: 'Monthly bars · 5 years',     fcHorizon: '1y',  fcLabel: '+1Y',  maxBars: 60 },
-  '10y': { label: '10Y', interval: '2mo', subtitle: '2-month bars · 10 years',    fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 48 },
-  all:   { label: 'ALL', interval: '1yr', subtitle: 'Yearly bars · 1975–2026',    fcHorizon: '5y',  fcLabel: '+5Y',  maxBars: 52 },
+  '15min': { label: '15m', interval: '1m',  barMs: 60000,       subtitle: '1-min price bars · Live 15 mins', fcHorizon: '7d', fcLabel: '+7d', maxBars: 60,  defaultVisible: 18 },
+  '1h':    { label: '1H',  interval: '1m',  barMs: 60000,       subtitle: '1-min price bars · Past 1 hour',  fcHorizon: '7d', fcLabel: '+7d', maxBars: 120, defaultVisible: 60 },
+  '4h':    { label: '4H',  interval: '5m',  barMs: 300000,      subtitle: '5-min price bars · Past 4 hours', fcHorizon: '7d', fcLabel: '+7d', maxBars: 96,  defaultVisible: 48 },
+  '1d':    { label: '1D',  interval: '5m',  barMs: 300000,      subtitle: '5-min price bars · Today',        fcHorizon: '7d', fcLabel: '+7d', maxBars: 144, defaultVisible: 40 },
+  '7d':    { label: '7D',  interval: '1h',  barMs: 3600000,     subtitle: 'Hourly bars · 7 days',            fcHorizon: '7d', fcLabel: '+7d', maxBars: 84,  defaultVisible: 36 },
+  '1m':    { label: '1M',  interval: '1d',  barMs: 86400000,    subtitle: 'Daily bars · 1 month',            fcHorizon: '1m', fcLabel: '+1M', maxBars: 45,  defaultVisible: 28 },
+  '6m':    { label: '6M',  interval: '3d',  barMs: 259200000,   subtitle: '3-day bars · 6 months',           fcHorizon: '6m', fcLabel: '+6M', maxBars: 60,  defaultVisible: 36 },
+  '1y':    { label: '1Y',  interval: '1wk', barMs: 604800000,   subtitle: 'Weekly bars · 1 year',            fcHorizon: '1y', fcLabel: '+1Y', maxBars: 60,  defaultVisible: 52 },
+  '5y':    { label: '5Y',  interval: '1mo', barMs: 2629746000,  subtitle: 'Monthly bars · 5 years',          fcHorizon: '1y', fcLabel: '+1Y', maxBars: 60,  defaultVisible: 60 },
+  '10y':   { label: '10Y', interval: '2mo', barMs: 5259492000,  subtitle: '2-month bars · 10 years',         fcHorizon: '5y', fcLabel: '+5Y', maxBars: 48,  defaultVisible: 48 },
+  all:     { label: 'ALL', interval: '1yr', barMs: 31556952000, subtitle: 'Yearly bars · 1975–2026',         fcHorizon: '5y', fcLabel: '+5Y', maxBars: 52,  defaultVisible: 52 },
 };
 
 const CLIENT_HISTORICAL_ANCHORS = {
@@ -1635,10 +1658,14 @@ function bucket5m(ts = Date.now()) {
   return Math.floor(ts / CANDLE_INTERVAL_MS) * CANDLE_INTERVAL_MS;
 }
 
+function bucket1m(ts = Date.now()) {
+  return Math.floor(ts / CANDLE_1M_MS) * CANDLE_1M_MS;
+}
+
 function seed5mCandlesIfEmpty(metal, spotPrice, prevClose, force = false) {
   if (!force && state.candles[metal].length >= 8) return;
   const nowBucket = bucket5m(Date.now());
-  const count = 28;
+  const count = 48;
   const startPrice = prevClose || spotPrice;
   const vol = metal === 'silver' ? 0.0038 : 0.0018;
   const bars = [];
@@ -1659,6 +1686,133 @@ function seed5mCandlesIfEmpty(metal, spotPrice, prevClose, force = false) {
     cursor = c;
   }
   state.candles[metal] = bars;
+}
+
+function seed1mCandlesIfEmpty(metal, spotPrice, prevClose, force = false) {
+  if (!force && state.candles1m[metal].length >= 15) return;
+  const nowBucket = bucket1m(Date.now());
+  const src5m = state.candles[metal];
+  const bars = [];
+
+  if (Array.isArray(src5m) && src5m.length >= 6) {
+    // Subdivide the latest 12 intraday bars into 60 smooth 1-minute candles anchored to live spot
+    const slice = src5m.slice(-12);
+    const total1m = slice.length * 5;
+    let idx1m = 0;
+    for (let s = 0; s < slice.length; s++) {
+      const b = slice[s];
+      const isLast5m = s === slice.length - 1;
+      const barClose = isLast5m && spotPrice != null ? spotPrice : b.c;
+      const barHigh = Math.max(b.h, b.o, barClose);
+      const barLow = Math.min(b.l, b.o, barClose);
+      const range = barHigh - barLow;
+      const bullish = barClose >= b.o;
+      const waypoints = bullish
+        ? [
+            barLow + range * 0.18,
+            barLow + range * 0.42,
+            barLow + range * 0.68,
+            barLow + range * 0.86,
+            barClose,
+          ]
+        : [
+            barLow + range * 0.82,
+            barLow + range * 0.58,
+            barLow + range * 0.32,
+            barLow + range * 0.14,
+            barClose,
+          ];
+      const span = Math.max(range, barClose * (metal === 'silver' ? 0.0005 : 0.00025));
+
+      for (let k = 0; k < 5; k++) {
+        const o = k === 0 ? b.o : waypoints[k - 1];
+        const c = k === 4 ? barClose : waypoints[k];
+        const wickA = span * (0.1 + 0.08 * Math.abs(Math.sin((idx1m + 1) * 1.9)));
+        const wickB = span * (0.1 + 0.08 * Math.abs(Math.cos((idx1m + 1) * 2.3)));
+        let h = Math.min(barHigh, Math.max(o, c) + wickA);
+        let l = Math.max(barLow, Math.min(o, c) - wickB);
+        if (bullish && k === 0) l = barLow;
+        if (bullish && k === 3) h = barHigh;
+        if (!bullish && k === 0) h = barHigh;
+        if (!bullish && k === 3) l = barLow;
+        const t = nowBucket - (total1m - 1 - idx1m) * CANDLE_1M_MS;
+        bars.push({
+          t,
+          o: +o.toFixed(2),
+          h: +Math.max(o, c, h).toFixed(2),
+          l: +Math.max(0.01, Math.min(o, c, l)).toFixed(2),
+          c: +c.toFixed(2),
+        });
+        idx1m++;
+      }
+    }
+    state.candles1m[metal] = bars;
+    return;
+  }
+
+  const count = 60;
+  const vol = metal === 'silver' ? 0.00095 : 0.00045;
+  const drift = prevClose && spotPrice ? (spotPrice - prevClose) * 0.18 : 0;
+  const startPrice = spotPrice - drift;
+  let cursor = startPrice;
+  for (let i = count - 1; i >= 0; i--) {
+    const t = nowBucket - i * CANDLE_1M_MS;
+    const progress = (count - 1 - i) / Math.max(1, count - 1);
+    const target = startPrice + (spotPrice - startPrice) * progress;
+    const o = cursor;
+    const step = (target - o) * 0.42 + Math.sin(i * 0.95 + (metal === 'silver' ? 1.5 : 0)) * (spotPrice * vol * 0.6);
+    const c = i === 0 ? spotPrice : +(o + step).toFixed(2);
+    const wUp = Math.abs(Math.cos(i * 1.45)) * spotPrice * vol * 0.7;
+    const wDn = Math.abs(Math.sin(i * 1.85)) * spotPrice * vol * 0.7;
+    bars.push({
+      t,
+      o: +o.toFixed(2),
+      h: +(Math.max(o, c) + wUp).toFixed(2),
+      l: +Math.max(0.01, Math.min(o, c) - wDn).toFixed(2),
+      c,
+    });
+    cursor = c;
+  }
+  state.candles1m[metal] = bars;
+}
+
+function updateActive1mCandle(metal, price, prevClose) {
+  if (price == null) return;
+  seed1mCandlesIfEmpty(metal, price, prevClose);
+  const bars = state.candles1m[metal];
+  const currentBucket = bucket1m(Date.now());
+  const last = bars[bars.length - 1];
+
+  if (!last) {
+    bars.push({
+      t: currentBucket,
+      o: +price.toFixed(2),
+      h: +price.toFixed(2),
+      l: +price.toFixed(2),
+      c: +price.toFixed(2),
+    });
+    return;
+  }
+  if (last.t < currentBucket) {
+    // Avoid appending flat synthetic bars across weekend/market-closed gaps when price is unchanged
+    const minDiff = metal === 'silver' ? 0.005 : 0.05;
+    if (currentBucket - last.t > 10 * CANDLE_1M_MS && Math.abs(price - last.c) < minDiff) {
+      return;
+    }
+    const open = last.c;
+    bars.push({
+      t: currentBucket,
+      o: +open.toFixed(2),
+      h: +Math.max(open, price).toFixed(2),
+      l: +Math.min(open, price).toFixed(2),
+      c: +price.toFixed(2),
+    });
+    if (bars.length > 120) bars.shift();
+  } else {
+    last.h = +Math.max(last.h, price).toFixed(2);
+    last.l = +Math.min(last.l, price).toFixed(2);
+    last.c = +price.toFixed(2);
+  }
 }
 
 function buildFallbackTimeframeBars(metal, tf, spot, prevClose) {
@@ -1754,7 +1908,22 @@ function getCandlesForTimeframe(metal, tf) {
   const prevClose = quote.prevClose ?? (metal === 'gold' ? 3626.21 : 42.84);
   const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
 
-  if (tf === '1d') {
+  if (tf === '15min' || tf === '1h') {
+    seed5mCandlesIfEmpty(metal, spot, prevClose);
+    const bars1m = state.candles1m[metal];
+    if (
+      bars1m.length >= 6 &&
+      quote.price != null &&
+      Math.abs(bars1m[bars1m.length - 1].c - quote.price) / quote.price > 0.03
+    ) {
+      seed1mCandlesIfEmpty(metal, spot, prevClose, true);
+    } else {
+      seed1mCandlesIfEmpty(metal, spot, prevClose);
+    }
+    return state.candles1m[metal].slice(-meta.maxBars);
+  }
+
+  if (tf === '4h' || tf === '1d') {
     const bars = state.candles[metal];
     if (
       bars.length >= 4 &&
@@ -1787,7 +1956,7 @@ function getCandlesForTimeframe(metal, tf) {
 
 function formatCandleTimestamp(ts, tf, compact = false) {
   const d = new Date(ts);
-  if (tf === '1d') {
+  if (tf === '15min' || tf === '1h' || tf === '4h' || tf === '1d') {
     return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }
   if (tf === '7d') {
@@ -1800,6 +1969,21 @@ function formatCandleTimestamp(ts, tf, compact = false) {
     return d.toLocaleDateString([], { month: 'short', year: compact ? '2-digit' : 'numeric' });
   }
   return String(d.getUTCFullYear());
+}
+
+function formatCandleRangeLabel(ts, tf) {
+  if (tf === '15min' || tf === '1h' || tf === '4h' || tf === '1d') {
+    const stepMs = tf === '15min' || tf === '1h' ? CANDLE_1M_MS : CANDLE_INTERVAL_MS;
+    const sStr = new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const eStr = new Date(ts + stepMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const sMer = sStr.match(/\s*([AP]M)$/i);
+    const eMer = eStr.match(/\s*([AP]M)$/i);
+    if (sMer && eMer && sMer[1].toUpperCase() === eMer[1].toUpperCase()) {
+      return `${sStr.replace(/\s*[AP]M$/i, '')}–${eStr}`;
+    }
+    return `${sStr}–${eStr}`;
+  }
+  return formatCandleTimestamp(ts, tf, false);
 }
 
 function updateActive5mCandle(metal, price, prevClose) {
@@ -1818,7 +2002,7 @@ function updateActive5mCandle(metal, price, prevClose) {
       l: +Math.min(open, price).toFixed(2),
       c: +price.toFixed(2),
     });
-    if (bars.length > 48) bars.shift();
+    if (bars.length > 144) bars.shift();
   } else {
     last.h = +Math.max(last.h, price).toFixed(2);
     last.l = +Math.min(last.l, price).toFixed(2);
@@ -1926,7 +2110,7 @@ async function fetchCandlesData() {
     const g1d = data.timeframes?.['1d']?.gold || data.gold;
     const s1d = data.timeframes?.['1d']?.silver || data.silver;
     if (Array.isArray(g1d) && g1d.length >= 4) {
-      state.candles.gold = g1d.slice(-40);
+      state.candles.gold = g1d.slice(-144);
       if (state.quotes.gold.price != null && state.quotes.gold.prevClose === state.quotes.gold.price && state.candles.gold[0]?.o > 0) {
         state.quotes.gold.prevClose = +state.candles.gold[0].o.toFixed(2);
         state.quotes.gold.chg = +(state.quotes.gold.price - state.quotes.gold.prevClose).toFixed(2);
@@ -1937,7 +2121,7 @@ async function fetchCandlesData() {
       }
     }
     if (Array.isArray(s1d) && s1d.length >= 4) {
-      state.candles.silver = s1d.slice(-40);
+      state.candles.silver = s1d.slice(-144);
       if (state.quotes.silver.price != null && state.quotes.silver.prevClose === state.quotes.silver.price && state.candles.silver[0]?.o > 0) {
         state.quotes.silver.prevClose = +state.candles.silver[0].o.toFixed(2);
         state.quotes.silver.chg = +(state.quotes.silver.price - state.quotes.silver.prevClose).toFixed(2);
@@ -1947,14 +2131,29 @@ async function fetchCandlesData() {
         renderStackTracker();
       }
     }
+    const g1m = data.bars1m?.gold;
+    const s1m = data.bars1m?.silver;
+    if (Array.isArray(g1m) && g1m.length >= 10) {
+      state.candles1m.gold = g1m.slice(-120);
+    } else if (state.quotes.gold.price) {
+      seed1mCandlesIfEmpty('gold', state.quotes.gold.price, state.quotes.gold.prevClose, true);
+    }
+    if (Array.isArray(s1m) && s1m.length >= 10) {
+      state.candles1m.silver = s1m.slice(-120);
+    } else if (state.quotes.silver.price) {
+      seed1mCandlesIfEmpty('silver', state.quotes.silver.price, state.quotes.silver.prevClose, true);
+    }
     if (state.quotes.gold.price) {
       updateActive5mCandle('gold', state.quotes.gold.price, state.quotes.gold.prevClose);
+      updateActive1mCandle('gold', state.quotes.gold.price, state.quotes.gold.prevClose);
     }
     if (state.quotes.silver.price) {
       updateActive5mCandle('silver', state.quotes.silver.price, state.quotes.silver.prevClose);
+      updateActive1mCandle('silver', state.quotes.silver.price, state.quotes.silver.prevClose);
     }
     renderChart();
-    if ((state.settings.chartTimeframe || '1d') !== '1d' && !histCandlesLoaded) {
+    const activeTf = state.settings.chartTimeframe || '1d';
+    if (!INTRADAY_TIMEFRAMES.has(activeTf) && !histCandlesLoaded) {
       ensureHistoricalCandlesLoaded();
     }
   } catch {
@@ -2005,14 +2204,117 @@ function updateCandleCountdown() {
     const now = Date.now();
     const nextTickAt = state.nextRefreshAt || now + REFRESH_MS;
     const remaining = Math.max(0, nextTickAt - now);
+    const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
     if (tf === '1d') {
       el.textContent = `5-min price bars · Next live update in ${formatCountdown(remaining)}`;
+    } else if (tf === '15min' || tf === '1h') {
+      el.textContent = `${meta.subtitle} · Next live update in ${formatCountdown(remaining)}`;
     } else {
-      const meta = CHART_TF_META[tf] || CHART_TF_META['1d'];
       el.textContent = `${meta.subtitle} · Live update in ${formatCountdown(remaining)}`;
     }
   }
   renderFeedHealth();
+}
+
+/* ---------- Chart Zoom & Pan Engine ---------- */
+
+function resetChartZoom() {
+  state.chartZoom.startIdx = null;
+  state.chartZoom.visibleCount = null;
+  state.hoverCandleIdx = null;
+}
+
+function getZoomWindow(totalLen, meta) {
+  const defaultVis = Math.min(totalLen, meta?.defaultVisible || totalLen);
+  const minVis = Math.min(totalLen, MIN_ZOOM_BARS);
+  let visCount = state.chartZoom.visibleCount != null ? Math.round(state.chartZoom.visibleCount) : defaultVis;
+  visCount = Math.max(minVis, Math.min(totalLen, visCount));
+  let startIdx = state.chartZoom.startIdx != null ? Math.round(state.chartZoom.startIdx) : Math.max(0, totalLen - visCount);
+  startIdx = Math.max(0, Math.min(Math.max(0, totalLen - visCount), startIdx));
+  const endIdx = Math.min(totalLen, startIdx + visCount);
+  const isAtLiveEdge = endIdx >= totalLen;
+  const isZoomed = visCount < totalLen;
+  const isCustom = state.chartZoom.visibleCount != null || state.chartZoom.startIdx != null;
+  const zoomMult = visCount > 0 ? defaultVis / visCount : 1;
+  return { startIdx, endIdx, visCount, defaultVis, totalLen, isAtLiveEdge, isZoomed, isCustom, zoomMult };
+}
+
+function zoomChartBy(factor, anchorFrac = 0.5) {
+  const g = state.chartGeom;
+  if (!g || !g.totalCount) return;
+  const tf = state.settings.chartTimeframe || '1d';
+  const total = g.totalCount;
+  const minVis = Math.min(total, MIN_ZOOM_BARS);
+  const curVis = g.visCount;
+  const curStart = g.viewStart;
+
+  // Seamless drill-down into 1-minute live bars when already zoomed to max on 4H/1D
+  if (factor < 1 && curVis <= minVis && (tf === '1d' || tf === '4h')) {
+    state.settings.chartTimeframe = '1h';
+    state.chartZoom.visibleCount = 20;
+    state.chartZoom.startIdx = null;
+    state.hoverCandleIdx = null;
+    renderChart();
+    savePersistedState();
+    return;
+  }
+
+  let nextVis = Math.round(curVis * factor);
+  if (factor < 1 && nextVis >= curVis) nextVis = curVis - 1;
+  if (factor > 1 && nextVis <= curVis) nextVis = curVis + 1;
+  nextVis = Math.max(minVis, Math.min(total, nextVis));
+
+  const anchorBar = curStart + clampNum(anchorFrac, 0, 1) * curVis;
+  let nextStart = Math.round(anchorBar - clampNum(anchorFrac, 0, 1) * nextVis);
+  const maxStart = Math.max(0, total - nextVis);
+  nextStart = Math.max(0, Math.min(maxStart, nextStart));
+
+  if (nextStart >= maxStart && nextVis === g.defaultVis) {
+    resetChartZoom();
+  } else {
+    state.chartZoom.visibleCount = nextVis;
+    state.chartZoom.startIdx = nextStart >= maxStart ? null : nextStart;
+    state.hoverCandleIdx = null;
+  }
+  renderChart();
+}
+
+function panChartBy(deltaBars) {
+  const g = state.chartGeom;
+  if (!g || g.visCount >= g.totalCount) return;
+  const maxStart = Math.max(0, g.totalCount - g.visCount);
+  const nextStart = Math.max(0, Math.min(maxStart, g.viewStart + deltaBars));
+  if (nextStart === g.viewStart) return;
+  state.chartZoom.visibleCount = g.visCount;
+  state.chartZoom.startIdx = nextStart >= maxStart ? null : nextStart;
+  state.hoverCandleIdx = null;
+  renderChart();
+}
+
+function syncZoomControls(win, tf) {
+  const resetBtn = document.getElementById('btn-zoom-reset');
+  const leftBtn = document.getElementById('btn-pan-left');
+  const rightBtn = document.getElementById('btn-pan-right');
+  const outBtn = document.getElementById('btn-zoom-out');
+  const inBtn = document.getElementById('btn-zoom-in');
+  const live1mBtn = document.getElementById('btn-zoom-1m');
+  const wrap = document.querySelector('#panel-chart .chart-wrap');
+
+  if (resetBtn) {
+    if (!win.isCustom) {
+      resetBtn.textContent = '100%';
+    } else {
+      const mag = win.zoomMult >= 1.05 ? `${win.zoomMult.toFixed(1)}×` : `${Math.round(win.zoomMult * 100)}%`;
+      resetBtn.textContent = `${mag} · ${win.visCount} bars`;
+    }
+    resetBtn.classList.toggle('active', win.isCustom);
+  }
+  if (leftBtn) leftBtn.disabled = win.startIdx <= 0;
+  if (rightBtn) rightBtn.disabled = win.isAtLiveEdge;
+  if (outBtn) outBtn.disabled = win.visCount >= win.totalLen;
+  if (inBtn) inBtn.disabled = win.visCount <= MIN_ZOOM_BARS && tf !== '1d' && tf !== '4h';
+  if (live1mBtn) live1mBtn.classList.toggle('active', tf === '15min' || tf === '1h');
+  if (wrap) wrap.classList.toggle('is-zoomed', win.isZoomed);
 }
 
 function computeFibonacciLevels(bars) {
@@ -2338,33 +2640,46 @@ function renderChart() {
   const borderCol = styles.getPropertyValue('--border-strong').trim() || 'rgba(255,255,255,0.14)';
   const gridCol = styles.getPropertyValue('--border').trim() || 'rgba(255,255,255,0.06)';
 
-  const converted = bars.map((b) => ({
+  const allConverted = bars.map((b) => ({
     t: b.t,
     o: isRatio ? b.o : convertUnit(b.o),
     h: isRatio ? b.h : convertUnit(b.h),
     l: isRatio ? b.l : convertUnit(b.l),
     c: isRatio ? b.c : convertUnit(b.c),
   }));
+  const win = getZoomWindow(allConverted.length, meta);
+  syncZoomControls(win, tf);
+  const converted = allConverted.slice(win.startIdx, win.endIdx);
+  if (!converted.length) return;
+
+  const liveClose = allConverted[allConverted.length - 1].c;
   const firstOpen = converted[0].o;
   const lastClose = converted[converted.length - 1].c;
+  const isMinuteTf = tf === '15min' || tf === '1h';
   const refLineVal = isRatio
     ? (tf === '1d' && state.quotes.gold.prevClose && state.quotes.silver.prevClose
         ? state.quotes.gold.prevClose / state.quotes.silver.prevClose
         : firstOpen)
     : (tf === '1d' ? convertUnit(quote.prevClose ?? bars[0].o) : firstOpen);
-  const fmtChartVal = (v, dec) => (isRatio ? `${Number(v).toFixed(1)}:1` : formatMoney(v, dec));
+  const fmtChartVal = (v, dec) => (isRatio ? `${Number(v).toFixed(dec ?? 1)}:1` : formatMoney(v, dec));
 
-  // Period return badge
+  // Period / visible-window return badge
   const tfChgEl = document.getElementById('chart-tf-change');
   if (tfChgEl && firstOpen > 0) {
     const tfPct = ((lastClose - firstOpen) / firstOpen) * 100;
-    const dec = Math.abs(tfPct) >= 100 ? 0 : 1;
-    tfChgEl.textContent = `${tfPct >= 0 ? '+' : '−'}${Math.abs(tfPct).toFixed(dec)}% (${meta.label})`;
-    tfChgEl.className = `tf-return-pill ${tfPct >= 0.05 ? 'up' : tfPct <= -0.05 ? 'down' : ''}`;
+    const dec = Math.abs(tfPct) >= 100 ? 0 : (isMinuteTf || win.isCustom ? 2 : 1);
+    const scopeTag = win.isCustom ? `${meta.label} · ${win.visCount}` : meta.label;
+    tfChgEl.textContent = `${tfPct >= 0 ? '+' : '−'}${Math.abs(tfPct).toFixed(dec)}% (${scopeTag})`;
+    tfChgEl.className = `tf-return-pill ${tfPct >= 0.02 ? 'up' : tfPct <= -0.02 ? 'down' : ''}`;
   }
 
-  // Compute Jump-Diffusion fat-tail forecast cone scaled proportionally to the active timeframe
-  const showFc = !!state.settings.showForecast && !isRatio;
+  // Compute Jump-Diffusion fat-tail forecast cone (auto-hidden on 1m views, zoomed closeups, or historical pan so candles scale tightly)
+  const showFc =
+    !!state.settings.showForecast &&
+    !isRatio &&
+    win.isAtLiveEdge &&
+    !isMinuteTf &&
+    !(win.isCustom && win.zoomMult >= 1.35);
   const showDiscovery = !!state.settings.showDiscovery && !isRatio;
   const showSqueeze = !!state.settings.showSqueeze && !isRatio;
   const showFib = !!state.settings.showFib;
@@ -2374,8 +2689,11 @@ function renderChart() {
   const sqzCol = '#F43F5E';
   const isLightTheme = isLightThemeName(document.documentElement.getAttribute('data-theme'));
   const fibData = showFib ? computeFibonacciLevels(converted) : null;
-  const sma20 = showSma ? computeSmaSeries(converted, 20) : null;
-  const sma50 = showSma ? computeSmaSeries(converted, 50) : null;
+  // Compute moving averages & regime lines on FULL series first, then slice to zoom window so indicators never distort
+  const fullSma20 = showSma ? computeSmaSeries(allConverted, 20) : null;
+  const fullSma50 = showSma ? computeSmaSeries(allConverted, 50) : null;
+  const sma20 = fullSma20 ? fullSma20.slice(win.startIdx, win.endIdx) : null;
+  const sma50 = fullSma50 ? fullSma50.slice(win.startIdx, win.endIdx) : null;
   const outlookRes = computeInteractiveOutlook();
   const activeRegime = outlookRes.marketRegime?.[sel] || outlookRes[sel]?.regime || null;
 
@@ -2417,13 +2735,15 @@ function renderChart() {
     }
   }
 
-  const discoverySeries = showDiscovery
-    ? computePriceDiscoverySeries(converted, activeRegime, outlookRes[sel]?.unit ?? 0)
+  const fullDiscovery = showDiscovery
+    ? computePriceDiscoverySeries(allConverted, activeRegime, outlookRes[sel]?.unit ?? 0)
     : null;
-  const squeezeSeries = showSqueeze ? computeShortSqueezeSeries(converted, activeRegime) : null;
+  const fullSqueeze = showSqueeze ? computeShortSqueezeSeries(allConverted, activeRegime) : null;
+  const discoverySeries = fullDiscovery ? fullDiscovery.slice(win.startIdx, win.endIdx) : null;
+  const squeezeSeries = fullSqueeze ? fullSqueeze.slice(win.startIdx, win.endIdx) : null;
 
-  const fcHorizon = tf === '1d' ? (outlookState.horizon === '30d' ? '1m' : '7d') : meta.fcHorizon;
-  const fcLabel = tf === '1d' ? (outlookState.horizon === '30d' ? '+30d' : '+7d') : meta.fcLabel;
+  const fcHorizon = (tf === '1d' || tf === '4h') ? (outlookState.horizon === '30d' ? '1m' : '7d') : meta.fcHorizon;
+  const fcLabel = (tf === '1d' || tf === '4h') ? (outlookState.horizon === '30d' ? '+30d' : '+7d') : meta.fcLabel;
   const jdChart = showFc ? getChartJumpDiffusion(sel, outlookRes, fcHorizon) : null;
   const horizonRange = outlookRes[sel].range;
   const p90Target = convertUnit(jdChart ? jdChart.p90 : horizonRange.bull);
@@ -2447,8 +2767,12 @@ function renderChart() {
     sqzGammaAnchor +
     upperSpread * (0.45 + sqzScoreNorm * 0.82 + (activeRegime?.isBackwardation ? 0.18 : 0));
 
-  let min = Math.min(...converted.map((b) => b.l), refLineVal);
-  let max = Math.max(...converted.map((b) => b.h), refLineVal);
+  let min = Math.min(...converted.map((b) => b.l));
+  let max = Math.max(...converted.map((b) => b.h));
+  if (!win.isCustom && !isMinuteTf) {
+    min = Math.min(min, refLineVal);
+    max = Math.max(max, refLineVal);
+  }
   if (discoverySeries?.length) {
     min = Math.min(min, ...discoverySeries);
     max = Math.max(max, ...discoverySeries);
@@ -2468,25 +2792,26 @@ function renderChart() {
       max = Math.max(max, sqzFcTarget);
     }
   }
-  const span = max - min || max * 0.008 || 1;
-  min = Math.max(0, min - span * 0.09);
-  max += span * 0.09;
+  const rawSpan = max - min || max * 0.0025 || 0.5;
+  min = Math.max(0, min - rawSpan * 0.09);
+  max += rawSpan * 0.09;
+  const axisSpan = max - min;
 
   const padTop = 12;
-  const padBottom = 20;
+  const padBottom = win.isZoomed ? 25 : 20;
   const padLeft = 6;
-  const padRight = 60;
+  const padRight = 64;
   const plotW = w - padLeft - padRight;
   const plotH = h - padTop - padBottom;
 
   const candleAreaW = showFc ? plotW * 0.72 : plotW;
   const forecastAreaW = showFc ? plotW * 0.28 : 0;
   const stepX = candleAreaW / Math.max(1, converted.length);
-  const candleW = Math.max(2.5, Math.min(9.5, stepX * 0.64));
+  const candleW = Math.max(2.5, Math.min(26, stepX * 0.66));
   const xCandle = (i) => padLeft + i * stepX + stepX * 0.5;
   const yAt = (v) => padTop + (1 - (v - min) / (max - min)) * plotH;
 
-  // Subtle horizontal gridlines + price axis labels
+  // Subtle horizontal gridlines + precision-adaptive price axis labels
   const desktopCanvas = w >= 720;
   ctx.font = `500 ${desktopCanvas ? 11.5 : 10.5}px "JetBrains Mono", monospace`;
   ctx.textAlign = 'right';
@@ -2501,21 +2826,26 @@ function renderChart() {
     ctx.lineTo(padLeft + plotW, y);
     ctx.stroke();
     ctx.fillStyle = mutedCol;
-    const axisTxt = isRatio ? `${Number(val).toFixed(1)}:1` : formatCompactMoney(val, val >= 500 ? 0 : 2);
+    const yDec = isRatio
+      ? (axisSpan < 3 ? 2 : 1)
+      : (axisSpan < 25 ? 2 : axisSpan < 140 && val >= 500 ? 1 : (val >= 500 ? 0 : 2));
+    const axisTxt = isRatio ? `${Number(val).toFixed(yDec)}:1` : formatCompactMoney(val, yDec);
     ctx.fillText(axisTxt, w - 2, y);
   }
 
-  // Reference baseline (Prev close on 1D, period open on longer ranges)
-  const refY = yAt(refLineVal);
-  ctx.save();
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = borderCol;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padLeft, refY);
-  ctx.lineTo(padLeft + candleAreaW, refY);
-  ctx.stroke();
-  ctx.restore();
+  // Reference baseline (Prev close on 1D, period open on longer ranges — drawn when inside visible Y range)
+  if (refLineVal >= min && refLineVal <= max) {
+    const refY = yAt(refLineVal);
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = borderCol;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padLeft, refY);
+    ctx.lineTo(padLeft + candleAreaW, refY);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Optional Fibonacci Retracement Overlay (Golden Pocket + lines behind candles)
   if (fibData) {
@@ -2662,16 +2992,41 @@ function renderChart() {
     ctx.restore();
   }
 
-  // Bottom X-axis date labels across historical candlestick zone
+  // Mini Zoom Position Track (shows where the zoomed window sits across full history)
+  if (win.isZoomed && win.totalLen > 0) {
+    const trackY = padTop + plotH + 3;
+    const trackH = 3;
+    const thumbX = padLeft + (win.startIdx / win.totalLen) * candleAreaW;
+    const thumbW = Math.max(18, (win.visCount / win.totalLen) * candleAreaW);
+    ctx.save();
+    ctx.fillStyle = gridCol;
+    ctx.fillRect(padLeft, trackY, candleAreaW, trackH);
+    ctx.fillStyle = baseCol;
+    ctx.globalAlpha = 0.72;
+    ctx.fillRect(thumbX, trackY, Math.min(thumbW, padLeft + candleAreaW - thumbX), trackH);
+    ctx.restore();
+  }
+
+  // Bottom X-axis date/time labels across historical candlestick zone
   ctx.font = `500 ${desktopCanvas ? 11 : 9.5}px "JetBrains Mono", monospace`;
   ctx.fillStyle = mutedCol;
   ctx.textBaseline = 'bottom';
   ctx.textAlign = 'left';
   ctx.fillText(formatCandleTimestamp(converted[0].t, tf, true), padLeft, h - 2);
-  const midIdx = Math.floor(converted.length / 2);
-  if (converted[midIdx]) {
+  if (!showFc && desktopCanvas && converted.length >= 10) {
+    const q1 = Math.floor(converted.length * 0.25);
+    const q2 = Math.floor(converted.length * 0.5);
+    const q3 = Math.floor(converted.length * 0.75);
     ctx.textAlign = 'center';
-    ctx.fillText(formatCandleTimestamp(converted[midIdx].t, tf, true), padLeft + candleAreaW / 2, h - 2);
+    ctx.fillText(formatCandleTimestamp(converted[q1].t, tf, true), xCandle(q1), h - 2);
+    ctx.fillText(formatCandleTimestamp(converted[q2].t, tf, true), xCandle(q2), h - 2);
+    ctx.fillText(formatCandleTimestamp(converted[q3].t, tf, true), xCandle(q3), h - 2);
+  } else {
+    const midIdx = Math.floor(converted.length / 2);
+    if (converted[midIdx]) {
+      ctx.textAlign = 'center';
+      ctx.fillText(formatCandleTimestamp(converted[midIdx].t, tf, true), padLeft + candleAreaW / 2, h - 2);
+    }
   }
   if (!showFc) {
     ctx.textAlign = 'right';
@@ -2805,10 +3160,16 @@ function renderChart() {
     ctx.fillText(`Now → ${fcLabel}`, (startX + endX) / 2, h - 2);
   }
 
-  // Optional RSI(14) oscillator sub-chart
+  // Optional RSI(14) oscillator sub-chart (computed on full series first so zooming never distorts momentum)
   let rsiData = null;
   if (state.settings.showRsi) {
-    rsiData = computeRsiSeries(converted, 14);
+    const fullRsi = computeRsiSeries(allConverted, 14);
+    const slicedVals = fullRsi.values.slice(win.startIdx, win.endIdx);
+    const visLast = slicedVals.length ? slicedVals[slicedVals.length - 1] : null;
+    rsiData = {
+      values: slicedVals,
+      latest: visLast != null ? +visLast.toFixed(1) : fullRsi.latest,
+    };
     drawRsiPane(rsiData, candleAreaW, padLeft, stepX);
   }
 
@@ -3019,6 +3380,15 @@ function renderChart() {
     isRatio,
     converted,
     visibleLimit,
+    totalCount: allConverted.length,
+    viewStart: win.startIdx,
+    viewEnd: win.endIdx,
+    visCount: win.visCount,
+    defaultVis: win.defaultVis,
+    isAtLiveEdge: win.isAtLiveEdge,
+    isZoomed: win.isZoomed,
+    liveClose,
+    showFc,
     sma20,
     sma50,
     discoverySeries,
@@ -3207,11 +3577,23 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
 
   const activeIdx = idx != null && g.converted[idx] ? idx : null;
   const bar = g.converted[activeIdx != null ? activeIdx : g.converted.length - 1];
-  const tLabel = formatCandleTimestamp(bar.t, g.tf, false);
-  const dec = bar.c >= 500 ? 0 : 2;
+  const tLabel = formatCandleRangeLabel(bar.t, g.tf);
+  const dec = g.isRatio
+    ? 2
+    : (INTRADAY_TIMEFRAMES.has(g.tf) || g.isZoomed ? 2 : (bar.c >= 500 ? 0 : 2));
+  const barMove = bar.c - bar.o;
+  const barMovePct = bar.o > 0 ? (barMove / bar.o) * 100 : 0;
+  const barSwing = Math.max(0, bar.h - bar.l);
+  const barSwingPct = bar.l > 0 ? (barSwing / bar.l) * 100 : 0;
+  const fmtDelta = (d) =>
+    g.isRatio ? `${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}` : `${d >= 0 ? '+' : '−'}${formatMoney(Math.abs(d), dec)}`;
+  const fmtSpread = (v) => (g.isRatio ? `${v.toFixed(2)}` : formatMoney(v, dec));
+  const movePctStr = `${barMovePct >= 0 ? '+' : '−'}${Math.abs(barMovePct).toFixed(2)}%`;
+  const moveCls = barMove > 0.0001 ? 'tt-up' : barMove < -0.0001 ? 'tt-dn' : '';
+
   if (ohlcEl) {
     ohlcEl.textContent =
-      `${tLabel} · Open ${g.fmtChartVal(bar.o, dec)} · High ${g.fmtChartVal(bar.h, dec)} · Low ${g.fmtChartVal(bar.l, dec)} · Close ${g.fmtChartVal(bar.c, dec)}`;
+      `${tLabel} · Open ${g.fmtChartVal(bar.o, dec)} · High ${g.fmtChartVal(bar.h, dec)} · Low ${g.fmtChartVal(bar.l, dec)} · Close ${g.fmtChartVal(bar.c, dec)} · Move ${fmtDelta(barMove)} (${movePctStr}) · Swing ${fmtSpread(barSwing)}`;
   }
 
   if (overlay) {
@@ -3271,6 +3653,14 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
     if (s50 != null) subParts.push(`50-Avg ${g.fmtChartVal(s50, dec)}`);
     if (rVal != null) subParts.push(`Momentum ${Number(rVal).toFixed(0)}`);
 
+    let detailRow = `Swing ${fmtSpread(barSwing)} (${barSwingPct.toFixed(2)}%)`;
+    const isLatestLiveBar = g.isAtLiveEdge && activeIdx === g.converted.length - 1;
+    if (!isLatestLiveBar && g.liveClose > 0) {
+      const vsLive = bar.c - g.liveClose;
+      const vsLivePct = (vsLive / g.liveClose) * 100;
+      detailRow += ` · vs Live ${fmtDelta(vsLive)} (${vsLivePct >= 0 ? '+' : '−'}${Math.abs(vsLivePct).toFixed(2)}%)`;
+    }
+
     const extraRows = [];
     const buyLots = g.buyMarkersByIdx?.get(activeIdx);
     if (buyLots && buyLots.length) {
@@ -3291,8 +3681,9 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
     }
 
     tipEl.innerHTML =
-      `<div>${escapeHtml(tLabel)} · <strong>${escapeHtml(g.fmtChartVal(bar.c, dec))}</strong></div>` +
+      `<div>${escapeHtml(tLabel)} · <strong>${escapeHtml(g.fmtChartVal(bar.c, dec))}</strong> <span class="${moveCls}">${escapeHtml(`${fmtDelta(barMove)} (${movePctStr})`)}</span></div>` +
       `<div class="tt-sub">Open ${escapeHtml(g.fmtChartVal(bar.o, dec))} · High ${escapeHtml(g.fmtChartVal(bar.h, dec))} · Low ${escapeHtml(g.fmtChartVal(bar.l, dec))}</div>` +
+      `<div class="tt-sub">${escapeHtml(detailRow)}</div>` +
       (regimeParts.length ? `<div class="tt-sub">${regimeParts.join(' · ')}</div>` : '') +
       (subParts.length ? `<div class="tt-sub">${escapeHtml(subParts.join(' · '))}</div>` : '') +
       extraRows.join('');
@@ -5304,7 +5695,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=42', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=43', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -8707,13 +9098,40 @@ function wireEvents() {
     savePersistedState();
   });
 
-  // Candlestick chart 1D–ALL timeframe selector (lazy-loads candles_hist.json once on 7D–ALL)
+  // Candlestick chart 15m–ALL timeframe selector (lazy-loads candles_hist.json once on 7D–ALL)
   document.getElementById('chart-tf-bar')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.tf-btn');
     if (!btn || !btn.dataset.tf) return;
     state.settings.chartTimeframe = btn.dataset.tf;
-    state.hoverCandleIdx = null;
-    if (btn.dataset.tf !== '1d') ensureHistoricalCandlesLoaded();
+    resetChartZoom();
+    if (!INTRADAY_TIMEFRAMES.has(btn.dataset.tf)) ensureHistoricalCandlesLoaded();
+    renderChart();
+    savePersistedState();
+  });
+
+  // Chart Zoom & Pan toolbar controls
+  document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
+    zoomChartBy(0.7, 0.72);
+  });
+  document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
+    zoomChartBy(1.42, 0.72);
+  });
+  document.getElementById('btn-zoom-reset')?.addEventListener('click', () => {
+    resetChartZoom();
+    renderChart();
+  });
+  document.getElementById('btn-pan-left')?.addEventListener('click', () => {
+    const step = Math.max(3, Math.round((state.chartGeom?.visCount || 15) * 0.35));
+    panChartBy(-step);
+  });
+  document.getElementById('btn-pan-right')?.addEventListener('click', () => {
+    const step = Math.max(3, Math.round((state.chartGeom?.visCount || 15) * 0.35));
+    panChartBy(step);
+  });
+  document.getElementById('btn-zoom-1m')?.addEventListener('click', () => {
+    const curTf = state.settings.chartTimeframe || '1d';
+    state.settings.chartTimeframe = curTf === '15min' ? '1h' : '15min';
+    resetChartZoom();
     renderChart();
     savePersistedState();
   });
@@ -9008,9 +9426,10 @@ function wireEvents() {
     });
   }
 
-  // Interactive 60fps dual-canvas OHLC crosshair hover / touch drag on candlestick chart
+  // Interactive 60fps dual-canvas OHLC crosshair, wheel/pinch zoom & drag-to-pan on candlestick chart
   const chartCanvas = document.getElementById('intraday-chart');
   if (chartCanvas) {
+    const chartWrapEl = chartCanvas.closest('.chart-wrap');
     const inspectPointer = (clientX) => {
       const g = state.chartGeom;
       const rect = chartCanvas.getBoundingClientRect();
@@ -9037,11 +9456,134 @@ function wireEvents() {
         renderCrosshairOverlay(idx);
       }
     };
-    chartCanvas.addEventListener('pointermove', (e) => inspectPointer(e.clientX));
-    chartCanvas.addEventListener('pointerdown', (e) => inspectPointer(e.clientX));
+
+    const endChartDrag = () => {
+      state.chartZoom.dragging = false;
+      state.chartZoom.didDrag = false;
+      if (chartWrapEl) chartWrapEl.classList.remove('is-dragging');
+    };
+
+    chartCanvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const g = state.chartGeom;
+      if (g && g.visCount < g.totalCount) {
+        state.chartZoom.dragging = true;
+        state.chartZoom.dragStartX = e.clientX;
+        state.chartZoom.dragStartIdx = g.viewStart;
+        state.chartZoom.didDrag = false;
+        if (chartWrapEl) chartWrapEl.classList.add('is-dragging');
+      }
+      inspectPointer(e.clientX);
+    });
+
+    chartCanvas.addEventListener('pointermove', (e) => {
+      const g = state.chartGeom;
+      if (state.chartZoom.dragging && g && g.visCount < g.totalCount && (e.pointerType !== 'mouse' || (e.buttons & 1))) {
+        const dx = e.clientX - state.chartZoom.dragStartX;
+        if (Math.abs(dx) > 5) state.chartZoom.didDrag = true;
+        if (state.chartZoom.didDrag) {
+          const barsDelta = Math.round(-dx / Math.max(4, g.stepX));
+          const maxStart = Math.max(0, g.totalCount - g.visCount);
+          const nextStart = Math.max(0, Math.min(maxStart, state.chartZoom.dragStartIdx + barsDelta));
+          if (nextStart !== g.viewStart) {
+            state.chartZoom.visibleCount = g.visCount;
+            state.chartZoom.startIdx = nextStart >= maxStart ? null : nextStart;
+            state.hoverCandleIdx = null;
+            renderChart();
+          }
+          return;
+        }
+      }
+      inspectPointer(e.clientX);
+    });
+
+    chartCanvas.addEventListener('pointerup', endChartDrag);
+    chartCanvas.addEventListener('pointercancel', endChartDrag);
     chartCanvas.addEventListener('pointerleave', () => {
+      endChartDrag();
       state.hoverCandleIdx = null;
       renderCrosshairOverlay(null);
+    });
+
+    // Mouse wheel / trackpad scroll zoom centered on cursor candle
+    chartCanvas.addEventListener(
+      'wheel',
+      (e) => {
+        const g = state.chartGeom;
+        if (!g || !g.totalCount) return;
+        e.preventDefault();
+        const rect = chartCanvas.getBoundingClientRect();
+        const anchorFrac = clampNum((e.clientX - rect.left - g.padLeft) / Math.max(1, g.candleAreaW), 0, 1);
+        const factor = e.deltaY < 0 ? 0.78 : 1.28;
+        zoomChartBy(factor, anchorFrac);
+      },
+      { passive: false }
+    );
+
+    // Double-click to reset zoom to 100%
+    chartCanvas.addEventListener('dblclick', () => {
+      resetChartZoom();
+      renderChart();
+    });
+
+    // Two-finger touchscreen pinch-to-zoom
+    chartCanvas.addEventListener(
+      'touchstart',
+      (e) => {
+        if (e.touches.length === 2 && state.chartGeom) {
+          e.preventDefault();
+          endChartDrag();
+          const [t1, t2] = e.touches;
+          state.chartZoom.pinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+          state.chartZoom.pinchCount = state.chartGeom.visCount;
+          const rect = chartCanvas.getBoundingClientRect();
+          const midX = (t1.clientX + t2.clientX) / 2;
+          state.chartZoom.pinchCenterFrac = clampNum(
+            (midX - rect.left - state.chartGeom.padLeft) / Math.max(1, state.chartGeom.candleAreaW),
+            0,
+            1
+          );
+        }
+      },
+      { passive: false }
+    );
+
+    chartCanvas.addEventListener(
+      'touchmove',
+      (e) => {
+        if (e.touches.length === 2 && state.chartZoom.pinchDist && state.chartGeom) {
+          e.preventDefault();
+          const [t1, t2] = e.touches;
+          const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+          if (dist < 10) return;
+          const g = state.chartGeom;
+          const ratio = state.chartZoom.pinchDist / dist;
+          const targetVis = Math.max(
+            Math.min(g.totalCount, MIN_ZOOM_BARS),
+            Math.min(g.totalCount, Math.round(state.chartZoom.pinchCount * ratio))
+          );
+          if (targetVis !== g.visCount) {
+            const anchorBar = g.viewStart + state.chartZoom.pinchCenterFrac * g.visCount;
+            const maxStart = Math.max(0, g.totalCount - targetVis);
+            const nextStart = Math.max(
+              0,
+              Math.min(maxStart, Math.round(anchorBar - state.chartZoom.pinchCenterFrac * targetVis))
+            );
+            state.chartZoom.visibleCount = targetVis;
+            state.chartZoom.startIdx = nextStart >= maxStart ? null : nextStart;
+            state.hoverCandleIdx = null;
+            renderChart();
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    chartCanvas.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) {
+        state.chartZoom.pinchDist = null;
+        state.chartZoom.pinchCount = null;
+      }
     });
   }
 
@@ -9104,7 +9646,7 @@ function wireEvents() {
     const selectMetal = () => {
       state.settings.selectedMetal = metal;
       state.settings.chartMode = metal;
-      state.hoverCandleIdx = null;
+      resetChartZoom();
       renderAll();
       savePersistedState();
     };
@@ -9114,8 +9656,8 @@ function wireEvents() {
 
   document.getElementById('chart-btn-ratio')?.addEventListener('click', () => {
     state.settings.chartMode = 'ratio';
-    state.hoverCandleIdx = null;
-    if ((state.settings.chartTimeframe || '1d') !== '1d') ensureHistoricalCandlesLoaded();
+    resetChartZoom();
+    if (!INTRADAY_TIMEFRAMES.has(state.settings.chartTimeframe || '1d')) ensureHistoricalCandlesLoaded();
     renderChart();
     savePersistedState();
   });
@@ -9326,7 +9868,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 42,
+      version: 43,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),

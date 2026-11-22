@@ -9,7 +9,7 @@ const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) BullionPulseCandles/1.1';
 
 export const TIMEFRAME_SPECS = {
-  '1d': { label: '1D', interval: '5m', range: '1d', yahooInterval: '5m', maxBars: 48 },
+  '1d': { label: '1D', interval: '5m', range: '1d', yahooInterval: '5m', maxBars: 96 },
   '7d': { label: '7D', interval: '1h', range: '5d', yahooInterval: '60m', maxBars: 42 },
   '1m': { label: '1M', interval: '1d', range: '1mo', yahooInterval: '1d', maxBars: 30 },
   '6m': { label: '6M', interval: '3d', range: '6mo', yahooInterval: '1d', maxBars: 42 },
@@ -18,6 +18,8 @@ export const TIMEFRAME_SPECS = {
   '10y': { label: '10Y', interval: '2mo', range: '10y', yahooInterval: '1mo', maxBars: 48 },
   all: { label: 'ALL', interval: '1yr', range: 'max', yahooInterval: '3mo', maxBars: 52 },
 };
+
+export const INTRADAY_1M_SPEC = { interval: '1m', range: '1d', yahooInterval: '1m', maxBars: 90 };
 
 /**
  * Verified annual/multi-year historical anchors (USD/troy oz) from 1975–2026.
@@ -323,12 +325,50 @@ export function buildSeededMultiTimeframeCandles({
     };
   }
 
+  const build1mSeries = (metal, bars5m, spot) => {
+    const isSilver = metal === 'silver';
+    const stepMs = 60 * 1000;
+    const count = 60; // 60 one-minute bars (past 1 hour)
+    const vol = isSilver ? 0.0014 : 0.00065;
+    const startVal = bars5m?.length >= 12 ? bars5m[bars5m.length - 12].o : spot * 0.999;
+    const seed = isSilver ? 4.9 : 1.7;
+    const out = [];
+    let cursor = startVal;
+    for (let i = count - 1; i >= 0; i--) {
+      const t = Math.round(nowMs - i * stepMs);
+      const frac = (count - 1 - i) / Math.max(1, count - 1);
+      const target = startVal + (spot - startVal) * frac;
+      const o = cursor;
+      const wave = Math.sin(i * 0.85 + seed) * 0.45 + Math.cos(i * 1.45 + seed) * 0.3;
+      const step = (target - o) * 0.55 + wave * spot * vol * 0.7;
+      const c = i === 0 ? spot : Math.max(0.5, +(o + step).toFixed(2));
+      const wUp = Math.abs(Math.cos(i * 1.9 + seed)) * spot * vol * 0.65;
+      const wDn = Math.abs(Math.sin(i * 2.3 + seed)) * spot * vol * 0.65;
+      out.push({
+        t,
+        o: +o.toFixed(2),
+        h: +(Math.max(o, c) + wUp).toFixed(2),
+        l: +Math.max(0.5, Math.min(o, c) - wDn).toFixed(2),
+        c,
+      });
+      cursor = c;
+    }
+    return out;
+  };
+
+  const bars1m = {
+    interval: '1m',
+    gold: build1mSeries('gold', timeframes['1d'].gold, goldSpot),
+    silver: build1mSeries('silver', timeframes['1d'].silver, silverSpot),
+  };
+
   return {
     interval: '5m',
     intervalMs: 300000,
     updatedAt: new Date(nowMs).toISOString(),
     gold: timeframes['1d'].gold,
     silver: timeframes['1d'].silver,
+    bars1m,
     timeframes,
   };
 }
@@ -389,19 +429,30 @@ export async function fetchMetalMultiTimeframeCandles() {
     })
   );
 
+  const [g1mRes, s1mRes] = await Promise.allSettled([
+    fetchYahooCandles('GC=F', { range: INTRADAY_1M_SPEC.range, interval: INTRADAY_1M_SPEC.yahooInterval, maxBars: INTRADAY_1M_SPEC.maxBars }),
+    fetchYahooCandles('SI=F', { range: INTRADAY_1M_SPEC.range, interval: INTRADAY_1M_SPEC.yahooInterval, maxBars: INTRADAY_1M_SPEC.maxBars }),
+  ]);
+  const bars1m = {
+    interval: '1m',
+    gold: g1mRes.status === 'fulfilled' ? g1mRes.value : [],
+    silver: s1mRes.status === 'fulfilled' ? s1mRes.value : [],
+  };
+
   return {
     interval: '5m',
     intervalMs: 300000,
     updatedAt: new Date().toISOString(),
     gold: timeframes['1d']?.gold || [],
     silver: timeframes['1d']?.silver || [],
+    bars1m,
     timeframes,
   };
 }
 
 /**
  * Splits a multi-timeframe candle object into:
- *  - intraday1d: lightweight 5m intraday payload (~70% smaller for 5-minute mobile refreshes)
+ *  - intraday1d: lightweight 5m + 1m intraday payload for fast mobile refreshes
  *  - historical: 7D..ALL multi-year candles (lazy-loaded once on demand)
  */
 export function splitCandlePayloads(candles) {
@@ -412,6 +463,7 @@ export function splitCandlePayloads(candles) {
     updatedAt: candles?.updatedAt || new Date().toISOString(),
     gold: tf['1d']?.gold || candles?.gold || [],
     silver: tf['1d']?.silver || candles?.silver || [],
+    bars1m: candles?.bars1m || null,
   };
   const histTimeframes = {};
   for (const [k, v] of Object.entries(tf)) {

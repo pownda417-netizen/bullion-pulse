@@ -241,15 +241,19 @@ for (const tf of ['1y', '5y', '10y', 'all']) {
   assert.ok(gPeak >= 5500, `Gold ${tf} peak (${gPeak}) must preserve Jan 2026 $5,500+ spike`);
 }
 
-// 13. Split candle payloads (lightweight 1D 5m refresh vs lazy-loaded 7D-ALL history)
+// 13. Split candle payloads (lightweight 1D 5m + 1m refresh vs lazy-loaded 7D-ALL history)
 const { intraday1d, historical } = splitCandlePayloads(seededAll);
 assert.equal(intraday1d.gold.length, seededAll.timeframes['1d'].gold.length);
 assert.equal(intraday1d.silver.length, seededAll.timeframes['1d'].silver.length);
+assert.ok(intraday1d.bars1m && intraday1d.bars1m.gold.length >= 60, 'intraday1d should carry 1m gold bars');
+assert.ok(intraday1d.bars1m && intraday1d.bars1m.silver.length >= 60, 'intraday1d should carry 1m silver bars');
+assert.equal(intraday1d.bars1m.gold.at(-1).c, 3542.81);
+assert.equal(intraday1d.bars1m.silver.at(-1).c, 42.22);
 assert.equal(historical.timeframes['1d'], undefined);
 assert.equal(Object.keys(historical.timeframes).length, 7);
 const fullBytes = JSON.stringify(seededAll).length;
 const intradayBytes = JSON.stringify(intraday1d).length;
-assert.ok(intradayBytes < fullBytes * 0.25, `1D payload (${intradayBytes}B) should be >75% smaller than full (${fullBytes}B)`);
+assert.ok(intradayBytes < fullBytes * 0.35, `1D+1m payload (${intradayBytes}B) should stay compact vs full (${fullBytes}B)`);
 
 // 14. Custom absolute USD & Au/Ag ratio target price alerts + same-day deduplication
 const tgt1 = evaluatePriceTargets({

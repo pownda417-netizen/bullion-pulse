@@ -594,10 +594,46 @@
         zh: `今日 ${m[1]}`, ja: `本日 ${m[1]}`, hi: `आज ${m[1]}`,
       })[l],
     ],
-    // "Gold · 1D" / "Silver · 7D" / "Gold / Silver Ratio · 1Y"
+    // "Gold · 15m" / "Gold · 1H" / "Gold · 1D" / "Silver · 7D" / "Gold / Silver Ratio · 1Y"
     [
-      /^(Gold|Silver|Gold \/ Silver Ratio) · (1D|7D|1M|6M|1Y|5Y|10Y|ALL)$/,
+      /^(Gold|Silver|Gold \/ Silver Ratio) · (15m|1H|4H|1D|7D|1M|6M|1Y|5Y|10Y|ALL)$/,
       (m, l) => `${trExact(m[1], l)} · ${m[2]}`,
+    ],
+    // "1-min price bars · Live 15 mins · Next live update in 00:14"
+    [
+      /^1-min price bars · Live 15 mins · Next live update in (.+)$/,
+      (m, l) => ({
+        th: `แท่งราคา 1 นาที · สด 15 นาทีล่าสุด · อัปเดตใน ${m[1]}`,
+        lo: `ແທ່ງລາຄາ 1 ນາທີ · ສົດ 15 ນາທີ · ອັບເດດໃນ ${m[1]}`,
+        es: `Velas de 1 min · Últimos 15 min · Actualiza en ${m[1]}`,
+        zh: `1分钟K线 · 实时近15分钟 · ${m[1]} 后更新`,
+        ja: `1分足チャート・直近15分・次回更新まで ${m[1]}`,
+        hi: `1-मिनट बार · लाइव 15 मिनट · अगला अपडेट ${m[1]} में`,
+      })[l],
+    ],
+    // "1-min price bars · Past 1 hour · Next live update in 00:14"
+    [
+      /^1-min price bars · Past 1 hour · Next live update in (.+)$/,
+      (m, l) => ({
+        th: `แท่งราคา 1 นาที · 1 ชั่วโมงล่าสุด · อัปเดตใน ${m[1]}`,
+        lo: `ແທ່ງລາຄາ 1 ນາທີ · 1 ຊົ່ວໂມງຜ່ານມາ · ອັບເດດໃນ ${m[1]}`,
+        es: `Velas de 1 min · Última hora · Actualiza en ${m[1]}`,
+        zh: `1分钟K线 · 过去1小时 · ${m[1]} 后更新`,
+        ja: `1分足チャート・過去1時間・次回更新まで ${m[1]}`,
+        hi: `1-मिनट बार · पिछला 1 घंटा · अगला अपडेट ${m[1]} में`,
+      })[l],
+    ],
+    // "5-min price bars · Past 4 hours · Live update in 00:14"
+    [
+      /^5-min price bars · Past 4 hours · Live update in (.+)$/,
+      (m, l) => ({
+        th: `แท่งราคา 5 นาที · 4 ชั่วโมงล่าสุด · อัปเดตใน ${m[1]}`,
+        lo: `ແທ່ງລາຄາ 5 ນາທີ · 4 ຊົ່ວໂມງຜ່ານມາ · ອັບເດດໃນ ${m[1]}`,
+        es: `Velas de 5 min · Últimas 4 horas · Actualiza en ${m[1]}`,
+        zh: `5分钟K线 · 过去4小时 · ${m[1]} 后更新`,
+        ja: `5分足チャート・過去4時間・次回更新まで ${m[1]}`,
+        hi: `5-मिनट बार · पिछले 4 घंटे · लाइव अपडेट ${m[1]} में`,
+      })[l],
     ],
     // "5-min price bars · Next live update in 00:14"
     [
@@ -1278,9 +1314,9 @@
   };
 
   PATTERNS.push(
-    // Markets: OHLC hover bar & tooltip (with optional leading time & optional trailing Close)
+    // Markets: OHLC hover bar & tooltip (with optional leading time, trailing Close, Move & Swing)
     [
-      /^(?:(.+?) · )?Open ([^·]+) · High ([^·]+) · Low ([^·]+)(?: · Close (.+))?$/,
+      /^(?:(.+?) · )?Open ([^·]+) · High ([^·]+) · Low ([^·]+)(?: · Close ([^·]+))?(?: · Move ([^·]+))?(?: · Swing (.+))?$/,
       (m, l) => {
         const pre = m[1] ? `${m[1]} · ` : '';
         const cl = m[5]
@@ -1289,13 +1325,49 @@
               zh: ` · 收 ${m[5]}`, ja: `・終 ${m[5]}`, hi: ` · बंद ${m[5]}`,
             })[l]
           : '';
+        const mv = m[6]
+          ? ({
+              th: ` · ขยับ ${m[6]}`, lo: ` · ເໜັງຕີງ ${m[6]}`, es: ` · Cambio ${m[6]}`,
+              zh: ` · 涨跌 ${m[6]}`, ja: `・変動 ${m[6]}`, hi: ` · चाल ${m[6]}`,
+            })[l]
+          : '';
+        const sw = m[7]
+          ? ({
+              th: ` · กรอบแกว่ง ${m[7]}`, lo: ` · ຊ່ວງແກວ່ງ ${m[7]}`, es: ` · Rango ${m[7]}`,
+              zh: ` · 振幅 ${m[7]}`, ja: `・値幅 ${m[7]}`, hi: ` · दायरा ${m[7]}`,
+            })[l]
+          : '';
         return ({
-          th: `${pre}เปิด ${m[2]} · สูง ${m[3]} · ต่ำ ${m[4]}${cl}`,
-          lo: `${pre}ເປີດ ${m[2]} · ສູງ ${m[3]} · ຕ່ຳ ${m[4]}${cl}`,
-          es: `${pre}Aper ${m[2]} · Máx ${m[3]} · Mín ${m[4]}${cl}`,
-          zh: `${pre}开 ${m[2]} · 高 ${m[3]} · 低 ${m[4]}${cl}`,
-          ja: `${pre}始 ${m[2]}・高 ${m[3]}・安 ${m[4]}${cl}`,
-          hi: `${pre}खुला ${m[2]} · उच्च ${m[3]} · निम्न ${m[4]}${cl}`,
+          th: `${pre}เปิด ${m[2]} · สูง ${m[3]} · ต่ำ ${m[4]}${cl}${mv}${sw}`,
+          lo: `${pre}ເປີດ ${m[2]} · ສູງ ${m[3]} · ຕ່ຳ ${m[4]}${cl}${mv}${sw}`,
+          es: `${pre}Aper ${m[2]} · Máx ${m[3]} · Mín ${m[4]}${cl}${mv}${sw}`,
+          zh: `${pre}开 ${m[2]} · 高 ${m[3]} · 低 ${m[4]}${cl}${mv}${sw}`,
+          ja: `${pre}始 ${m[2]}・高 ${m[3]}・安 ${m[4]}${cl}${mv}${sw}`,
+          hi: `${pre}खुला ${m[2]} · उच्च ${m[3]} · निम्न ${m[4]}${cl}${mv}${sw}`,
+        })[l];
+      },
+    ],
+    // Chart Zoom pill ("2.4× · 15 bars") & Tooltip Swing / vs Live row
+    [
+      /^([\d.]+[×%]) · (\d+) bars$/,
+      (m, l) => ({
+        th: `${m[1]} · ${m[2]} แท่ง`, lo: `${m[1]} · ${m[2]} ແທ່ງ`, es: `${m[1]} · ${m[2]} velas`,
+        zh: `${m[1]} · ${m[2]} 根K线`, ja: `${m[1]}・${m[2]}本`, hi: `${m[1]} · ${m[2]} बार`,
+      })[l],
+    ],
+    [
+      /^Swing ([^·]+)(?: · vs Live (.+))?$/,
+      (m, l) => {
+        const vs = m[2]
+          ? ({
+              th: ` · เทียบราคาสด ${m[2]}`, lo: ` · ທຽບລາຄາສົດ ${m[2]}`, es: ` · vs Actual ${m[2]}`,
+              zh: ` · 对比现价 ${m[2]}`, ja: `・現在値比 ${m[2]}`, hi: ` · लाइव से ${m[2]}`,
+            })[l]
+          : '';
+        return ({
+          th: `กรอบแกว่ง ${m[1].trim()}${vs}`, lo: `ຊ່ວງແກວ່ງ ${m[1].trim()}${vs}`,
+          es: `Rango ${m[1].trim()}${vs}`, zh: `振幅 ${m[1].trim()}${vs}`,
+          ja: `値幅 ${m[1].trim()}${vs}`, hi: `दायरा ${m[1].trim()}${vs}`,
         })[l];
       },
     ],
@@ -2060,6 +2132,8 @@
     'slightly bullish': ['เอนเอียงขึ้น', 'ເອນອຽງຂຶ້ນ', 'levemente alcista', '小幅看涨', 'やや強気', 'हल्की तेज़ी'],
     'slightly bearish': ['เอนเอียงลง', 'ເອນອຽງລົງ', 'levemente bajista', '小幅看跌', 'やや弱気', 'हल्की मंदी'],
     '⋮ menu': ['เมนู ⋮', 'ເມນູ ⋮', 'menú ⋮', '⋮ 菜单', '⋮ メニュー', '⋮ मेनू'],
+    '1m Live': ['สด 1 นาที', 'ສົດ 1 ນາທີ', '1m Vivo', '1分实时', '1分ライブ', '1मि लाइव'],
+    'Scroll or pinch to zoom · Drag to pan': ['เลื่อนลูกกลิ้งหรือถ่างนิ้วเพื่อซูม · ลากเพื่อเลื่อนดู', 'ເລື່ອນ ຫຼື ຖ່າງນິ້ວເພື່ອຊູມ · ລາກເພື່ອເລື່ອນເບິ່ງ', 'Desplaza o pellizca para acercar · Arrastra para mover', '滚轮或双指缩放 · 拖动查看历史', 'スクロール・ピンチで拡大縮小・ドラッグで移動', 'ज़ूम के लिए स्क्रॉल/पिंच करें · खिसकाने को खींचें'],
     'No alerts triggered yet. Tap "Simulate Move" or "Simulate Shanghai Premium" above to test.': ['ยังไม่มีการแจ้งเตือน แตะ "จำลองราคาขยับแรง" ด้านบนเพื่อดูตัวอย่าง', 'ຍັງບໍ່ມີການແຈ້ງເຕືອນ ແຕະປຸ່ມທົດສອບດ້ານເທິງເພື່ອເບິ່ງຕົວຢ່າງ', 'Aún no hay alertas. Toca los botones de prueba arriba.', '暂无提醒记录。点击上方模拟按钮进行测试。', 'まだ通知はありません。上のテストボタンで確認できます。', 'अभी कोई अलर्ट नहीं। ऊपर टेस्ट बटन दबाकर देखें।'],
   });
 })();

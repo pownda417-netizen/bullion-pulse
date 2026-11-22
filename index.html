@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./styles.css?v=42" />
+  <link rel="stylesheet" href="./styles.css?v=43" />
 </head>
 <body>
   <div class="app-shell">
@@ -329,7 +329,10 @@
               </div>
             </div>
           </div>
-          <div class="tf-bar" id="chart-tf-bar" role="group" aria-label="Chart timeframe">
+          <div class="tf-bar tf-bar-intraday" id="chart-tf-bar" role="group" aria-label="Chart timeframe">
+            <button type="button" class="tf-btn" data-tf="15min" title="1-minute live bars · Past 15 minutes">15m</button>
+            <button type="button" class="tf-btn" data-tf="1h" title="1-minute live bars · Past 1 hour">1H</button>
+            <button type="button" class="tf-btn" data-tf="4h" title="5-minute bars · Past 4 hours">4H</button>
             <button type="button" class="tf-btn active" data-tf="1d">1D</button>
             <button type="button" class="tf-btn" data-tf="7d">7D</button>
             <button type="button" class="tf-btn" data-tf="1m">1M</button>
@@ -338,6 +341,17 @@
             <button type="button" class="tf-btn" data-tf="5y">5Y</button>
             <button type="button" class="tf-btn" data-tf="10y">10Y</button>
             <button type="button" class="tf-btn" data-tf="all">ALL</button>
+          </div>
+          <div class="chart-zoom-bar" id="chart-zoom-bar" role="group" aria-label="Chart zoom and pan controls">
+            <div class="zoom-btn-group">
+              <button type="button" class="zoom-btn" id="btn-pan-left" aria-label="Pan left to earlier bars" title="Pan earlier">◀</button>
+              <button type="button" class="zoom-btn" id="btn-zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+              <button type="button" class="zoom-reset-pill" id="btn-zoom-reset" aria-label="Reset chart zoom" title="Reset zoom (100%)">100%</button>
+              <button type="button" class="zoom-btn" id="btn-zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+              <button type="button" class="zoom-btn" id="btn-pan-right" aria-label="Pan right to live edge" title="Pan newer">▶</button>
+              <button type="button" class="zoom-1m-btn" id="btn-zoom-1m" title="Jump straight to live 1-minute bars">1m Live</button>
+            </div>
+            <span class="zoom-hint" id="chart-zoom-hint">Scroll or pinch to zoom · Drag to pan</span>
           </div>
           <div class="ohlc-row">
             <div class="ohlc-bar" id="chart-ohlc">Tap or drag on the chart to inspect any price bar</div>
@@ -1993,9 +2007,9 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=42" defer></script>
-  <script src="./intel.js?v=42" defer></script>
-  <script src="./i18n_packs.js?v=42" defer></script>
-  <script src="./display_i18n.js?v=42" defer></script>
+  <script src="./app.js?v=43" defer></script>
+  <script src="./intel.js?v=43" defer></script>
+  <script src="./i18n_packs.js?v=43" defer></script>
+  <script src="./display_i18n.js?v=43" defer></script>
 </body>
 </html>

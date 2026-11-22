@@ -1,12 +1,12 @@
-const CACHE_NAME = 'bullion-pulse-v42';
+const CACHE_NAME = 'bullion-pulse-v43';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=42',
-  './app.js?v=42',
-  './intel.js?v=42',
-  './i18n_packs.js?v=42',
-  './display_i18n.js?v=42',
+  './styles.css?v=43',
+  './app.js?v=43',
+  './intel.js?v=43',
+  './i18n_packs.js?v=43',
+  './display_i18n.js?v=43',
   './mc_worker.js',
   './tts_worker.js',
   './manifest.json',
@@ -67,6 +67,8 @@ self.addEventListener('fetch', (event) => {
     p.endsWith('/index.html') ||
     p.endsWith('/app.js') ||
     p.endsWith('/intel.js') ||
+    p.endsWith('/i18n_packs.js') ||
+    p.endsWith('/display_i18n.js') ||
     p.endsWith('/styles.css') ||
     p.endsWith('/mc_worker.js') ||
     p.endsWith('/tts_worker.js') ||
