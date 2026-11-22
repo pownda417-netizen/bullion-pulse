@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./styles.css?v=38" />
+  <link rel="stylesheet" href="./styles.css?v=39" />
 </head>
 <body>
   <div class="app-shell">
@@ -261,7 +261,7 @@
           </div>
         </section>
 
-        <!-- #140 Live Glowing Global Vault World Map (Placed Above World Trading Hours) -->
+        <!-- #140 Live Glowing Global Vault World Map -->
         <section class="panel" id="panel-global-vault-map" data-sub="global" aria-label="Live global bullion trading hubs map">
           <div class="panel-header">
             <div>
@@ -272,41 +272,7 @@
           </div>
           <div class="vault-map-wrap" id="vault-map-svg-wrap"></div>
           <div class="vault-hub-grid" id="vault-hub-grid"></div>
-        </section>
-
-        <!-- Global Bullion Session Clock & Liquidity Risk Strip -->
-        <section class="panel session-panel" id="panel-session-clock" data-sub="global" aria-label="World gold and silver trading hours">
-          <div class="session-head">
-            <div class="session-title-row">
-              <span class="session-title">World Trading Hours</span>
-              <span class="session-next" id="session-next-countdown">Checking schedule…</span>
-            </div>
-            <span class="session-risk-pill" id="session-liquidity-pill">Active Market</span>
-          </div>
-          <div class="session-grid">
-            <div class="session-item" id="sess-sge">
-              <span class="session-dot" aria-hidden="true"></span>
-              <div class="session-meta">
-                <strong>Shanghai (China)</strong>
-                <span id="sess-sge-status">Checking…</span>
-              </div>
-            </div>
-            <div class="session-item" id="sess-london">
-              <span class="session-dot" aria-hidden="true"></span>
-              <div class="session-meta">
-                <strong>London Market</strong>
-                <span id="sess-london-status">Checking…</span>
-              </div>
-            </div>
-            <div class="session-item" id="sess-comex">
-              <span class="session-dot" aria-hidden="true"></span>
-              <div class="session-meta">
-                <strong>New York (US)</strong>
-                <span id="sess-comex-status">Checking…</span>
-              </div>
-            </div>
-          </div>
-          <div class="session-foot" id="session-liquidity-note">Shows which major gold &amp; silver markets are open right now.</div>
+          <div class="intel-note" id="vault-map-foot">Shows which major gold &amp; silver markets are open right now.</div>
         </section>
 
         <!-- Multi-Timeframe OHLC Candlestick & Prediction Fan Chart -->
@@ -1924,7 +1890,7 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=38" defer></script>
-  <script src="./intel.js?v=38" defer></script>
+  <script src="./app.js?v=39" defer></script>
+  <script src="./intel.js?v=39" defer></script>
 </body>
 </html>

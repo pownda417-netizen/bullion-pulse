@@ -162,25 +162,80 @@
     };
   }
 
-  function getHubClockState(hub, now) {
+  function getTzParts(now, tz) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(now);
+    const get = (t) => parts.find((p) => p.type === t)?.value || '';
+    const wdMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const hh = parseInt(get('hour'), 10) % 24;
+    const mm = parseInt(get('minute'), 10) || 0;
+    return {
+      wd: wdMap[get('weekday')] ?? 1,
+      hh,
+      mm,
+      mins: hh * 60 + mm,
+      timeStr: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`,
+    };
+  }
+
+  function isGlobalBullionWeekend(now) {
     try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: hub.tz,
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).formatToParts(now);
-      const get = (t) => parts.find((p) => p.type === t)?.value || '';
-      const wd = get('weekday');
-      const hh = parseInt(get('hour'), 10) % 24;
-      const mm = parseInt(get('minute'), 10) || 0;
-      const isWeekend = wd === 'Sat' || wd === 'Sun';
-      const isOpen = !isWeekend && hh >= hub.openH && hh < hub.closeH;
-      const isNightSge = !isWeekend && hub.id === 'sha' && (hh >= 20 || hh < 2);
-      const active = isOpen || isNightSge;
-      const timeStr = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      return { active, timeStr, status: active ? 'Open Now' : isWeekend ? 'Weekend' : 'Closed' };
+      const ny = getTzParts(now, 'America/New_York');
+      return (
+        ny.wd === 6 ||
+        (ny.wd === 5 && ny.mins >= 17 * 60) ||
+        (ny.wd === 0 && ny.mins < 18 * 60)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function getHubClockState(hub, now, isGlobalWeekend) {
+    try {
+      const t = getTzParts(now, hub.tz);
+      if (isGlobalWeekend) {
+        return { active: false, timeStr: t.timeStr, status: 'Weekend' };
+      }
+      const isWeekday = t.wd >= 1 && t.wd <= 5;
+      if (hub.id === 'sha') {
+        const isMorning = isWeekday && t.mins >= 9 * 60 && t.mins < 11 * 60 + 30;
+        const isLunch = isWeekday && t.mins >= 11 * 60 + 30 && t.mins < 13 * 60 + 30;
+        const isAfternoon = isWeekday && t.mins >= 13 * 60 + 30 && t.mins < 15 * 60 + 30;
+        const isNightEvening = isWeekday && t.mins >= 20 * 60;
+        // SGE overnight session (00:00–02:30 Beijing) continues Mon–Fri 20:00 opens, so Tue–Sat mornings only (never Mon morning)
+        const isNightLate = t.wd >= 2 && t.wd <= 6 && t.mins < 2 * 60 + 30;
+        if (isMorning || isAfternoon) return { active: true, timeStr: t.timeStr, status: 'Open · Day' };
+        if (isNightEvening || isNightLate) return { active: true, timeStr: t.timeStr, status: 'Open · Night' };
+        if (isLunch) return { active: false, timeStr: t.timeStr, status: 'Lunch Break' };
+        return { active: false, timeStr: t.timeStr, status: 'Closed' };
+      }
+      if (hub.id === 'ny') {
+        const isMaint = t.mins >= 17 * 60 && t.mins < 18 * 60;
+        const isCore = isWeekday && t.mins >= 8 * 60 + 20 && t.mins < 13 * 60 + 30;
+        if (isCore) return { active: true, timeStr: t.timeStr, status: 'Open · Busiest' };
+        if (isMaint) return { active: false, timeStr: t.timeStr, status: 'Daily Break' };
+        return { active: true, timeStr: t.timeStr, status: 'Open · After-Hours' };
+      }
+      if (hub.id === 'lon') {
+        const active = isWeekday && t.mins >= 8 * 60 && t.mins < 16 * 60 + 30;
+        return { active, timeStr: t.timeStr, status: active ? 'Open Now' : 'Closed' };
+      }
+      if (hub.id === 'bom') {
+        const active = isWeekday && t.mins >= 9 * 60 && t.mins < 23 * 60 + 30;
+        return { active, timeStr: t.timeStr, status: active ? 'Open Now' : 'Closed' };
+      }
+      if (hub.id === 'dxb') {
+        const active = isWeekday && t.mins >= 8 * 60 && t.mins < 23 * 60;
+        return { active, timeStr: t.timeStr, status: active ? 'Open Now' : 'Closed' };
+      }
+      const active = isWeekday && t.hh >= hub.openH && t.hh < hub.closeH;
+      return { active, timeStr: t.timeStr, status: active ? 'Open Now' : 'Closed' };
     } catch {
       return { active: false, timeStr: '--:--', status: 'Closed' };
     }
@@ -208,6 +263,7 @@
     if (!svgWrap || !gridEl) return;
 
     const now = new Date();
+    const isGlobalWeekend = isGlobalBullionWeekend(now);
     const { gold: goldUsd } = b.getCanonicalSpotPrices();
     const statuses = GLOBAL_HUBS.map((h) => {
       const pt = projectEquirectangular(h.lat, h.lon);
@@ -215,14 +271,19 @@
         ...h,
         x: pt.x,
         y: pt.y,
-        clock: getHubClockState(h, now),
+        clock: getHubClockState(h, now, isGlobalWeekend),
         localPrice: formatHubPrice(h, goldUsd, b.state.fxRates, b.CURRENCY_META),
       };
     });
     const openCount = statuses.filter((s) => s.clock.active).length;
 
     if (badgeEl) {
-      badgeEl.textContent = openCount > 0 ? `${openCount} Hub${openCount > 1 ? 's' : ''} Open Live` : 'Weekend / Quiet';
+      badgeEl.textContent =
+        openCount > 0
+          ? `${openCount} Hub${openCount > 1 ? 's' : ''} Open Live`
+          : isGlobalWeekend
+            ? 'Weekend Closed'
+            : 'Quiet / Daily Break';
       badgeEl.className = `signal-pill ${openCount > 0 ? 'bullish' : ''}`;
     }
 
@@ -288,6 +349,26 @@
         </div>`
       )
       .join('');
+
+    const footEl = document.getElementById('vault-map-foot');
+    if (footEl) {
+      if (isGlobalWeekend) {
+        footEl.textContent =
+          'Major markets are closed for the weekend — global trading reopens Sunday at 6:00 PM ET (Shanghai opens Monday 9:00 AM Beijing / 8:00 PM ET).';
+      } else if (byId.ny?.clock.status === 'Daily Break') {
+        footEl.textContent =
+          'Daily 5:00–6:00 PM ET market break: trading is very light, so prices can briefly jump or dip more easily.';
+      } else if (byId.lon?.clock.active && byId.ny?.clock.status === 'Open · Busiest') {
+        footEl.textContent =
+          'Both London and New York are open right now — busiest trading hours and most reliable pricing of the day.';
+      } else if (byId.sha?.clock.active && !byId.lon?.clock.active && byId.ny?.clock.status !== 'Open · Busiest') {
+        footEl.textContent =
+          'Asia & Shanghai physical buyers are leading the market right now while US and European main desks sleep.';
+      } else {
+        footEl.textContent =
+          'Global bullion trading is active right now — glowing green hubs show which exchanges are live.';
+      }
+    }
   }
 
   /* ---------- #49 Asia Buying vs. London vs. New York Session Replay ---------- */
@@ -1691,12 +1772,19 @@
         renderStackTimeMachine();
       }
     });
+    setInterval(() => {
+      const st = B()?.state;
+      if (st?.activeView === 'markets' && (st?.settings?.subViews?.markets || 'live') === 'global') {
+        renderGlobalVaultMap();
+      }
+    }, 30000);
   }
 
   window.BullionIntel = {
     init,
     renderAll,
     renderGlobalSub,
+    renderGlobalVaultMap,
     renderDeepChartsSub,
     renderOutlookSubs,
     renderTickTrust,

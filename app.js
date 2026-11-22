@@ -1989,127 +1989,6 @@ function renderFeedHealth() {
   setPill('fh-outlook', 'Forecast', fh.outlookAt, fh.outlookAt != null && Date.now() - fh.outlookAt < 4 * 3600 * 1000, 'Synced');
 }
 
-function getTzClock(nowDate, timeZone) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(nowDate);
-  const get = (t) => parts.find((p) => p.type === t)?.value || '';
-  const wdMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  const h = Number(get('hour')) % 24;
-  const m = Number(get('minute')) || 0;
-  return { wd: wdMap[get('weekday')] ?? 1, h, m, mins: h * 60 + m };
-}
-
-function renderSessionClock(nowDate = new Date()) {
-  if (!document.getElementById('panel-session-clock')) return;
-  const ny = getTzClock(nowDate, 'America/New_York');
-  const lon = getTzClock(nowDate, 'Europe/London');
-  const sh = getTzClock(nowDate, 'Asia/Shanghai');
-
-  const isWeekend =
-    ny.wd === 6 ||
-    (ny.wd === 5 && ny.mins >= 17 * 60) ||
-    (ny.wd === 0 && ny.mins < 18 * 60);
-
-  const sgeDay = !isWeekend && sh.wd >= 1 && sh.wd <= 5 && sh.mins >= 9 * 60 && sh.mins < 15 * 60 + 30;
-  const sgeNightEvening = !isWeekend && sh.wd >= 1 && sh.wd <= 5 && sh.mins >= 20 * 60;
-  const sgeNightLate = !isWeekend && sh.wd >= 2 && sh.wd <= 6 && sh.mins < 2 * 60 + 30;
-  const sgeOpen = sgeDay || sgeNightEvening || sgeNightLate;
-
-  const lonWeekday = lon.wd >= 1 && lon.wd <= 5 && !isWeekend;
-  const lonOpen = lonWeekday && lon.mins >= 8 * 60 && lon.mins < 16 * 60 + 30;
-  const lonAmFix = lonWeekday && Math.abs(lon.mins - (10 * 60 + 30)) <= 15;
-  const lonPmFix = lonWeekday && Math.abs(lon.mins - 15 * 60) <= 15;
-
-  const comexMaint = !isWeekend && ny.mins >= 17 * 60 && ny.mins < 18 * 60;
-  const comexCore = !isWeekend && ny.wd >= 1 && ny.wd <= 5 && ny.mins >= 8 * 60 + 20 && ny.mins < 13 * 60 + 30;
-  const comexGlobex = !isWeekend && !comexMaint;
-
-  const setSess = (id, statusId, cls, txt) => {
-    const item = document.getElementById(id);
-    const st = document.getElementById(statusId);
-    if (item) item.className = `session-item ${cls}`;
-    if (st) st.textContent = txt;
-  };
-
-  setSess(
-    'sess-sge',
-    'sess-sge-status',
-    sgeOpen ? 'open' : '',
-    sgeDay ? 'OPEN · Day' : (sgeNightEvening || sgeNightLate) ? 'OPEN · Night' : 'Closed'
-  );
-  setSess(
-    'sess-london',
-    'sess-london-status',
-    lonAmFix || lonPmFix ? 'fix' : lonOpen ? 'open' : '',
-    lonAmFix ? 'Morning Price Fix' : lonPmFix ? 'Afternoon Price Fix' : lonOpen ? 'OPEN · Active' : 'Closed'
-  );
-  setSess(
-    'sess-comex',
-    'sess-comex-status',
-    comexCore ? 'fix' : comexGlobex ? 'open' : '',
-    comexCore ? 'OPEN · Busiest' : comexMaint ? 'Daily Break (5–6p)' : comexGlobex ? 'OPEN · After-Hours' : 'Weekend Closed'
-  );
-
-  const riskPill = document.getElementById('session-liquidity-pill');
-  const noteEl = document.getElementById('session-liquidity-note');
-  const nextEl = document.getElementById('session-next-countdown');
-
-  let riskLabel = 'Normal Activity';
-  let riskCls = '';
-  let note = 'Global trading is open with steady buyer and seller activity.';
-  let nextTxt = '';
-
-  if (isWeekend) {
-    riskLabel = 'Weekend Closed';
-    riskCls = '';
-    note = 'Major markets are closed for the weekend — trading reopens Sunday at 6:00 PM ET (prices can gap at open).';
-    nextTxt = 'Opens Sun 6:00 PM ET';
-  } else if (comexMaint) {
-    riskLabel = 'Quiet Hour · Jumpy Prices';
-    riskCls = 'warn';
-    const rem = 18 * 60 - ny.mins;
-    note = 'Daily 5:00–6:00 PM ET market break: trading is very light, so prices can briefly jump or dip more easily.';
-    nextTxt = `Reopens in ${rem}m`;
-  } else if (lonPmFix) {
-    riskLabel = 'London Price Fix · Active';
-    riskCls = 'peak';
-    note = 'London afternoon benchmark price is being set right now — big banks are active, so prices can move quickly.';
-    nextTxt = 'London Fix Active Now';
-  } else if (lonOpen && comexCore) {
-    riskLabel = 'Busiest Trading Hours';
-    riskCls = 'peak';
-    const remToPm = 15 * 60 - lon.mins;
-    note = 'Both London and New York are open right now — highest trading volume and most reliable pricing of the day.';
-    nextTxt = remToPm > 0 ? `London Fix in ${Math.floor(remToPm / 60)}h ${remToPm % 60}m` : 'NY main hours end 1:30 PM ET';
-  } else if (sgeOpen && !lonOpen && !comexCore) {
-    riskLabel = 'Asia Trading Active';
-    riskCls = '';
-    note = 'China (Shanghai) physical buyers are leading the market right now while US and Europe sleep.';
-    nextTxt = 'London opens 3:00 AM ET';
-  } else if (comexCore) {
-    riskLabel = 'US Main Hours';
-    riskCls = 'peak';
-    const rem = 13 * 60 + 30 - ny.mins;
-    note = 'New York main trading hours are open — US traders and funds are setting the pace.';
-    nextTxt = `US main hours end in ${Math.floor(rem / 60)}h ${rem % 60}m`;
-  } else {
-    const remMaint = ny.mins < 17 * 60 ? 17 * 60 - ny.mins : 24 * 60 - ny.mins + 8 * 60 + 20;
-    nextTxt = ny.mins < 17 * 60 ? `Daily break in ${Math.floor(remMaint / 60)}h ${remMaint % 60}m` : `NY main open in ${Math.floor(remMaint / 60)}h ${remMaint % 60}m`;
-  }
-
-  if (riskPill) {
-    riskPill.textContent = riskLabel;
-    riskPill.className = `session-risk-pill ${riskCls}`;
-  }
-  if (noteEl) noteEl.textContent = note;
-  if (nextEl) nextEl.textContent = nextTxt;
-}
-
 function updateCandleCountdown() {
   const el = document.getElementById('chart-subtitle');
   if (el) {
@@ -2124,7 +2003,6 @@ function updateCandleCountdown() {
       el.textContent = `${meta.subtitle} · Live update in ${formatCountdown(remaining)}`;
     }
   }
-  renderSessionClock();
   renderFeedHealth();
 }
 
@@ -5417,7 +5295,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=38', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=39', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -8573,7 +8451,6 @@ function renderStackTracker() {
 
 function renderAll() {
   renderMacroStrip();
-  renderSessionClock();
   renderFeedHealth();
   renderStatus();
   renderMetalCard('gold');
@@ -8636,7 +8513,6 @@ function switchSubView(viewName, subName) {
     } else if (subName === 'global') {
       renderFuturesPanel();
       renderShanghai();
-      renderSessionClock();
       window.BullionIntel?.renderGlobalSub?.();
     } else if (subName === 'charts') {
       requestAnimationFrame(() => window.BullionIntel?.renderDeepChartsSub?.());
@@ -8709,7 +8585,6 @@ function switchView(viewName) {
     renderMetalCard('gold');
     renderMetalCard('silver');
     renderFuturesPanel();
-    renderSessionClock();
     renderFeedHealth();
     renderStats();
     if (state.settings.subViews?.markets === 'live') {
@@ -9415,7 +9290,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 38,
+      version: 39,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
