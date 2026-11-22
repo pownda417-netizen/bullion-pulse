@@ -72,11 +72,13 @@ export function computeRealYieldSignal(dfii10Rows = [], t10yieRows = []) {
 
 export async function fetchFredRealYields() {
   const fetchSeries = async (id) => {
-    const res = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}`, {
+    const res = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}`, {
       headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(12000),
     });
     if (!res.ok) throw new Error(`FRED ${id} HTTP ${res.status}`);
-    return parseFredCsv(await res.text(), 60);
+    const csv = (await res.text()).slice(0, 2 * 1024 * 1024);
+    return parseFredCsv(csv, 60);
   };
 
   const [dfii10, t10yie] = await Promise.all([fetchSeries('DFII10'), fetchSeries('T10YIE')]);
@@ -154,7 +156,10 @@ export async function fetchCftcCot() {
     const url =
       `https://publicreporting.cftc.gov/resource/72hh-3qpy.json` +
       `?$where=${where}&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=52`;
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } });
+    const res = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      signal: AbortSignal.timeout(12000),
+    });
     if (!res.ok) throw new Error(`CFTC ${marketName} HTTP ${res.status}`);
     return computeCotSignal(parseCftcCotRows(await res.json()));
   };

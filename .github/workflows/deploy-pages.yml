@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   deploy:
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -28,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -43,7 +46,7 @@ jobs:
       - name: Stage static PWA files
         run: |
           mkdir -p _site/icons _site/data
-          cp index.html styles.css app.js mc_worker.js manifest.json sw.js _site/
+          cp index.html styles.css app.js mc_worker.js tts_worker.js manifest.json sw.js _site/
           cp icons/*.png _site/icons/
           if [ -d data ]; then cp data/*.json _site/data/ 2>/dev/null || true; fi
 

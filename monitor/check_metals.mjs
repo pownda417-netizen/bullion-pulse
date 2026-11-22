@@ -22,6 +22,76 @@ import { fetchShanghaiMetals } from './shanghai.mjs';
 
 const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) BullionPulseMonitor/1.0';
+const FETCH_TIMEOUT_MS = 12000;
+
+/* ---------- Security Validators ---------- */
+
+function isPrivateOrLocalHost(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!h || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) return true;
+  if (h === '::1' || h === '::' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80:')) {
+    return true;
+  }
+  // IPv4 literal check (RFC1918, loopback, link-local / cloud metadata 169.254.x.x, CGNAT 100.64.x.x)
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+  }
+  return false;
+}
+
+export function validateNtfyServerUrl(raw) {
+  const candidate = String(raw || 'https://ntfy.sh').trim();
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error('Invalid NTFY_SERVER URL');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error('NTFY_SERVER must use https://');
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('NTFY_SERVER must not contain embedded credentials');
+  }
+  if (isPrivateOrLocalHost(parsed.hostname)) {
+    throw new Error('NTFY_SERVER cannot point to a private, loopback, or link-local address');
+  }
+  return parsed.href.replace(/\/+$/, '');
+}
+
+export function validateNtfyTopic(raw) {
+  const cleaned = String(raw || '')
+    .trim()
+    .replace(/^https?:\/\/ntfy\.sh\//i, '')
+    .replace(/^\/+|\/+$/g, '');
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(cleaned)) {
+    return '';
+  }
+  return cleaned;
+}
+
+export function validateAppUrl(raw) {
+  const candidate = String(raw || '').trim();
+  if (!candidate || candidate.length > 1024) return '';
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'https:' || isPrivateOrLocalHost(parsed.hostname)) return '';
+    return parsed.href;
+  } catch {
+    return '';
+  }
+}
+
+export function maskSecretTopic(topic) {
+  if (!topic || topic === 'dry-run-topic') return 'dry-run-topic';
+  return '[redacted-topic]';
+}
 
 /* ---------- Feed Parsers ---------- */
 
@@ -97,11 +167,16 @@ export function parseGoldApiQuotes(xauJson, xagJson, prevCloses = {}) {
 }
 
 export async function fetchSpotPrices(fetchImpl = fetch) {
+  const withTimeout = (headers) => ({
+    headers,
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
   // Primary: goldprice.org spot USD feed (XAU + XAG with daily % change)
   try {
-    const res = await fetchImpl('https://data-asg.goldprice.org/dbXRates/USD', {
-      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-    });
+    const res = await fetchImpl(
+      'https://data-asg.goldprice.org/dbXRates/USD',
+      withTimeout({ 'User-Agent': USER_AGENT, Accept: 'application/json' })
+    );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return parseGoldPriceOrg(await res.json());
   } catch (primaryErr) {
@@ -111,24 +186,28 @@ export async function fetchSpotPrices(fetchImpl = fetch) {
   // Secondary: gold-api.com live XAU/XAG spot (using Yahoo chartPreviousClose or candles_1d session open for daily % change)
   try {
     const [xauRes, xagRes] = await Promise.all([
-      fetchImpl('https://api.gold-api.com/price/XAU', {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-      }),
-      fetchImpl('https://api.gold-api.com/price/XAG', {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-      }),
+      fetchImpl(
+        'https://api.gold-api.com/price/XAU',
+        withTimeout({ 'User-Agent': USER_AGENT, Accept: 'application/json' })
+      ),
+      fetchImpl(
+        'https://api.gold-api.com/price/XAG',
+        withTimeout({ 'User-Agent': USER_AGENT, Accept: 'application/json' })
+      ),
     ]);
     if (xauRes.ok && xagRes.ok) {
       const [xauJson, xagJson] = await Promise.all([xauRes.json(), xagRes.json()]);
       const prevCloses = {};
       try {
         const [gYRes, sYRes] = await Promise.all([
-          fetchImpl('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m', {
-            headers: { 'User-Agent': USER_AGENT },
-          }),
-          fetchImpl('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m', {
-            headers: { 'User-Agent': USER_AGENT },
-          }),
+          fetchImpl(
+            'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m',
+            withTimeout({ 'User-Agent': USER_AGENT })
+          ),
+          fetchImpl(
+            'https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m',
+            withTimeout({ 'User-Agent': USER_AGENT })
+          ),
         ]);
         if (gYRes.ok) {
           const gMeta = (await gYRes.json())?.chart?.result?.[0]?.meta;
@@ -158,12 +237,14 @@ export async function fetchSpotPrices(fetchImpl = fetch) {
 
   // Final fallback: Yahoo Finance COMEX continuous futures (GC=F & SI=F)
   const [goldRes, silverRes] = await Promise.all([
-    fetchImpl('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m', {
-      headers: { 'User-Agent': USER_AGENT },
-    }),
-    fetchImpl('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m', {
-      headers: { 'User-Agent': USER_AGENT },
-    }),
+    fetchImpl(
+      'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m',
+      withTimeout({ 'User-Agent': USER_AGENT })
+    ),
+    fetchImpl(
+      'https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m',
+      withTimeout({ 'User-Agent': USER_AGENT })
+    ),
   ]);
   if (!goldRes.ok || !silverRes.ok) {
     throw new Error(`Fallback Yahoo feed failed (${goldRes.status}/${silverRes.status})`);
@@ -522,7 +603,17 @@ async function writeState(statePath, state) {
 }
 
 async function sendNtfy(serverUrl, payload, token) {
-  const endpoint = serverUrl.replace(/\/+$/, '');
+  const endpoint = validateNtfyServerUrl(serverUrl);
+  const safeTopic = validateNtfyTopic(payload?.topic);
+  if (!safeTopic) {
+    throw new Error('Invalid NTFY_TOPIC format');
+  }
+  const safePayload = { ...payload, topic: safeTopic };
+  if (safePayload.click) {
+    const cleanClick = validateAppUrl(safePayload.click);
+    if (cleanClick) safePayload.click = cleanClick;
+    else delete safePayload.click;
+  }
   const headers = { 'Content-Type': 'application/json' };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -530,10 +621,11 @@ async function sendNtfy(serverUrl, payload, token) {
   const res = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify(payload),
+    body: JSON.stringify(safePayload),
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) {
-    const errText = await res.text().catch(() => '');
+    const errText = (await res.text().catch(() => '')).replace(/[\r\n]+/g, ' ').slice(0, 120);
     throw new Error(`ntfy publish failed (${res.status}): ${errText}`);
   }
   return res.json().catch(() => ({}));
@@ -589,8 +681,9 @@ async function main() {
   const sendTest = args.has('--test');
   const sendDigest = args.has('--digest');
 
-  const ntfyTopic = (process.env.NTFY_TOPIC || '').trim();
-  const ntfyServer = (process.env.NTFY_SERVER || 'https://ntfy.sh').trim();
+  const rawTopic = (process.env.NTFY_TOPIC || '').trim();
+  const ntfyTopic = validateNtfyTopic(rawTopic);
+  const ntfyServer = validateNtfyServerUrl(process.env.NTFY_SERVER || 'https://ntfy.sh');
   const ntfyToken = (process.env.NTFY_TOKEN || '').trim();
   const goldThreshold = parseFloat(process.env.GOLD_THRESHOLD_PCT || '1.5');
   const silverThreshold = parseFloat(process.env.SILVER_THRESHOLD_PCT || '3.0');
@@ -601,11 +694,11 @@ async function main() {
   const quietStart = process.env.QUIET_HOURS_START ?? '';
   const quietEnd = process.env.QUIET_HOURS_END ?? '';
   const quietActive = isQuietHours(new Date(), quietStart, quietEnd);
-  const appUrl = (process.env.APP_URL || '').trim();
+  const appUrl = validateAppUrl(process.env.APP_URL || '');
   const statePath = process.env.STATE_FILE || path.resolve('monitor/state.json');
 
   if (!dryRun && !ntfyTopic) {
-    console.error('Error: NTFY_TOPIC environment variable is required (or pass --dry-run).');
+    console.error('Error: Valid NTFY_TOPIC environment variable is required (or pass --dry-run).');
     process.exit(1);
   }
 
@@ -655,10 +748,10 @@ async function main() {
     };
 
     if (dryRun) {
-      console.log('DRY RUN test payload:', JSON.stringify(testPayload, null, 2));
+      console.log('DRY RUN test payload:', JSON.stringify({ ...testPayload, topic: maskSecretTopic(testPayload.topic) }, null, 2));
     } else {
       await sendNtfy(ntfyServer, testPayload, ntfyToken);
-      console.log(`Test push sent to ${ntfyServer}/${ntfyTopic}`);
+      console.log(`Test push sent to ${ntfyServer}/${maskSecretTopic(ntfyTopic)}`);
     }
     return;
   }
@@ -678,10 +771,10 @@ async function main() {
       appUrl,
     });
     if (dryRun) {
-      console.log('DRY RUN morning digest payload:', JSON.stringify(digestPayload, null, 2));
+      console.log('DRY RUN morning digest payload:', JSON.stringify({ ...digestPayload, topic: maskSecretTopic(digestPayload.topic) }, null, 2));
     } else {
       await sendNtfy(ntfyServer, digestPayload, ntfyToken);
-      console.log(`Morning digest sent to ${ntfyServer}/${ntfyTopic}`);
+      console.log(`Morning digest sent to ${ntfyServer}/${maskSecretTopic(ntfyTopic)}`);
     }
     return;
   }
@@ -734,7 +827,7 @@ async function main() {
     });
 
     if (dryRun) {
-      console.log(`  ${key}: DRY RUN would send ->`, JSON.stringify(payload));
+      console.log(`  ${key}: DRY RUN would send ->`, JSON.stringify({ ...payload, topic: maskSecretTopic(payload.topic) }));
     } else {
       await sendNtfy(ntfyServer, payload, ntfyToken);
       console.log(`  ${key}: alert sent (${evaluation.kind}) -> ${payload.title}`);
@@ -768,7 +861,7 @@ async function main() {
         appUrl,
       });
       if (dryRun) {
-        console.log('  SGE_AU_PREM: DRY RUN would send ->', JSON.stringify(payload));
+        console.log('  SGE_AU_PREM: DRY RUN would send ->', JSON.stringify({ ...payload, topic: maskSecretTopic(payload.topic) }));
       } else {
         await sendNtfy(ntfyServer, payload, ntfyToken);
         console.log(`  SGE_AU_PREM: alert sent (${sgeEval.kind}) -> ${payload.title}`);
@@ -808,7 +901,7 @@ async function main() {
       ...(appUrl ? { click: appUrl } : {}),
     };
     if (dryRun) {
-      console.log(`  TARGET (${hit.id}): DRY RUN ->`, JSON.stringify(payload));
+      console.log(`  TARGET (${hit.id}): DRY RUN ->`, JSON.stringify({ ...payload, topic: maskSecretTopic(payload.topic) }));
     } else {
       await sendNtfy(ntfyServer, payload, ntfyToken);
       console.log(`  TARGET (${hit.id}): alert sent -> ${payload.title}`);
@@ -849,7 +942,7 @@ async function main() {
         ...(appUrl ? { click: appUrl } : {}),
       };
       if (dryRun) {
-        console.log(`  REGIME (${hit.id}): DRY RUN ->`, JSON.stringify(payload));
+        console.log(`  REGIME (${hit.id}): DRY RUN ->`, JSON.stringify({ ...payload, topic: maskSecretTopic(payload.topic) }));
       } else {
         await sendNtfy(ntfyServer, payload, ntfyToken);
         console.log(`  REGIME (${hit.id}): alert sent -> ${payload.title}`);

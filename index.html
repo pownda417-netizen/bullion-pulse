@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Bullion Pulse — Spot Gold &amp; Silver Tracker</title>
   <meta name="description" content="Mobile PWA tracking live spot Gold (XAU/USD) and Silver (XAG/USD) prices with customizable big daily move push alerts via ntfy.sh." />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self' https://raw.githubusercontent.com https://data-asg.goldprice.org https://api.gold-api.com https://open.er-api.com https://api.frankfurter.app https://ntfy.sh https://publicreporting.cftc.gov https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://huggingface.co https://*.huggingface.co https://*.hf.co blob: data:; object-src 'none'; base-uri 'self'; form-action 'self';" />
 
   <!-- PWA & iOS Home Screen Meta -->
   <link rel="manifest" href="./manifest.json" />
@@ -17,8 +19,8 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css?v=34" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous" />
+  <link rel="stylesheet" href="./styles.css?v=35" />
 </head>
 <body>
   <div class="app-shell">
@@ -1630,6 +1632,6 @@ CATALYST_ALERTS=true</div>
     </nav>
   </div>
 
-  <script src="./app.js?v=34" defer></script>
+  <script src="./app.js?v=35" defer></script>
 </body>
 </html>

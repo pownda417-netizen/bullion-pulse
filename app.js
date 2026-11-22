@@ -12,33 +12,66 @@ const ANON_FETCH_OPTS = {
 };
 const RAW_DATA_BASE =
   'https://raw.githubusercontent.com/pownda417-netizen/bullion-pulse/main/data/';
+const MAX_BACKUP_BYTES = 512 * 1024;
+
+function sanitizeHttpUrl(raw) {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 2048) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeNtfyTopic(raw) {
+  if (typeof raw !== 'string') return '';
+  const cleaned = raw
+    .trim()
+    .replace(/^https?:\/\/ntfy\.sh\//i, '')
+    .replace(/^\/+|\/+$/g, '');
+  return /^[A-Za-z0-9._-]{1,64}$/.test(cleaned) ? cleaned : '';
+}
+
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...ANON_FETCH_OPTS,
+      ...opts,
+      signal: ctrl.signal,
+    });
+  } finally {
+    clearTimeout(tid);
+  }
+}
 
 async function fetchFreshRepoJson(fileName) {
+  if (typeof fileName !== 'string' || !/^[a-z0-9_]+\.json$/i.test(fileName)) {
+    throw new Error('Invalid data filename');
+  }
   const localFetch = async () => {
-    const res = await fetch(`./data/${fileName}`, ANON_FETCH_OPTS);
+    const res = await fetchWithTimeout(`./data/${fileName}`, {}, 8000);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   };
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
   const canPollRaw =
     typeof window !== 'undefined' &&
-    (window.location.hostname.endsWith('github.io') ||
+    (host === 'pownda417-netizen.github.io' ||
+      host.endsWith('.github.io') ||
       window.location.search.includes('liveRaw=1'));
 
   if (!canPollRaw) return localFetch();
 
   const rawFetch = async () => {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 4000);
-    try {
-      const res = await fetch(`${RAW_DATA_BASE}${fileName}?t=${Date.now()}`, {
-        ...ANON_FETCH_OPTS,
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error(`Raw HTTP ${res.status}`);
-      return await res.json();
-    } finally {
-      clearTimeout(tid);
-    }
+    const res = await fetchWithTimeout(`${RAW_DATA_BASE}${fileName}?t=${Date.now()}`, {}, 4000);
+    if (!res.ok) throw new Error(`Raw HTTP ${res.status}`);
+    return await res.json();
   };
 
   const [locRes, rawRes] = await Promise.allSettled([localFetch(), rawFetch()]);
@@ -238,45 +271,257 @@ const state = {
   countdownTimer: null,
 };
 
-/* ---------- Persistence ---------- */
+/* ---------- Persistence & Schema Sanitization ---------- */
+
+const ALLOWED_CURRENCIES = new Set([
+  'USD', 'CAD', 'EUR', 'GBP', 'CHF', 'AUD', 'MXN', 'INR', 'CNY', 'JPY',
+  'THB', 'LAK', 'SGD', 'HKD', 'KRW', 'VND', 'IDR', 'AED', 'SAR', 'TRY', 'ZAR',
+]);
+const ALLOWED_TIMEFRAMES = new Set(['1d', '7d', '1m', '6m', '1y', '5y', '10y', 'all']);
+const ALLOWED_LOG_DIRS = new Set(['up', 'down', 'neutral']);
+const ALLOWED_NEURAL_VOICE_IDS = new Set([
+  'en_US-lessac-medium',
+  'en_US-ryan-medium',
+  'en_US-amy-medium',
+  'en_US-hfc_female-medium',
+  'en_US-hfc_male-medium',
+  'en_GB-alba-medium',
+]);
+const ALLOWED_SUBVIEWS = {
+  markets: new Set(['live', 'global', 'macro']),
+  outlook: new Set(['forecast', 'drivers', 'vaults', 'sim']),
+  trade: new Set(['swap', 'ladder', 'grader']),
+  stack: new Set(['overview', 'goals', 'lots']),
+  alerts: new Set(['rules', 'phone', 'setup']),
+};
+
+function isPlainObject(v) {
+  return Boolean(v && typeof v === 'object' && !Array.isArray(v));
+}
+
+function sanitizeBoundedNum(v, fallback, lo, hi) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
+}
+
+function sanitizeNumInputStr(v, lo = 0, hi = 1e9) {
+  if (v === '' || v == null) return '';
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < lo || n > hi) return '';
+  return String(v).trim().slice(0, 24);
+}
+
+function sanitizeShortText(v, maxLen = 120) {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, maxLen);
+}
+
+function sanitizeTtsVoicePref(raw) {
+  if (typeof raw !== 'string') return 'auto';
+  const v = raw.trim().slice(0, 120);
+  if (!v || v === 'auto') return 'auto';
+  if (v.startsWith('neural:')) {
+    const id = v.slice(7);
+    return ALLOWED_NEURAL_VOICE_IDS.has(id) ? `neural:${id}` : 'auto';
+  }
+  return v.replace(/[\x00-\x1f\x7f]/g, '');
+}
+
+function sanitizeStackLots(rawLots) {
+  if (!Array.isArray(rawLots)) return [];
+  const out = [];
+  for (const lot of rawLots.slice(0, 100)) {
+    if (!isPlainObject(lot)) continue;
+    const oz = Number(lot.oz);
+    const cost = Number(lot.cost);
+    if (!Number.isFinite(oz) || oz <= 0 || oz > 1e6) continue;
+    if (!Number.isFinite(cost) || cost < 0 || cost > 1e7) continue;
+    out.push({
+      id: sanitizeShortText(String(lot.id || `lot_${out.length + 1}`), 48) || `lot_${out.length + 1}`,
+      metal: lot.metal === 'silver' ? 'silver' : 'gold',
+      oz: +oz.toFixed(6),
+      cost: +cost.toFixed(4),
+      form: sanitizeShortText(lot.form || 'Bullion', 60) || 'Bullion',
+      note: sanitizeShortText(lot.note || '', 120),
+      date: sanitizeShortText(lot.date || '', 24),
+    });
+  }
+  return out;
+}
+
+function sanitizePersistedSettings(raw) {
+  const s = isPlainObject(raw) ? raw : {};
+  const rawStack = isPlainObject(s.stack) ? s.stack : {};
+  const rawGoals = isPlainObject(s.stackGoals) ? s.stackGoals : {};
+  const rawLadder = isPlainObject(s.ladder) ? s.ladder : {};
+  const rawGrader = isPlainObject(s.dealGrader) ? s.dealGrader : {};
+  const rawTargets = isPlainObject(s.targets) ? s.targets : {};
+  const rawSmart = isPlainObject(s.smartAlerts) ? s.smartAlerts : {};
+  const rawQuiet = isPlainObject(s.quietHours) ? s.quietHours : {};
+  const rawSub = isPlainObject(s.subViews) ? s.subViews : {};
+
+  const selectedMetal = s.selectedMetal === 'silver' ? 'silver' : 'gold';
+  const chartModeRaw = s.chartMode || selectedMetal;
+  const chartMode =
+    chartModeRaw === 'silver' || chartModeRaw === 'ratio' ? chartModeRaw : 'gold';
+
+  return {
+    goldThreshold: sanitizeBoundedNum(s.goldThreshold, DEFAULT_SETTINGS.goldThreshold, 0.25, 25),
+    silverThreshold: sanitizeBoundedNum(s.silverThreshold, DEFAULT_SETTINGS.silverThreshold, 0.5, 40),
+    shanghaiThreshold: sanitizeBoundedNum(s.shanghaiThreshold, DEFAULT_SETTINGS.shanghaiThreshold, 5, 500),
+    direction: s.direction === 'up' || s.direction === 'down' ? s.direction : 'both',
+    ntfyTopic: sanitizeNtfyTopic(s.ntfyTopic || ''),
+    unit: s.unit === 'g' ? 'g' : 'oz',
+    currency: ALLOWED_CURRENCIES.has(s.currency) ? s.currency : 'USD',
+    privacyMode: Boolean(s.privacyMode),
+    ttsVoice: sanitizeTtsVoicePref(s.ttsVoice),
+    ttsRate: sanitizeBoundedNum(s.ttsRate, DEFAULT_SETTINGS.ttsRate, 0.7, 1.4),
+    theme: s.theme === 'light' ? 'light' : 'dark',
+    selectedMetal,
+    chartMode,
+    confirmMoves: Boolean(s.confirmMoves),
+    showForecast: s.showForecast !== undefined ? Boolean(s.showForecast) : DEFAULT_SETTINGS.showForecast,
+    showDiscovery: s.showDiscovery !== undefined ? Boolean(s.showDiscovery) : DEFAULT_SETTINGS.showDiscovery,
+    showSqueeze: s.showSqueeze !== undefined ? Boolean(s.showSqueeze) : DEFAULT_SETTINGS.showSqueeze,
+    showFib: Boolean(s.showFib),
+    showSma: Boolean(s.showSma),
+    showRsi: Boolean(s.showRsi),
+    chartTimeframe: ALLOWED_TIMEFRAMES.has(s.chartTimeframe) ? s.chartTimeframe : DEFAULT_SETTINGS.chartTimeframe,
+    stack: {
+      goldOz: sanitizeNumInputStr(rawStack.goldOz, 0, 1e6),
+      goldCost: sanitizeNumInputStr(rawStack.goldCost, 0, 1e7),
+      silverOz: sanitizeNumInputStr(rawStack.silverOz, 0, 1e7),
+      silverCost: sanitizeNumInputStr(rawStack.silverCost, 0, 1e6),
+      goldSpreadPct: sanitizeBoundedNum(rawStack.goldSpreadPct, DEFAULT_SETTINGS.stack.goldSpreadPct, -50, 50),
+      silverSpreadPct: sanitizeBoundedNum(rawStack.silverSpreadPct, DEFAULT_SETTINGS.stack.silverSpreadPct, -50, 50),
+    },
+    stackLots: sanitizeStackLots(s.stackLots),
+    stackGoals: {
+      goldOz: sanitizeNumInputStr(rawGoals.goldOz, 0, 1e6),
+      silverOz: sanitizeNumInputStr(rawGoals.silverOz, 0, 1e7),
+      targetUsd: sanitizeNumInputStr(rawGoals.targetUsd, 0, 1e10),
+    },
+    ladder: {
+      budget: sanitizeBoundedNum(rawLadder.budget, DEFAULT_SETTINGS.ladder.budget, 10, 1e8),
+      metal:
+        rawLadder.metal === 'gold' || rawLadder.metal === 'silver' || rawLadder.metal === 'split'
+          ? rawLadder.metal
+          : 'auto',
+    },
+    dealGrader: {
+      preset: sanitizeShortText(rawGrader.preset || DEFAULT_SETTINGS.dealGrader.preset, 40) || DEFAULT_SETTINGS.dealGrader.preset,
+      qty: sanitizeBoundedNum(rawGrader.qty, DEFAULT_SETTINGS.dealGrader.qty, 1, 10000),
+      ask: sanitizeNumInputStr(rawGrader.ask, 0, 1e8),
+    },
+    targets: {
+      goldAbove: sanitizeNumInputStr(rawTargets.goldAbove, 0, 1e7),
+      goldBelow: sanitizeNumInputStr(rawTargets.goldBelow, 0, 1e7),
+      silverAbove: sanitizeNumInputStr(rawTargets.silverAbove, 0, 1e6),
+      silverBelow: sanitizeNumInputStr(rawTargets.silverBelow, 0, 1e6),
+      ratioAbove: sanitizeNumInputStr(rawTargets.ratioAbove, 0, 1000),
+      ratioBelow: sanitizeNumInputStr(rawTargets.ratioBelow, 0, 1000),
+    },
+    smartAlerts: {
+      backwardation: rawSmart.backwardation !== undefined ? Boolean(rawSmart.backwardation) : DEFAULT_SETTINGS.smartAlerts.backwardation,
+      shortSqueeze: rawSmart.shortSqueeze !== undefined ? Boolean(rawSmart.shortSqueeze) : DEFAULT_SETTINGS.smartAlerts.shortSqueeze,
+      dxyShock: rawSmart.dxyShock !== undefined ? Boolean(rawSmart.dxyShock) : DEFAULT_SETTINGS.smartAlerts.dxyShock,
+      morningDigest: Boolean(rawSmart.morningDigest),
+    },
+    quietHours: {
+      enabled: Boolean(rawQuiet.enabled),
+      start: Math.round(sanitizeBoundedNum(rawQuiet.start, DEFAULT_SETTINGS.quietHours.start, 0, 23)),
+      end: Math.round(sanitizeBoundedNum(rawQuiet.end, DEFAULT_SETTINGS.quietHours.end, 0, 23)),
+    },
+    subViews: {
+      markets: ALLOWED_SUBVIEWS.markets.has(rawSub.markets) ? rawSub.markets : DEFAULT_SETTINGS.subViews.markets,
+      outlook: ALLOWED_SUBVIEWS.outlook.has(rawSub.outlook) ? rawSub.outlook : DEFAULT_SETTINGS.subViews.outlook,
+      trade: ALLOWED_SUBVIEWS.trade.has(rawSub.trade) ? rawSub.trade : DEFAULT_SETTINGS.subViews.trade,
+      stack: ALLOWED_SUBVIEWS.stack.has(rawSub.stack) ? rawSub.stack : DEFAULT_SETTINGS.subViews.stack,
+      alerts: ALLOWED_SUBVIEWS.alerts.has(rawSub.alerts) ? rawSub.alerts : DEFAULT_SETTINGS.subViews.alerts,
+    },
+  };
+}
+
+function sanitizeAlertLog(rawLog) {
+  if (!Array.isArray(rawLog)) return [];
+  const out = [];
+  for (const item of rawLog.slice(0, 25)) {
+    if (!isPlainObject(item)) continue;
+    const pctNum = Number(item.pct);
+    out.push({
+      title: sanitizeShortText(item.title || 'Alert', 140),
+      body: sanitizeShortText(item.body || '', 260),
+      time: sanitizeShortText(item.time || '', 48),
+      dir: ALLOWED_LOG_DIRS.has(item.dir) ? item.dir : 'neutral',
+      pct: Number.isFinite(pctNum) ? pctNum : 0,
+      badge: sanitizeShortText(item.badge || '', 40),
+    });
+  }
+  return out;
+}
+
+function sanitizeHistorySeries(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .slice(-60)
+    .filter((pt) => isPlainObject(pt) && Number.isFinite(Number(pt.ts)) && Number.isFinite(Number(pt.price)) && Number(pt.price) > 0)
+    .map((pt) => ({ ts: Number(pt.ts), price: Number(pt.price) }));
+}
+
+function sanitizeSessionAlerted(raw) {
+  const base = {
+    gold: { day: '', dir: null, pct: 0 },
+    silver: { day: '', dir: null, pct: 0 },
+    shanghai: { day: '', dir: null, usd: 0 },
+    targets: Object.create(null),
+    regime: Object.create(null),
+  };
+  if (!isPlainObject(raw)) return base;
+  for (const k of ['gold', 'silver']) {
+    if (isPlainObject(raw[k])) {
+      base[k] = {
+        day: sanitizeShortText(raw[k].day || '', 16),
+        dir: raw[k].dir === 'up' || raw[k].dir === 'down' ? raw[k].dir : null,
+        pct: sanitizeBoundedNum(raw[k].pct, 0, -100, 100),
+      };
+    }
+  }
+  if (isPlainObject(raw.shanghai)) {
+    base.shanghai = {
+      day: sanitizeShortText(raw.shanghai.day || '', 16),
+      dir: raw.shanghai.dir === 'up' || raw.shanghai.dir === 'down' ? raw.shanghai.dir : null,
+      usd: sanitizeBoundedNum(raw.shanghai.usd, 0, -5000, 5000),
+    };
+  }
+  for (const mapKey of ['targets', 'regime']) {
+    if (isPlainObject(raw[mapKey])) {
+      for (const [k, v] of Object.entries(raw[mapKey]).slice(0, 32)) {
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+        base[mapKey][sanitizeShortText(k, 32)] = sanitizeShortText(String(v || ''), 24);
+      }
+    }
+  }
+  return base;
+}
 
 function loadPersistedState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
+    if (!raw || raw.length > MAX_BACKUP_BYTES) return;
     const parsed = JSON.parse(raw);
-    if (parsed.settings) {
-      state.settings = {
-        ...DEFAULT_SETTINGS,
-        ...parsed.settings,
-        stack: { ...DEFAULT_SETTINGS.stack, ...(parsed.settings.stack || {}) },
-        stackLots: Array.isArray(parsed.settings.stackLots) ? parsed.settings.stackLots.slice(0, 100) : [],
-        stackGoals: { ...DEFAULT_SETTINGS.stackGoals, ...(parsed.settings.stackGoals || {}) },
-        ladder: { ...DEFAULT_SETTINGS.ladder, ...(parsed.settings.ladder || {}) },
-        dealGrader: { ...DEFAULT_SETTINGS.dealGrader, ...(parsed.settings.dealGrader || {}) },
-        targets: { ...DEFAULT_SETTINGS.targets, ...(parsed.settings.targets || {}) },
-        smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts, ...(parsed.settings.smartAlerts || {}) },
-        quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(parsed.settings.quietHours || {}) },
-        subViews: { ...DEFAULT_SETTINGS.subViews, ...(parsed.settings.subViews || {}) },
-      };
-      if (!parsed.settings.chartMode && parsed.settings.selectedMetal) {
-        state.settings.chartMode = parsed.settings.selectedMetal;
-      }
+    if (!isPlainObject(parsed)) return;
+    if (isPlainObject(parsed.settings)) {
+      state.settings = sanitizePersistedSettings(parsed.settings);
     }
     if (Array.isArray(parsed.alertLog)) {
-      state.alertLog = parsed.alertLog.slice(0, 25);
+      state.alertLog = sanitizeAlertLog(parsed.alertLog);
     }
-    if (parsed.history && Array.isArray(parsed.history.gold) && Array.isArray(parsed.history.silver)) {
-      state.history.gold = parsed.history.gold.slice(-60);
-      state.history.silver = parsed.history.silver.slice(-60);
+    if (isPlainObject(parsed.history)) {
+      state.history.gold = sanitizeHistorySeries(parsed.history.gold);
+      state.history.silver = sanitizeHistorySeries(parsed.history.silver);
     }
-    if (parsed.sessionAlerted) {
-      state.sessionAlerted = {
-        ...state.sessionAlerted,
-        ...parsed.sessionAlerted,
-        targets: { ...(parsed.sessionAlerted.targets || {}) },
-        regime: { ...(parsed.sessionAlerted.regime || {}) },
-      };
+    if (isPlainObject(parsed.sessionAlerted)) {
+      state.sessionAlerted = sanitizeSessionAlerted(parsed.sessionAlerted);
     }
   } catch {
     // Ignore malformed storage
@@ -461,9 +706,7 @@ function formatTime(date) {
 /* ---------- Live Spot Feed Fetching ---------- */
 
 async function fetchFromGoldPriceOrg() {
-  const res = await fetch('https://data-asg.goldprice.org/dbXRates/USD', {
-    cache: 'no-store',
-  });
+  const res = await fetchWithTimeout('https://data-asg.goldprice.org/dbXRates/USD', {}, 8000);
   if (!res.ok) throw new Error(`goldprice.org HTTP ${res.status}`);
   const data = await res.json();
   const item = data?.items?.[0];
@@ -514,8 +757,8 @@ function getCanonicalSpotPrices() {
 
 async function fetchFromGoldApiCom() {
   const [xauRes, xagRes] = await Promise.all([
-    fetch('https://api.gold-api.com/price/XAU', { cache: 'no-store' }),
-    fetch('https://api.gold-api.com/price/XAG', { cache: 'no-store' }),
+    fetchWithTimeout('https://api.gold-api.com/price/XAU', {}, 8000),
+    fetchWithTimeout('https://api.gold-api.com/price/XAG', {}, 8000),
   ]);
   if (!xauRes.ok || !xagRes.ok) {
     throw new Error(`gold-api.com HTTP ${xauRes.status}/${xagRes.status}`);
@@ -591,7 +834,7 @@ function buildFallbackDemoQuotes() {
 
 async function fetchLivePlatinumPrice() {
   try {
-    const res = await fetch('https://api.gold-api.com/price/XPT', ANON_FETCH_OPTS);
+    const res = await fetchWithTimeout('https://api.gold-api.com/price/XPT', {}, 8000);
     if (!res.ok) return;
     const xpt = await res.json();
     if (typeof xpt?.price === 'number' && Number.isFinite(xpt.price) && xpt.price > 200) {
@@ -1076,21 +1319,34 @@ function showAlertBanner(title, body, dir) {
 }
 
 async function publishToNtfy({ topic, title, message, priority = 'high', tags = 'bell,coin' }) {
-  const cleanTopic = topic.replace(/^https?:\/\/ntfy\.sh\//i, '').replace(/^\/+|\/+$/g, '');
-  if (!cleanTopic) throw new Error('Please enter an ntfy topic name first.');
+  const cleanTopic = sanitizeNtfyTopic(topic);
+  if (!cleanTopic) {
+    throw new Error('Enter a valid ntfy topic name (letters, numbers, dashes, dots, or underscores only).');
+  }
+
+  const safePriority = ['min', 'low', 'default', 'high', 'urgent', 'max'].includes(String(priority))
+    ? String(priority)
+    : 'high';
+  const safeTags = String(tags || 'bell,coin').replace(/[^A-Za-z0-9_,-]/g, '').slice(0, 80) || 'bell';
+  const safeTitle = sanitizeShortText(String(title || 'Bullion Pulse Alert'), 180);
+  const safeMessage = String(message || '').slice(0, 2000);
 
   // Query parameters + text/plain avoids CORS preflight issues in mobile browsers
   const params = new URLSearchParams({
-    title,
-    priority,
-    tags,
+    title: safeTitle,
+    priority: safePriority,
+    tags: safeTags,
   });
 
   const url = `https://ntfy.sh/${encodeURIComponent(cleanTopic)}?${params.toString()}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    body: message,
-  });
+  const res = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      body: safeMessage,
+    },
+    10000
+  );
 
   if (!res.ok) {
     throw new Error(`ntfy.sh returned HTTP ${res.status}`);
@@ -2630,15 +2886,18 @@ function renderAlertLog() {
 
   list.innerHTML = state.alertLog
     .map(
-      (item) => `
+      (item) => {
+        const dirCls = ALLOWED_LOG_DIRS.has(item.dir) ? item.dir : 'neutral';
+        return `
       <li class="log-item">
         <div>
           <div>${escapeHtml(item.title)}</div>
           <div class="log-meta">${escapeHtml(item.body)} · ${escapeHtml(item.time)}</div>
         </div>
-        <span class="log-pct ${item.dir}">${escapeHtml(item.badge || formatSignedPct(item.pct))}</span>
+        <span class="log-pct ${dirCls}">${escapeHtml(item.badge || formatSignedPct(item.pct))}</span>
       </li>
-    `
+    `;
+      }
     )
     .join('');
 }
@@ -3094,10 +3353,11 @@ function recomputeComexMetal(m, pricePct = 0) {
 }
 
 async function fetchLiveCftcOiBrowser(code) {
+  if (!/^\d{6}$/.test(String(code || ''))) throw new Error('Invalid CFTC code');
   const url =
     `https://publicreporting.cftc.gov/resource/72hh-3qpy.json` +
-    `?cftc_contract_market_code=${code}&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=16`;
-  const res = await fetch(url, ANON_FETCH_OPTS);
+    `?cftc_contract_market_code=${encodeURIComponent(code)}&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=16`;
+  const res = await fetchWithTimeout(url, {}, 8000);
   if (!res.ok) throw new Error(`CFTC HTTP ${res.status}`);
   const rows = await res.json();
   if (!Array.isArray(rows) || !rows.length) return null;
@@ -4614,7 +4874,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=34', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=35', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -5710,7 +5970,7 @@ function renderOutlook() {
       </div>
       <div class="sl-chip">
         <span class="sl-chip-label">Forecast Range Size</span>
-        <span class="sl-chip-val">${activeRegime} · ${activeConeMult}×</span>
+        <span class="sl-chip-val">${escapeHtml(activeRegime)} · ${escapeHtml(activeConeMult)}×</span>
       </div>`;
   }
 
@@ -5770,18 +6030,27 @@ function renderOutlook() {
     }
     rows.push('<div class="sl-section-label">6-Month Track Record</div>');
     if (btGold) {
+      const gSamples = Math.max(0, Math.round(Number(btGold.samples) || 0));
+      const gDir = Math.round(Number(btGold.dirHitPct) || 0);
+      const gCone = Math.round(Number(btGold.inConePct) || 0);
       rows.push(
-        `<div class="acc-row"><span>6-Month Test · Gold (${btGold.samples} checks)</span><span>${btGold.dirHitPct}% Right · ${btGold.inConePct}% In Range</span></div>`
+        `<div class="acc-row"><span>6-Month Test · Gold (${gSamples} checks)</span><span>${gDir}% Right · ${gCone}% In Range</span></div>`
       );
     }
     if (btSilver) {
+      const sSamples = Math.max(0, Math.round(Number(btSilver.samples) || 0));
+      const sDir = Math.round(Number(btSilver.dirHitPct) || 0);
+      const sCone = Math.round(Number(btSilver.inConePct) || 0);
       rows.push(
-        `<div class="acc-row"><span>6-Month Test · Silver (${btSilver.samples} checks)</span><span>${btSilver.dirHitPct}% Right · ${btSilver.inConePct}% In Range</span></div>`
+        `<div class="acc-row"><span>6-Month Test · Silver (${sSamples} checks)</span><span>${sDir}% Right · ${sCone}% In Range</span></div>`
       );
     }
     if (live7?.count > 0) {
+      const lCount = Math.max(0, Math.round(Number(live7.count) || 0));
+      const lDir = Math.round(Number(live7.dirHitPct) || 0);
+      const lCone = Math.round(Number(live7.inConePct) || 0);
       rows.push(
-        `<div class="acc-row full-span"><span>Live 7-Day Checks (${live7.count})</span><span>${live7.dirHitPct}% Right · ${live7.inConePct}% In Range</span></div>`
+        `<div class="acc-row full-span"><span>Live 7-Day Checks (${lCount})</span><span>${lDir}% Right · ${lCone}% In Range</span></div>`
       );
     } else {
       rows.push(
@@ -5806,17 +6075,20 @@ function renderOutlook() {
       ? items
           .slice(0, 8)
           .map((h) => {
-            const titleHtml = h.url
-              ? `<a class="news-title" href="${escapeHtml(h.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(h.title)}</a>`
+            const safeUrl = sanitizeHttpUrl(h.url);
+            const titleHtml = safeUrl
+              ? `<a class="news-title" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(h.title)}</a>`
               : `<div class="news-title">${escapeHtml(h.title)}</div>`;
-            const clusterBadge = h.clusterCount > 1 ? ` · ${h.clusterCount} articles` : '';
-            const moodWord = h.sentiment === 'bullish' ? 'Positive' : h.sentiment === 'bearish' ? 'Negative' : 'Neutral';
+            const cCount = Number(h.clusterCount);
+            const clusterBadge = Number.isFinite(cCount) && cCount > 1 ? ` · ${Math.floor(cCount)} articles` : '';
+            const sentCls = h.sentiment === 'bullish' || h.sentiment === 'bearish' || h.sentiment === 'neutral' ? h.sentiment : '';
+            const moodWord = sentCls === 'bullish' ? 'Positive' : sentCls === 'bearish' ? 'Negative' : 'Neutral';
             return `
               <li class="news-item">
                 ${titleHtml}
                 <div class="news-meta">
                   <span>${escapeHtml(h.source || 'News')} · ${escapeHtml(h.driverLabel || 'Market')}${clusterBadge}</span>
-                  <span class="news-pill ${h.sentiment || ''}">${escapeHtml(moodWord)}</span>
+                  <span class="news-pill ${sentCls}">${escapeHtml(moodWord)}</span>
                 </div>
               </li>`;
           })
@@ -5900,10 +6172,11 @@ function renderMinerDetailDrawer(outlookRes, leaders) {
     ? `Latest Catalyst: ${matchedHeadline.title}`
     : MINER_PROFILES[c.symbol] || `${c.name} (${c.symbol}) feeds Bullion Pulse's 9-miner sector breadth signal.`;
 
+  const metalCls = c.metal === 'silver' ? 'silver' : 'gold';
   drawer.innerHTML = `
     <div class="sector-detail-head">
       <div class="sector-detail-title">
-        <span class="sector-sym ${c.metal}">${escapeHtml(c.symbol)}</span> · ${escapeHtml(c.name)} (${spotRef} Miner/Streamer)
+        <span class="sector-sym ${metalCls}">${escapeHtml(c.symbol)}</span> · ${escapeHtml(c.name)} (${escapeHtml(spotRef)} Miner/Streamer)
       </div>
       <button type="button" class="sector-detail-close" id="btn-close-miner-drawer">Close ✕</button>
     </div>
@@ -5967,10 +6240,11 @@ function renderSectorLeaders(outlookRes) {
       const pctStr = `${p5 >= 0 ? '+' : '−'}${Math.abs(p5).toFixed(1)}%`;
       const lastStr = Number.isFinite(c.last) ? `$${Number(c.last).toFixed(c.last >= 100 ? 0 : 2)}` : '$—';
       const isSel = state.selectedMiner === c.symbol;
+      const metalCls = c.metal === 'silver' ? 'silver' : 'gold';
       return `
         <button type="button" class="sector-chip${isSel ? ' selected' : ''}" data-symbol="${escapeHtml(c.symbol)}" aria-pressed="${isSel ? 'true' : 'false'}">
           <div class="sector-chip-top">
-            <span class="sector-sym ${c.metal}">${escapeHtml(c.symbol)}</span>
+            <span class="sector-sym ${metalCls}">${escapeHtml(c.symbol)}</span>
             <span class="sector-pct ${cls}">${pctStr}</span>
           </div>
           <div class="sector-name">${escapeHtml(c.name)}</div>
@@ -6921,11 +7195,12 @@ function applyTheme(theme) {
 }
 
 function escapeHtml(str) {
-  return String(str)
+  return String(str ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function renderMacroStrip() {
@@ -8458,7 +8733,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 30,
+      version: 35,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
@@ -8482,22 +8757,18 @@ function wireEvents() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      if (file.size > MAX_BACKUP_BYTES) {
+        throw new Error('Backup file too large');
+      }
       const parsed = JSON.parse(await file.text());
-      if (parsed && parsed.settings && typeof parsed.settings === 'object') {
-        state.settings = {
+      if (isPlainObject(parsed) && isPlainObject(parsed.settings)) {
+        state.settings = sanitizePersistedSettings({
           ...state.settings,
           ...parsed.settings,
-          stack: { ...DEFAULT_SETTINGS.stack, ...(parsed.settings.stack || {}) },
-          stackLots: Array.isArray(parsed.settings.stackLots) ? parsed.settings.stackLots.slice(0, 100) : [],
-          stackGoals: { ...DEFAULT_SETTINGS.stackGoals, ...(parsed.settings.stackGoals || {}) },
-          ladder: { ...DEFAULT_SETTINGS.ladder, ...(parsed.settings.ladder || {}) },
-          dealGrader: { ...DEFAULT_SETTINGS.dealGrader, ...(parsed.settings.dealGrader || {}) },
-          targets: { ...DEFAULT_SETTINGS.targets, ...(parsed.settings.targets || {}) },
-          smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts, ...(parsed.settings.smartAlerts || {}) },
-          quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(parsed.settings.quietHours || {}) },
-        };
+          subViews: state.settings.subViews,
+        });
         if (Array.isArray(parsed.alertLog)) {
-          state.alertLog = parsed.alertLog.slice(0, 25);
+          state.alertLog = sanitizeAlertLog(parsed.alertLog);
         }
         applyTheme(state.settings.theme);
         applyPrivacyMode();
@@ -8505,7 +8776,7 @@ function wireEvents() {
         savePersistedState();
       }
     } catch {
-      // Ignore malformed JSON backup file
+      // Ignore malformed or oversized JSON backup file
     } finally {
       e.target.value = '';
     }

@@ -9,7 +9,7 @@ import {
   computeSetupQuality,
   recencyDecayWeight,
 } from './historical_patterns.mjs';
-import { parseRssItems } from './analyze_outlook.mjs';
+import { parseRssItems, sanitizeHttpUrl } from './analyze_outlook.mjs';
 import {
   cnyPerGramToUsdPerOz,
   cnyPerKgToUsdPerOz,
@@ -917,4 +917,22 @@ assert.equal(sqHeadwind.label, 'Macro Headwind — Wait');
 assert.equal(sqHeadwind.tone, 'bearish');
 assert.ok(regimeOutlook.setupQuality?.gold && regimeOutlook.setupQuality?.silver, 'buildOutlook must attach setupQuality');
 
-console.log('All 24 Bullion Pulse suites (Asymmetric Regime Jump-Diffusion, Au/Ag Ratio Z-Score/Swap, Setup Quality, Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, FRED, COT, Miners, Shanghai & Accuracy) passed!');
+// 25. Security: RSS URL scheme sanitization blocks javascript:/data:/vbscript: XSS payloads
+assert.equal(sanitizeHttpUrl('https://example.com/gold?q=1'), 'https://example.com/gold?q=1');
+assert.equal(sanitizeHttpUrl('javascript:alert(document.domain)'), '');
+assert.equal(sanitizeHttpUrl('data:text/html,<script>alert(1)</script>'), '');
+assert.equal(sanitizeHttpUrl('vbscript:msgbox(1)'), '');
+const evilRss = `
+  <rss><channel>
+    <item><title>Safe Story</title><link>https://reuters.com/markets/gold</link></item>
+    <item><title>Poisoned Story</title><link>javascript:alert(1)</link></item>
+    <item><title>Data URI Story</title><link>data:text/html,&lt;svg/onload=alert(1)&gt;</link></item>
+  </channel></rss>
+`;
+const parsedEvil = parseRssItems(evilRss, 'TestFeed');
+assert.equal(parsedEvil.length, 3);
+assert.equal(parsedEvil[0].url, 'https://reuters.com/markets/gold');
+assert.equal(parsedEvil[1].url, '', 'javascript: link must be stripped at RSS ingestion');
+assert.equal(parsedEvil[2].url, '', 'data: link must be stripped at RSS ingestion');
+
+console.log('All 25 Bullion Pulse suites (Security RSS/URL XSS Defense, Asymmetric Regime Jump-Diffusion, Au/Ag Ratio Z-Score/Swap, Setup Quality, Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, FRED, COT, Miners, Shanghai & Accuracy) passed!');

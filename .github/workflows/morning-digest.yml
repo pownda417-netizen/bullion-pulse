@@ -6,12 +6,18 @@ on:
     - cron: '0 13 * * 1-5'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   morning-digest:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -25,8 +31,9 @@ jobs:
           NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
           MORNING_DIGEST: ${{ vars.MORNING_DIGEST || 'false' }}
           APP_URL: ${{ vars.APP_URL }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "$MORNING_DIGEST" != "true" ]; then
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] && [ "$MORNING_DIGEST" != "true" ]; then
             echo "MORNING_DIGEST variable is not set to 'true' — skipping scheduled morning brief."
             exit 0
           fi

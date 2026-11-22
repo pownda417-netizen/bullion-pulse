@@ -9,9 +9,13 @@ import {
   formatNtfyPayload,
   formatShanghaiNtfyPayload,
   isQuietHours,
+  maskSecretTopic,
   parseGoldApiQuotes,
   parseGoldPriceOrg,
   parseYahooChart,
+  validateAppUrl,
+  validateNtfyServerUrl,
+  validateNtfyTopic,
 } from './check_metals.mjs';
 import { fetchSettledCloses, parseGoldApiCloses } from './self_learn.mjs';
 import {
@@ -422,4 +426,21 @@ assert.match(digestPayload.message, /China Gold vs US\/London: \+\$24\.50\/oz/);
 assert.match(digestPayload.message, /Gold Setup: Accumulation \/ Dip-Buy Zone/);
 assert.equal(digestPayload.click, 'https://pownda417-netizen.github.io/bullion-pulse/');
 
-console.log('All 20 Bullion Pulse monitor, Morning Digest, gold-api fallback, Quiet Hours, Regime/Backwardation/DXY alerts, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');
+// 21. Security validators (SSRF protection, HTTPS enforcement, topic sanitization & log redaction)
+assert.equal(validateNtfyServerUrl('https://ntfy.sh/'), 'https://ntfy.sh');
+assert.throws(() => validateNtfyServerUrl('http://ntfy.sh'), /https/i);
+assert.throws(() => validateNtfyServerUrl('https://169.254.169.254/latest'), /private|link-local/i);
+assert.throws(() => validateNtfyServerUrl('https://127.0.0.1/ntfy'), /private|loopback/i);
+assert.throws(() => validateNtfyServerUrl('https://10.0.0.5/ntfy'), /private/i);
+assert.throws(() => validateNtfyServerUrl('https://user:pass@ntfy.sh'), /credentials/i);
+assert.equal(validateNtfyTopic('https://ntfy.sh/my-gold_topic.1'), 'my-gold_topic.1');
+assert.equal(validateNtfyTopic('bad topic/with spaces'), '');
+assert.equal(validateNtfyTopic('../admin'), '');
+assert.equal(validateAppUrl('https://pownda417-netizen.github.io/bullion-pulse/'), 'https://pownda417-netizen.github.io/bullion-pulse/');
+assert.equal(validateAppUrl('javascript:alert(1)'), '');
+assert.equal(validateAppUrl('http://insecure.example.com'), '');
+assert.equal(validateAppUrl('https://127.0.0.1/app'), '');
+assert.equal(maskSecretTopic('my-secret-topic-123'), '[redacted-topic]');
+assert.equal(maskSecretTopic('dry-run-topic'), 'dry-run-topic');
+
+console.log('All 21 Bullion Pulse monitor, Security SSRF/Topic, Morning Digest, gold-api fallback, Quiet Hours, Regime/Backwardation/DXY alerts, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');

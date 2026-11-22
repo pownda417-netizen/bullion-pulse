@@ -52,19 +52,31 @@ function mcQuantile(sorted, q) {
 }
 
 self.onmessage = (event) => {
-  const { reqId, cacheKey, spot, horizonKey, spec, paths = 1500, params, seed } = event.data || {};
-  if (!Number.isFinite(spot) || !spec || !params) return;
+  const { reqId, cacheKey, spot, horizonKey, spec, paths: rawPaths = 1500, params, seed } = event.data || {};
+  if (!Number.isFinite(spot) || spot <= 0 || !spec || !params) return;
 
-  const totalDays = spec.tradingDays;
-  const steps = spec.steps;
+  const paths = Math.round(clampNum(Number(rawPaths) || 1500, 1, 5000));
+  const totalDays = clampNum(Number(spec.tradingDays) || 1, 1, 3650);
+  const steps = Math.round(clampNum(Number(spec.steps) || 1, 1, 400));
   const dt = totalDays / steps;
 
-  const rng = createMcRng(seed);
-  const { diffVol, dailyDrift, lambda, jumpMean, jumpSigma } = params;
-  const kappa = Math.exp(jumpMean + 0.5 * jumpSigma * jumpSigma) - 1;
-  const driftStep = (dailyDrift - 0.5 * diffVol * diffVol - lambda * kappa) * dt;
-  const stepDiffVol = diffVol * Math.sqrt(dt);
-  const stepLambda = lambda * dt;
+  const rng = createMcRng(Number.isFinite(Number(seed)) ? Number(seed) : 1);
+  const diffVol = Number(params.diffVol);
+  const dailyDrift = Number(params.dailyDrift);
+  const lambda = Number(params.lambda);
+  const jumpMean = Number(params.jumpMean);
+  const jumpSigma = Number(params.jumpSigma);
+  if (![diffVol, dailyDrift, lambda, jumpMean, jumpSigma].every(Number.isFinite)) return;
+  const safeDiffVol = clampNum(diffVol, 0, 5);
+  const safeDailyDrift = clampNum(dailyDrift, -0.5, 0.5);
+  const safeLambda = clampNum(lambda, 0, 10);
+  const safeJumpMean = clampNum(jumpMean, -1, 1);
+  const safeJumpSigma = clampNum(jumpSigma, 0, 2);
+
+  const kappa = Math.exp(safeJumpMean + 0.5 * safeJumpSigma * safeJumpSigma) - 1;
+  const driftStep = (safeDailyDrift - 0.5 * safeDiffVol * safeDiffVol - safeLambda * kappa) * dt;
+  const stepDiffVol = safeDiffVol * Math.sqrt(dt);
+  const stepLambda = safeLambda * dt;
 
   const terminalPrices = new Float64Array(paths);
   const maxPrices = new Float64Array(paths);
@@ -86,7 +98,7 @@ self.onmessage = (event) => {
       const nJumps = mcPoisson(stepLambda, rng);
       let jumpSum = 0;
       if (nJumps > 0) {
-        jumpSum = nJumps * jumpMean + Math.sqrt(nJumps) * jumpSigma * mcNormal(rng);
+        jumpSum = nJumps * safeJumpMean + Math.sqrt(nJumps) * safeJumpSigma * mcNormal(rng);
       }
       s = s * Math.exp(driftStep + stepDiffVol * z + jumpSum);
       if (s > hi) hi = s;

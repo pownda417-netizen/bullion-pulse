@@ -14,12 +14,18 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: read
+
 jobs:
   check-metals:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -57,11 +63,12 @@ jobs:
           ALERT_SHORT_SQUEEZE: ${{ vars.ALERT_SHORT_SQUEEZE || 'true' }}
           ALERT_DXY_SHOCK: ${{ vars.ALERT_DXY_SHOCK || 'true' }}
           APP_URL: ${{ vars.APP_URL }}
+          SEND_TEST: ${{ inputs.send_test }}
         run: |
           if [ -z "$NTFY_TOPIC" ]; then
             echo "NTFY_TOPIC secret is not configured yet — running dry-run check cleanly."
             node monitor/check_metals.mjs --dry-run
-          elif [ "${{ inputs.send_test }}" = "true" ]; then
+          elif [ "$SEND_TEST" = "true" ]; then
             node monitor/check_metals.mjs --test
           else
             node monitor/check_metals.mjs

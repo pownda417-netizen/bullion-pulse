@@ -1,9 +1,9 @@
-const CACHE_NAME = 'bullion-pulse-v34';
+const CACHE_NAME = 'bullion-pulse-v35';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=34',
-  './app.js?v=34',
+  './styles.css?v=35',
+  './app.js?v=35',
   './mc_worker.js',
   './tts_worker.js',
   './manifest.json',
@@ -11,6 +11,10 @@ const APP_SHELL = [
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'
 ];
+
+function isCacheableSameOriginResponse(response) {
+  return Boolean(response && response.ok && response.type === 'basic');
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -35,9 +39,18 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
-  const url = new URL(request.url);
-  // Always hit network directly for cross-origin live price feeds and ntfy requests
-  if (url.origin !== self.location.origin) {
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch {
+    return;
+  }
+
+  // Only handle http(s) same-origin requests; cross-origin live price feeds & ntfy hit network directly
+  if (
+    (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+    url.origin !== self.location.origin
+  ) {
     return;
   }
 
@@ -59,7 +72,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(new Request(request, { cache: 'no-store' }))
         .then((response) => {
-          if (response.ok) {
+          if (isCacheableSameOriginResponse(response)) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }
@@ -70,12 +83,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const isStaticAsset = /\.(?:png|svg|ico|webp|woff2?)$/i.test(p);
+  if (!isStaticAsset) return;
+
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
       cache.match(request).then((cached) => {
         if (cached) return cached;
         return fetch(request).then((response) => {
-          if (response.ok) {
+          if (isCacheableSameOriginResponse(response)) {
             cache.put(request, response.clone());
           }
           return response;

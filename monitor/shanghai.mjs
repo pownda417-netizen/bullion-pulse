@@ -94,7 +94,8 @@ function stripTags(html) {
 }
 
 export function parseSgeHomepageHtml(html) {
-  const rows = html.match(/<tr\b[\s\S]*?<\/tr>/gi) || [];
+  const safeHtml = typeof html === 'string' ? html.slice(0, 2 * 1024 * 1024) : '';
+  const rows = safeHtml.match(/<tr\b[\s\S]*?<\/tr>/gi) || [];
   const contracts = {};
   const benchmarks = {};
 
@@ -172,6 +173,7 @@ export async function fetchUsdCnyRate() {
   try {
     const res = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/CNY=X?range=5d&interval=1d', {
       headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(10000),
     });
     if (res.ok) {
       const json = await res.json();
@@ -186,6 +188,7 @@ export async function fetchUsdCnyRate() {
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/USD', {
       headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(10000),
     });
     if (res.ok) {
       const json = await res.json();
@@ -204,6 +207,7 @@ export async function fetchShanghaiMetals({ westernGoldUsdOz, westernSilverUsdOz
     fetchUsdCnyRate(),
     fetch('https://en.sge.com.cn/', {
       headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
+      signal: AbortSignal.timeout(12000),
     }).then((res) => {
       if (!res.ok) throw new Error(`SGE HTTP ${res.status}`);
       return res.text();

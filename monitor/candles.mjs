@@ -335,7 +335,10 @@ export function buildSeededMultiTimeframeCandles({
 
 export async function fetchYahooCandles(symbol, { range = '1d', interval = '5m', maxBars = 48 } = {}) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+  const res = await fetch(url, {
+    headers: { 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(12000),
+  });
   if (!res.ok) throw new Error(`Yahoo candles ${symbol} (${range}/${interval}) HTTP ${res.status}`);
   const raw = parseYahooCandles(await res.json(), 0);
   return aggregateCandles(raw, maxBars);

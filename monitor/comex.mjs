@@ -116,7 +116,7 @@ export function parseCmeBulletinText(text) {
  */
 export function parseVaultHtml(html, metal) {
   if (!html || typeof html !== 'string') return null;
-  const clean = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const clean = html.slice(0, 2 * 1024 * 1024).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
   const extractM = (patterns) => {
     for (const rx of patterns) {
@@ -170,7 +170,9 @@ export function parseVaultHtml(html, metal) {
  */
 export function parseCmeStocksBuffer(buf, metal = 'gold') {
   if (!buf) return null;
-  const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  const rawU8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  if (rawU8.byteLength > 5 * 1024 * 1024) return null;
+  const u8 = rawU8;
   const ascii = Buffer.from(u8).toString('latin1').replace(/[^\x20-\x7e\r\n]/g, ' ');
   const utf16 = Buffer.from(u8).toString('utf16le').replace(/[^\x20-\x7e\r\n]/g, ' ');
   const combined = `${ascii}\n${utf16}`.replace(/\s+/g, ' ');
@@ -337,7 +339,10 @@ async function fetchCftcMetalOi(metal) {
   const url =
     `https://publicreporting.cftc.gov/resource/72hh-3qpy.json` +
     `?cftc_contract_market_code=${code}&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=52`;
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+  const res = await fetch(url, {
+    headers: { 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(12000),
+  });
   if (!res.ok) throw new Error(`CFTC OI ${metal} HTTP ${res.status}`);
   return parseCftcOpenInterest(await res.json(), metal);
 }
@@ -350,6 +355,7 @@ async function fetchVaultMirror(metal) {
   try {
     const res = await fetch(cmeUrl, {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.ms-excel,*/*' },
+      signal: AbortSignal.timeout(15000),
     });
     if (res.ok) {
       const parsed = parseCmeStocksBuffer(await res.arrayBuffer(), metal);
@@ -366,7 +372,10 @@ async function fetchVaultMirror(metal) {
 
   for (const url of urls) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+      const res = await fetch(url, {
+        headers: { 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(12000),
+      });
       if (!res.ok) continue;
       const parsed = parseVaultHtml(await res.text(), metal);
       if (parsed) return parsed;
