@@ -1037,10 +1037,14 @@ body {
 .dot-up { background: var(--up); }
 .dot-down { background: var(--down); }
 
-.line-bull, .line-base, .line-bear, .line-fib {
+.line-bull, .line-base, .line-bear, .line-fib, .line-spot {
   width: 12px;
   height: 2px;
   border-radius: 2px;
+}
+
+.line-spot {
+  background: repeating-linear-gradient(90deg, var(--gold-bright) 0 4px, transparent 4px 7px);
 }
 
 .line-bull { background: var(--up); }
@@ -5177,6 +5181,10 @@ button.sector-chip.selected {
 .tt-news { color: #A78BFA; }
 
 /* #138 Highlight Reel Replay Bar & #227 Auto-Patterns Strip */
+.chart-replay-bar[hidden] {
+  display: none;
+}
+
 .chart-replay-bar {
   display: flex;
   align-items: center;
@@ -5418,6 +5426,24 @@ button.sector-chip.selected {
   font-size: 10.5px;
   color: var(--text-subtle);
   margin-top: 1px;
+}
+.vault-hub-countdown {
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vault-hub-countdown.is-closed {
+  color: var(--gold-bright);
+}
+.vault-hub-countdown.is-open {
+  color: var(--up);
 }
 
 /* #49 Session Replay */

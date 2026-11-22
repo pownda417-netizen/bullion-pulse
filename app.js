@@ -2653,6 +2653,11 @@ function renderChart() {
   if (!converted.length) return;
 
   const liveClose = allConverted[allConverted.length - 1].c;
+  const liveSpotVal = isRatio
+    ? (state.quotes.gold.price > 0 && state.quotes.silver.price > 0
+        ? state.quotes.gold.price / state.quotes.silver.price
+        : liveClose)
+    : (quote.price != null ? convertUnit(quote.price) : liveClose);
   const firstOpen = converted[0].o;
   const lastClose = converted[converted.length - 1].c;
   const isMinuteTf = tf === '15min' || tf === '1h';
@@ -2769,6 +2774,10 @@ function renderChart() {
 
   let min = Math.min(...converted.map((b) => b.l));
   let max = Math.max(...converted.map((b) => b.h));
+  if (win.isAtLiveEdge && Number.isFinite(liveSpotVal)) {
+    min = Math.min(min, liveSpotVal);
+    max = Math.max(max, liveSpotVal);
+  }
   if (!win.isCustom && !isMinuteTf) {
     min = Math.min(min, refLineVal);
     max = Math.max(max, refLineVal);
@@ -2797,10 +2806,16 @@ function renderChart() {
   max += rawSpan * 0.09;
   const axisSpan = max - min;
 
+  const desktopCanvas = w >= 720;
+  const spotDec = isRatio ? 1 : (Math.abs(liveSpotVal) >= 10000 ? 0 : 2);
+  const spotPillText = isRatio ? `${Number(liveSpotVal).toFixed(spotDec)}:1` : formatCompactMoney(liveSpotVal, spotDec);
+  ctx.font = `700 ${desktopCanvas ? 11 : 10}px "JetBrains Mono", monospace`;
+  const measuredSpotW = Math.ceil(ctx.measureText(spotPillText).width);
+
   const padTop = 12;
   const padBottom = win.isZoomed ? 25 : 20;
   const padLeft = 6;
-  const padRight = 64;
+  const padRight = Math.max(desktopCanvas ? 74 : 66, Math.min(106, measuredSpotW + 14));
   const plotW = w - padLeft - padRight;
   const plotH = h - padTop - padBottom;
 
@@ -2812,7 +2827,10 @@ function renderChart() {
   const yAt = (v) => padTop + (1 - (v - min) / (max - min)) * plotH;
 
   // Subtle horizontal gridlines + precision-adaptive price axis labels
-  const desktopCanvas = w >= 720;
+  const spotPillH = desktopCanvas ? 18 : 16;
+  const spotPillY = Number.isFinite(liveSpotVal)
+    ? clampNum(yAt(liveSpotVal), padTop + spotPillH / 2, padTop + plotH - spotPillH / 2)
+    : null;
   ctx.font = `500 ${desktopCanvas ? 11.5 : 10.5}px "JetBrains Mono", monospace`;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
@@ -2825,6 +2843,7 @@ function renderChart() {
     ctx.moveTo(padLeft, y);
     ctx.lineTo(padLeft + plotW, y);
     ctx.stroke();
+    if (spotPillY != null && Math.abs(y - spotPillY) < spotPillH * 0.72) continue;
     ctx.fillStyle = mutedCol;
     const yDec = isRatio
       ? (axisSpan < 3 ? 2 : 1)
@@ -3158,6 +3177,80 @@ function renderChart() {
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'center';
     ctx.fillText(`Now → ${fcLabel}`, (startX + endX) / 2, h - 2);
+  }
+
+  // Live Spot Price Horizontal Line & Right Y-Axis Highlight Pill (matches live spot card price)
+  if (Number.isFinite(liveSpotVal)) {
+    const inRange = liveSpotVal >= min && liveSpotVal <= max;
+    const rawSpotY = yAt(liveSpotVal);
+    const pillH = desktopCanvas ? 18 : 16;
+    const pillY = clampNum(rawSpotY, padTop + pillH / 2, padTop + plotH - pillH / 2);
+    const pillX = padLeft + plotW + 3;
+    const pillW = Math.max(40, w - pillX - 1);
+    const spotLineCol = isLightTheme
+      ? (sel === 'silver' ? '#475569' : '#B47B17')
+      : baseCol;
+    const pillTextCol = isLightTheme ? '#FFFFFF' : '#0B0D12';
+
+    ctx.save();
+    if (inRange) {
+      // Crisp horizontal dashed line spanning the entire chart at exact live spot price
+      ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = spotLineCol;
+      ctx.lineWidth = desktopCanvas ? 1.35 : 1.15;
+      ctx.globalAlpha = 0.88;
+      ctx.beginPath();
+      ctx.moveTo(padLeft, rawSpotY);
+      ctx.lineTo(padLeft + plotW, rawSpotY);
+      ctx.stroke();
+
+      // Highlight dot at latest candle when live edge is visible
+      if (win.isAtLiveEdge) {
+        const lastCx = xCandle(converted.length - 1);
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath();
+        ctx.arc(lastCx, rawSpotY, 6.5, 0, Math.PI * 2);
+        ctx.fillStyle = spotLineCol;
+        ctx.fill();
+
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(lastCx, rawSpotY, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = spotLineCol;
+        ctx.fill();
+      }
+    }
+
+    // Solid right Y-axis live price tag pill (with ▲/▼ indicator if panned away from spot range)
+    const displayPillTxt = inRange
+      ? spotPillText
+      : `${liveSpotVal > max ? '▲' : '▼'} ${spotPillText}`;
+    ctx.setLineDash([]);
+    ctx.globalAlpha = inRange ? 1 : 0.78;
+    const r = 4;
+    const px = pillX;
+    const py = pillY - pillH / 2;
+    ctx.beginPath();
+    ctx.moveTo(px + r, py);
+    ctx.lineTo(px + pillW - r, py);
+    ctx.quadraticCurveTo(px + pillW, py, px + pillW, py + r);
+    ctx.lineTo(px + pillW, py + pillH - r);
+    ctx.quadraticCurveTo(px + pillW, py + pillH, px + pillW - r, py + pillH);
+    ctx.lineTo(px + r, py + pillH);
+    ctx.quadraticCurveTo(px, py + pillH, px, py + pillH - r);
+    ctx.lineTo(px, py + r);
+    ctx.quadraticCurveTo(px, py, px + r, py);
+    ctx.closePath();
+    ctx.fillStyle = spotLineCol;
+    ctx.fill();
+
+    ctx.font = `700 ${desktopCanvas ? 10.5 : 9.5}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = pillTextCol;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(displayPillTxt, px + pillW / 2, pillY + 0.4, pillW - 4);
+    ctx.restore();
   }
 
   // Optional RSI(14) oscillator sub-chart (computed on full series first so zooming never distorts momentum)
@@ -5695,7 +5788,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=43', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=44', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -9109,12 +9202,14 @@ function wireEvents() {
     savePersistedState();
   });
 
-  // Chart Zoom & Pan toolbar controls
+  // Chart Zoom & Pan toolbar controls (stay anchored to live candle when at live edge)
   document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
-    zoomChartBy(0.7, 0.72);
+    const anchor = state.chartGeom?.isAtLiveEdge ? 1.0 : 0.5;
+    zoomChartBy(0.7, anchor);
   });
   document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
-    zoomChartBy(1.42, 0.72);
+    const anchor = state.chartGeom?.isAtLiveEdge ? 1.0 : 0.5;
+    zoomChartBy(1.42, anchor);
   });
   document.getElementById('btn-zoom-reset')?.addEventListener('click', () => {
     resetChartZoom();
@@ -9868,7 +9963,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 43,
+      version: 44,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),

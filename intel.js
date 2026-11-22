@@ -14,6 +14,8 @@
     radarMetal: 'gold',
     whisperCpi: 0,
     whisperFed: 0,
+    vaultCountdowns: {},
+    vaultMapLastRenderMin: -1,
     initialized: false,
   };
 
@@ -219,9 +221,14 @@
       if (hub.id === 'ny') {
         const isMaint = t.mins >= 17 * 60 && t.mins < 18 * 60;
         const isCore = isWeekday && t.mins >= 8 * 60 + 20 && t.mins < 13 * 60 + 30;
-        if (isCore) return { active: true, timeStr: t.timeStr, status: 'Open · Busiest' };
-        if (isMaint) return { active: false, timeStr: t.timeStr, status: 'Daily Break' };
-        return { active: true, timeStr: t.timeStr, status: 'Open · After-Hours' };
+        const isAfternoon = isWeekday && t.mins >= 13 * 60 + 30 && t.mins < 17 * 60;
+        if (isCore) return { active: true, subMode: 'core', timeStr: t.timeStr, status: 'Open · Busiest' };
+        if (isAfternoon) return { active: true, subMode: 'core', timeStr: t.timeStr, status: 'Open · Afternoon' };
+        if (isMaint) return { active: false, subMode: 'break', timeStr: t.timeStr, status: 'Daily Break' };
+        if (t.wd === 0 && t.mins >= 18 * 60) {
+          return { active: true, subMode: 'electronic', timeStr: t.timeStr, status: 'Open · Sunday Open' };
+        }
+        return { active: true, subMode: 'electronic', timeStr: t.timeStr, status: 'Open · Overnight' };
       }
       if (hub.id === 'lon') {
         const active = isWeekday && t.mins >= 8 * 60 && t.mins < 16 * 60 + 30;
@@ -239,6 +246,110 @@
       return { active, timeStr: t.timeStr, status: active ? 'Open Now' : 'Closed' };
     } catch {
       return { active: false, timeStr: '--:--', status: 'Closed' };
+    }
+  }
+
+  function findNextHubTransition(hub, nowMs, predicate) {
+    const baseMin = Math.floor(nowMs / 60000);
+    const stepMins = 30;
+    const maxSteps = 160; // Up to 80 hours ahead (covers full weekend + next open for all hubs)
+    let loMin = baseMin;
+    let hiMin = null;
+    let hiState = null;
+
+    for (let s = 1; s <= maxSteps; s++) {
+      const probeMin = baseMin + s * stepMins;
+      const d = new Date(probeMin * 60000);
+      const st = getHubClockState(hub, d, isGlobalBullionWeekend(d));
+      if (predicate(st)) {
+        hiMin = probeMin;
+        hiState = st;
+        break;
+      }
+      loMin = probeMin;
+    }
+    if (hiMin == null) return null;
+
+    while (hiMin - loMin > 1) {
+      const midMin = Math.floor((loMin + hiMin) / 2);
+      const dMid = new Date(midMin * 60000);
+      const stMid = getHubClockState(hub, dMid, isGlobalBullionWeekend(dMid));
+      if (predicate(stMid)) {
+        hiMin = midMin;
+        hiState = stMid;
+      } else {
+        loMin = midMin;
+      }
+    }
+    return { targetMs: hiMin * 60000, nextState: hiState };
+  }
+
+  function formatMarketCountdown(ms) {
+    const totalSec = Math.max(0, Math.ceil(ms / 1000));
+    const days = Math.floor(totalSec / 86400);
+    const hrs = Math.floor((totalSec % 86400) / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    if (days >= 1) {
+      return mins > 0 ? `${days}d ${hrs}h ${mins}m` : `${days}d ${hrs}h`;
+    }
+    if (hrs >= 1) {
+      return `${hrs}h ${mins}m`;
+    }
+    if (mins >= 1) {
+      return `${mins}m ${String(secs).padStart(2, '0')}s`;
+    }
+    return `${Math.max(1, secs)}s`;
+  }
+
+  function getHubCountdownMeta(hub, clock, nowMs) {
+    if (!clock.active) {
+      const hit = findNextHubTransition(hub, nowMs, (st) => st.active);
+      return hit ? { verb: 'Opens in', targetMs: hit.targetMs, isOpening: true } : null;
+    }
+    if (hub.id === 'ny' && clock.subMode === 'electronic') {
+      const hit = findNextHubTransition(hub, nowMs, (st) => st.subMode === 'core');
+      return hit ? { verb: 'Main open in', targetMs: hit.targetMs, isOpening: true } : null;
+    }
+    const hit = findNextHubTransition(hub, nowMs, (st) => !st.active);
+    if (!hit) return null;
+    const nextStatus = hit.nextState?.status || '';
+    const verb =
+      nextStatus === 'Lunch Break'
+        ? 'Lunch in'
+        : nextStatus === 'Daily Break'
+          ? 'Break in'
+          : 'Closes in';
+    return { verb, targetMs: hit.targetMs, isOpening: false };
+  }
+
+  function tickVaultMapCountdowns() {
+    const gridEl = document.getElementById('vault-hub-grid');
+    if (!gridEl) return;
+    const now = new Date();
+    const nowMs = now.getTime();
+    const curMin = Math.floor(nowMs / 60000);
+    let needsFullRender = false;
+
+    for (const hub of GLOBAL_HUBS) {
+      const info = ui.vaultCountdowns[hub.id];
+      if (!info || !info.targetMs) continue;
+      const rem = info.targetMs - nowMs;
+      if (rem <= 0) {
+        needsFullRender = true;
+        break;
+      }
+      const el = gridEl.querySelector(`.vault-hub-countdown[data-hub-id="${hub.id}"]`);
+      if (!el) continue;
+      const nextText = `${info.verb} ${formatMarketCountdown(rem)}`;
+      if (el.dataset.rawCountdown !== nextText) {
+        el.dataset.rawCountdown = nextText;
+        el.textContent = nextText;
+      }
+    }
+
+    if (needsFullRender || (ui.vaultMapLastRenderMin >= 0 && curMin !== ui.vaultMapLastRenderMin)) {
+      renderGlobalVaultMap();
     }
   }
 
@@ -264,15 +375,26 @@
     if (!svgWrap || !gridEl) return;
 
     const now = new Date();
+    const nowMs = now.getTime();
+    ui.vaultMapLastRenderMin = Math.floor(nowMs / 60000);
     const isGlobalWeekend = isGlobalBullionWeekend(now);
     const { gold: goldUsd } = b.getCanonicalSpotPrices();
     const statuses = GLOBAL_HUBS.map((h) => {
       const pt = projectEquirectangular(h.lat, h.lon);
+      const clock = getHubClockState(h, now, isGlobalWeekend);
+      const countdown = getHubCountdownMeta(h, clock, nowMs);
+      if (countdown) ui.vaultCountdowns[h.id] = countdown;
+      else delete ui.vaultCountdowns[h.id];
+      const countdownText = countdown
+        ? `${countdown.verb} ${formatMarketCountdown(countdown.targetMs - nowMs)}`
+        : '';
       return {
         ...h,
         x: pt.x,
         y: pt.y,
-        clock: getHubClockState(h, now, isGlobalWeekend),
+        clock,
+        countdown,
+        countdownText,
         localPrice: formatHubPrice(h, goldUsd, b.state.fxRates, b.CURRENCY_META),
       };
     });
@@ -347,6 +469,7 @@
           </div>
           <div class="vault-hub-price">${b.escapeHtml(h.localPrice)}</div>
           <div class="vault-hub-sub">${b.escapeHtml(h.tag)} · ${b.escapeHtml(h.clock.status)}</div>
+          ${h.countdownText ? `<div class="vault-hub-countdown ${h.clock.active ? 'is-open' : 'is-closed'}" data-hub-id="${b.escapeHtml(h.id)}" data-raw-countdown="${b.escapeHtml(h.countdownText)}">${b.escapeHtml(h.countdownText)}</div>` : ''}
         </div>`
       )
       .join('');
@@ -359,6 +482,9 @@
       } else if (byId.ny?.clock.status === 'Daily Break') {
         footEl.textContent =
           'Daily 5:00–6:00 PM ET market break: trading is very light, so prices can briefly jump or dip more easily.';
+      } else if (byId.ny?.clock.status === 'Open · Sunday Open' && openCount === 1) {
+        footEl.textContent =
+          'Global Gold & Silver trading just reopened for the week (Sunday 6:00 PM ET / 5:00 PM CT) — live electronic trading is active ahead of Asia & Shanghai.';
       } else if (byId.lon?.clock.active && byId.ny?.clock.status === 'Open · Busiest') {
         footEl.textContent =
           'Both London and New York are open right now — busiest trading hours and most reliable pricing of the day.';
@@ -1774,11 +1900,11 @@
       }
     });
     setInterval(() => {
-      const st = B()?.state;
-      if (st?.activeView === 'markets' && (st?.settings?.subViews?.markets || 'live') === 'global') {
-        renderGlobalVaultMap();
+      const mapPanel = document.getElementById('panel-global-vault-map');
+      if (mapPanel && mapPanel.offsetParent !== null) {
+        tickVaultMapCountdowns();
       }
-    }, 30000);
+    }, 1000);
   }
 
   window.BullionIntel = {

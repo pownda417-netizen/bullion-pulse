@@ -1347,6 +1347,25 @@
         })[l];
       },
     ],
+    // Market Hub Open / Close Countdowns ("Opens in 1h 34m", "Main open in 13h 54m", "Closes in 2h 10m", "Break in 3h 20m", "Lunch in 45m 12s")
+    [
+      /^(Opens in|Main open in|Closes in|Break in|Lunch in) (.+)$/,
+      (m, l) => {
+        const prefix = {
+          'Opens in': { th: 'เปิดใน', lo: 'ເປີດໃນ', es: 'Abre en', zh: '距开盘', ja: '開場まで', hi: 'खुलने में' },
+          'Main open in': { th: 'รอบหลักเปิดใน', lo: 'ຮອບຫຼັກເປີດໃນ', es: 'Sesión principal en', zh: '主盘开盘', ja: '本取引まで', hi: 'मुख्य सत्र में' },
+          'Closes in': { th: 'ปิดใน', lo: 'ປິດໃນ', es: 'Cierra en', zh: '距收盘', ja: '閉場まで', hi: 'बंद होने में' },
+          'Break in': { th: 'พักตลาดใน', lo: 'ພັກຕະຫຼາດໃນ', es: 'Pausa en', zh: '距休市', ja: '休止まで', hi: 'ब्रेक में' },
+          'Lunch in': { th: 'พักเที่ยงใน', lo: 'ພັກທ່ຽງໃນ', es: 'Pausa almuerzo en', zh: '距午休', ja: '昼休みまで', hi: 'लंच ब्रेक में' },
+        }[m[1]][l];
+        const dur = m[2]
+          .replace(/(\d+)d\b/g, (_, n) => ({ th: `${n}วัน`, lo: `${n}ມື້`, es: `${n}d`, zh: `${n}天`, ja: `${n}日`, hi: `${n}दिन` })[l])
+          .replace(/(\d+)h\b/g, (_, n) => ({ th: `${n}ชม.`, lo: `${n}ຊມ.`, es: `${n}h`, zh: `${n}小时`, ja: `${n}時間`, hi: `${n}घं` })[l])
+          .replace(/(\d+)m\b/g, (_, n) => ({ th: `${n}น.`, lo: `${n}ນ.`, es: `${n}m`, zh: `${n}分`, ja: `${n}分`, hi: `${n}मि` })[l])
+          .replace(/(\d+)s\b/g, (_, n) => ({ th: `${n}วิ`, lo: `${n}ວິ`, es: `${n}s`, zh: `${n}秒`, ja: `${n}秒`, hi: `${n}से` })[l]);
+        return `${prefix} ${dur}`;
+      },
+    ],
     // Chart Zoom pill ("2.4× · 15 bars") & Tooltip Swing / vs Live row
     [
       /^([\d.]+[×%]) · (\d+) bars$/,
@@ -2133,7 +2152,12 @@
     'slightly bearish': ['เอนเอียงลง', 'ເອນອຽງລົງ', 'levemente bajista', '小幅看跌', 'やや弱気', 'हल्की मंदी'],
     '⋮ menu': ['เมนู ⋮', 'ເມນູ ⋮', 'menú ⋮', '⋮ 菜单', '⋮ メニュー', '⋮ मेनू'],
     '1m Live': ['สด 1 นาที', 'ສົດ 1 ນາທີ', '1m Vivo', '1分实时', '1分ライブ', '1मि लाइव'],
+    'Live Spot': ['ราคาสดตอนนี้', 'ລາຄາສົດຕອນນີ້', 'Precio Actual', '当前现货价', '現在スポット', 'लाइव स्पॉट'],
     'Scroll or pinch to zoom · Drag to pan': ['เลื่อนลูกกลิ้งหรือถ่างนิ้วเพื่อซูม · ลากเพื่อเลื่อนดู', 'ເລື່ອນ ຫຼື ຖ່າງນິ້ວເພື່ອຊູມ · ລາກເພື່ອເລື່ອນເບິ່ງ', 'Desplaza o pellizca para acercar · Arrastra para mover', '滚轮或双指缩放 · 拖动查看历史', 'スクロール・ピンチで拡大縮小・ドラッグで移動', 'ज़ूम के लिए स्क्रॉल/पिंच करें · खिसकाने को खींचें'],
+    'Open · Sunday Open': ['เปิด · รอบคืนวันอาทิตย์', 'ເປີດ · ຮອບຄືນວັນອາທິດ', 'Abierto · Apertura Dominical', '开盘 · 周日早盘', '開場・日曜オープン', 'खुला · रविवार सत्र'],
+    'Open · Overnight': ['เปิด · รอบกลางคืน', 'ເປີດ · ຮອບກາງຄືນ', 'Abierto · Nocturno', '开盘 · 夜盘电子盘', '開場・夜間取引', 'खुला · रात्रि सत्र'],
+    'Open · Afternoon': ['เปิด · รอบบ่าย', 'ເປີດ · ຮອບບ່າຍ', 'Abierto · Tarde', '开盘 · 午盘', '開場・午後', 'खुला · दोपहर सत्र'],
+    'Global Gold & Silver trading just reopened for the week (Sunday 6:00 PM ET / 5:00 PM CT) — live electronic trading is active ahead of Asia & Shanghai.': ['ตลาดทองคำและเงินโลกเพิ่งเปิดรับสัปดาห์ใหม่ (วันอาทิตย์ 18:00 น. ET / 17:00 น. CT) — การซื้อขายอิเล็กทรอนิกส์เปิดสดแล้วก่อนฝั่งเอเชียและเซี่ยงไฮ้เปิด', 'ຕະຫຼາດຄຳ ແລະ ເງິນໂລກຫາກໍເປີດສຳລັບອາທິດໃໝ່ (ວັນອາທິດ 18:00 ET) — ການຊື້ຂາຍອີເລັກໂທຣນິກເປີດສົດແລ້ວ', 'El comercio global de oro y plata acaba de reabrir (domingo 6:00 PM ET / 5:00 PM CT) — negociación electrónica activa antes de Asia y Shanghái.', '全球黄金白银已正式开启本周交易（美东周日18:00 / 中部17:00）— 电子盘已实时开盘，静待亚洲与上海市场接力。', '世界の金・銀市場が今週の取引を再開しました（米国東部日曜18:00）— アジア・上海に先駆けて電子取引が稼働中です。', 'वैश्विक सोना-चांदी व्यापार सप्ताह के लिए फिर खुल गया है (रविवार 6:00 PM ET / 5:00 PM CT) — एशिया और शंघाई से पहले लाइव इलेक्ट्रॉनिक ट्रेडिंग सक्रिय है।'],
     'No alerts triggered yet. Tap "Simulate Move" or "Simulate Shanghai Premium" above to test.': ['ยังไม่มีการแจ้งเตือน แตะ "จำลองราคาขยับแรง" ด้านบนเพื่อดูตัวอย่าง', 'ຍັງບໍ່ມີການແຈ້ງເຕືອນ ແຕະປຸ່ມທົດສອບດ້ານເທິງເພື່ອເບິ່ງຕົວຢ່າງ', 'Aún no hay alertas. Toca los botones de prueba arriba.', '暂无提醒记录。点击上方模拟按钮进行测试。', 'まだ通知はありません。上のテストボタンで確認できます。', 'अभी कोई अलर्ट नहीं। ऊपर टेस्ट बटन दबाकर देखें।'],
   });
 })();
