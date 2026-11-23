@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-23T01:16:50.528Z",
+  "updatedAt": "2026-11-23T02:38:45.533Z",
   "liveFetched": true,
   "oiLive": true,
   "vaultLive": true,
@@ -27,7 +27,7 @@
     "jumpBoost": 0.11,
     "regime": "Balanced",
     "date": "2026-11-17",
-    "source": "Public COMEX Mirror"
+    "source": "CFTC Live OI + Public COMEX Mirror"
   },
   "silver": {
     "metal": "silver",
