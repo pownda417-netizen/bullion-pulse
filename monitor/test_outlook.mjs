@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  analyzeMarketGaps,
   buildOutlook,
   classifyHeadline,
   classifyHeadlines,
@@ -935,4 +936,62 @@ assert.equal(parsedEvil[0].url, 'https://reuters.com/markets/gold');
 assert.equal(parsedEvil[1].url, '', 'javascript: link must be stripped at RSS ingestion');
 assert.equal(parsedEvil[2].url, '', 'data: link must be stripped at RSS ingestion');
 
-console.log('All 25 Bullion Pulse suites (Security RSS/URL XSS Defense, Asymmetric Regime Jump-Diffusion, Au/Ag Ratio Z-Score/Swap, Setup Quality, Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, FRED, COT, Miners, Shanghai & Accuracy) passed!');
+// 26. Market Gap Analyzer (Bullish Gap Up, Bearish Gap Down, Fill Progress, and Forecast Score Boost)
+const tBase = Date.UTC(2026, 10, 20, 21, 55); // Fri close
+const tSunOpen = Date.UTC(2026, 10, 22, 23, 0); // Sun open (weekend gap!)
+const gapUpBars = [
+  { t: tBase, o: 3532, h: 3541, l: 3530, c: 3539 },
+  { t: tSunOpen, o: 3572, h: 3592, l: 3572, c: 3588 },
+  { t: tSunOpen + 300000, o: 3588, h: 3605, l: 3586, c: 3602 },
+];
+const gUpRes = analyzeMarketGaps(gapUpBars, 3602, 'gold', '1d');
+assert.equal(gUpRes.bias, 'bullish');
+assert.equal(gUpRes.status, 'Gap Up · Bullish ↑');
+assert.equal(gUpRes.primary.kind, 'Weekend Gap');
+assert.equal(gUpRes.primary.fillTarget, 3539);
+assert.equal(gUpRes.primary.fillPct, 0);
+assert.ok(gUpRes.primary.moveToFillUsd < -60, 'Unfilled Gap Up must require a negative drop to fill');
+assert.ok(gUpRes.predictionBoost > 0.05, 'Unfilled Gap Up must boost bullish prediction');
+
+// Partial fill (~50%) reduces fill gap & prediction boost proportionally
+const gHalfRes = analyzeMarketGaps(
+  [...gapUpBars, { t: tSunOpen + 600000, o: 3602, h: 3602, l: 3555.5, c: 3560 }],
+  3560,
+  'gold',
+  '1d'
+);
+assert.ok(gHalfRes.primary.fillPct >= 45 && gHalfRes.primary.fillPct <= 55, `Expected ~50% fill, got ${gHalfRes.primary.fillPct}`);
+assert.ok(gHalfRes.predictionBoost > 0 && gHalfRes.predictionBoost < gUpRes.predictionBoost, 'Partial fill must decay boost cleanly');
+
+const gapDnBars = [
+  { t: tBase, o: 42.2, h: 42.4, l: 41.9, c: 42.1 },
+  { t: tSunOpen, o: 41.1, h: 41.2, l: 40.6, c: 40.7 },
+];
+const sDnRes = analyzeMarketGaps(gapDnBars, 40.7, 'silver', '1d');
+assert.equal(sDnRes.bias, 'bearish');
+assert.equal(sDnRes.status, 'Gap Down · Bearish ↓');
+assert.equal(sDnRes.primary.fillTarget, 42.1);
+assert.ok(sDnRes.primary.moveToFillUsd > 1.3, 'Unfilled Gap Down must require a positive rally to fill');
+assert.ok(sDnRes.predictionBoost < -0.05, 'Unfilled Gap Down must apply bearish drag to prediction');
+
+const gapFilledBars = [
+  ...gapUpBars,
+  { t: tSunOpen + 600000, o: 3602, h: 3602, l: 3536, c: 3544 },
+];
+const gFilledRes = analyzeMarketGaps(gapFilledBars, 3544, 'gold', '1d');
+assert.equal(gFilledRes.primary.isFilled, true);
+assert.equal(gFilledRes.primary.fillPct, 100);
+assert.equal(gFilledRes.predictionBoost, 0, 'Filled gap must no longer bias prediction');
+
+const baseNoGapOut = buildOutlook({ spotGold: 3602, spotSilver: 40.7, rawHeadlines: [] });
+const withGapOut = buildOutlook({
+  spotGold: 3602,
+  spotSilver: 40.7,
+  rawHeadlines: [],
+  candles: { gold: gapUpBars, silver: gapDnBars },
+});
+assert.ok(withGapOut.gold.score > baseNoGapOut.gold.score, 'Unfilled Gold Gap Up must lift Gold forecast score');
+assert.ok(withGapOut.silver.score < baseNoGapOut.silver.score, 'Unfilled Silver Gap Down must lower Silver forecast score');
+assert.ok(withGapOut.marketGaps?.gold?.primary && withGapOut.marketGaps?.silver?.primary, 'buildOutlook must attach marketGaps');
+
+console.log('All 26 Bullion Pulse suites (Market Gap Analyzer & Predictions, Security RSS/URL XSS Defense, Asymmetric Regime Jump-Diffusion, Au/Ag Ratio Z-Score/Swap, Setup Quality, Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, FRED, COT, Miners, Shanghai & Accuracy) passed!');

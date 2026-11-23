@@ -489,8 +489,10 @@ async function main() {
   const candlesPath = process.env.CANDLES_FILE || path.resolve('data/candles.json');
   const candles1dPath = path.resolve(path.dirname(candlesPath), 'candles_1d.json');
   const candlesHistPath = path.resolve(path.dirname(candlesPath), 'candles_hist.json');
+  let latestCandles = null;
   try {
     const candles = await fetchMetalMultiTimeframeCandles();
+    latestCandles = candles;
     const { intraday1d, historical } = splitCandlePayloads(candles);
     await fs.mkdir(path.dirname(candlesPath), { recursive: true });
     await Promise.all([
@@ -599,6 +601,7 @@ async function main() {
     comex,
     proSignals,
     institutionalSignals,
+    candles: latestCandles,
     learnedWeights,
     coneMultiplier,
   });

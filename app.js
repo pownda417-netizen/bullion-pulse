@@ -113,6 +113,7 @@ const DEFAULT_SETTINGS = {
   showRsi: false,
   showMyBuys: false,
   showPatterns: false,
+  showGaps: true,
   showNewsDots: false,
   newsFilter: 'all', // 'all' | 'signal' | 'nohype'
   forecastJournal: [],
@@ -470,6 +471,7 @@ function sanitizePersistedSettings(raw) {
     showRsi: Boolean(s.showRsi),
     showMyBuys: Boolean(s.showMyBuys),
     showPatterns: Boolean(s.showPatterns),
+    showGaps: s.showGaps !== undefined ? Boolean(s.showGaps) : DEFAULT_SETTINGS.showGaps,
     showNewsDots: Boolean(s.showNewsDots),
     newsFilter: s.newsFilter === 'signal' || s.newsFilter === 'nohype' ? s.newsFilter : 'all',
     forecastJournal: sanitizeForecastJournal(s.forecastJournal),
@@ -2185,6 +2187,7 @@ async function ensureHistoricalCandlesLoaded() {
         state.timeframes = { ...(state.timeframes || {}), ...data.timeframes };
         histCandlesLoaded = true;
         renderChart();
+        renderOutlook();
       }
     } catch {
       // Fallback multi-timeframe generator remains active offline
@@ -2254,6 +2257,7 @@ async function fetchCandlesData() {
       updateActive1mCandle('silver', state.quotes.silver.price, state.quotes.silver.prevClose);
     }
     renderChart();
+    renderOutlook();
     const activeTf = state.settings.chartTimeframe || '1d';
     const needsHistBridge = (Array.isArray(g1d) && g1d.length < 48) || (Array.isArray(s1d) && s1d.length < 48);
     if ((!INTRADAY_TIMEFRAMES.has(activeTf) || needsHistBridge) && !histCandlesLoaded) {
@@ -2696,6 +2700,11 @@ function renderChart() {
     patBtn.classList.toggle('active', !!state.settings.showPatterns);
     patBtn.setAttribute('aria-pressed', String(!!state.settings.showPatterns));
   }
+  const gapsBtn = document.getElementById('btn-toggle-gaps');
+  if (gapsBtn) {
+    gapsBtn.classList.toggle('active', !!state.settings.showGaps);
+    gapsBtn.setAttribute('aria-pressed', String(!!state.settings.showGaps));
+  }
   const newsPinBtn = document.getElementById('btn-toggle-newsdots');
   if (newsPinBtn) {
     newsPinBtn.classList.toggle('active', !!state.settings.showNewsDots);
@@ -2719,6 +2728,8 @@ function renderChart() {
   if (buyLegend) buyLegend.hidden = !state.settings.showMyBuys || isRatio;
   const patLegend = document.getElementById('legend-patterns');
   if (patLegend) patLegend.hidden = !state.settings.showPatterns;
+  const gapsLegend = document.getElementById('legend-gaps');
+  if (gapsLegend) gapsLegend.hidden = !state.settings.showGaps;
   const newsLegend = document.getElementById('legend-newsdots');
   if (newsLegend) newsLegend.hidden = !state.settings.showNewsDots;
   const rsiWrap = document.getElementById('rsi-pane-wrap');
@@ -2972,6 +2983,29 @@ function renderChart() {
     ctx.lineTo(padLeft + candleAreaW, refY);
     ctx.stroke();
     ctx.restore();
+  }
+
+  // Market Gap Fill Zones shaded softly behind candlesticks
+  const chartGapAnalysis =
+    state.settings.showGaps && converted.length >= 2
+      ? analyzeClientMarketGaps(converted, liveSpotVal, isRatio ? 'ratio' : sel, tf)
+      : null;
+  if (chartGapAnalysis?.gaps?.length) {
+    for (const gp of chartGapAnalysis.gaps) {
+      const x1 = Math.max(padLeft, xCandle(Math.max(0, gp.idx - 1)) + stepX * 0.35);
+      const x2 = gp.isFilled && gp.filledAtIdx != null
+        ? Math.min(padLeft + candleAreaW, xCandle(gp.filledAtIdx) + stepX * 0.4)
+        : padLeft + candleAreaW;
+      const yTop = clampNum(yAt(gp.zoneHigh), padTop, padTop + plotH);
+      const yBot = clampNum(yAt(gp.zoneLow), padTop, padTop + plotH);
+      const bandH = Math.max(3, yBot - yTop);
+      ctx.save();
+      ctx.fillStyle = gp.dir === 'up'
+        ? (gp.isFilled ? 'rgba(34, 197, 94, 0.06)' : 'rgba(34, 197, 94, 0.16)')
+        : (gp.isFilled ? 'rgba(239, 68, 68, 0.06)' : 'rgba(239, 68, 68, 0.16)');
+      ctx.fillRect(x1, yTop, Math.max(6, x2 - x1), bandH);
+      ctx.restore();
+    }
   }
 
   // Optional Fibonacci Retracement Overlay (Golden Pocket + lines behind candles)
@@ -3433,6 +3467,85 @@ function renderChart() {
     patStripEl.hidden = true;
   }
 
+  // Market Gap Target Lines, Canvas Pill Labels & Plain-English Gap Strip
+  const gapsStripEl = document.getElementById('chart-gaps-strip');
+  const gapsByIdx = new Map();
+  if (chartGapAnalysis?.gaps?.length) {
+    const gapDec = isRatio ? 2 : (liveSpotVal >= 500 ? 2 : 2);
+    const fmtGapAmt = (v) =>
+      isRatio ? `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}` : `${v >= 0 ? '+' : '−'}${formatMoney(Math.abs(v), gapDec)}`;
+    for (const gp of chartGapAnalysis.gaps) {
+      gapsByIdx.set(gp.idx, gp);
+      const x1 = Math.max(padLeft, xCandle(Math.max(0, gp.idx - 1)) + stepX * 0.35);
+      const x2 = gp.isFilled && gp.filledAtIdx != null
+        ? Math.min(padLeft + candleAreaW, xCandle(gp.filledAtIdx) + stepX * 0.4)
+        : padLeft + candleAreaW;
+      const fillY = yAt(gp.fillTarget);
+      if (fillY < padTop + 4 || fillY > padTop + plotH - 4) continue;
+      const col = gp.dir === 'up' ? '#22C55E' : '#F43F5E';
+      ctx.save();
+      ctx.strokeStyle = col;
+      ctx.globalAlpha = gp.isFilled ? 0.42 : 0.9;
+      ctx.lineWidth = gp.isFilled ? 1.0 : 1.35;
+      ctx.setLineDash(gp.isFilled ? [2, 4] : [6, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x1, fillY);
+      ctx.lineTo(x2, fillY);
+      ctx.stroke();
+
+      if (!gp.isFilled || gp === chartGapAnalysis.primary) {
+        const tagTxt = gp.isFilled
+          ? `${gp.dir === 'up' ? 'Gap Up' : 'Gap Down'} Filled ✓`
+          : `${gp.dir === 'up' ? 'Gap Up' : 'Gap Down'} · Fill ${fmtChartVal(gp.fillTarget, gapDec)}`;
+        ctx.setLineDash([]);
+        ctx.font = `700 ${desktopCanvas ? 9.5 : 8.5}px "JetBrains Mono", monospace`;
+        const tw = ctx.measureText(tagTxt).width;
+        const tagW = tw + 10;
+        const tagH = 14;
+        const tagX = clampNum(x1 + 4, padLeft + 2, padLeft + candleAreaW - tagW - 2);
+        const tagY = gp.dir === 'up'
+          ? Math.min(padTop + plotH - tagH - 2, fillY + 3)
+          : Math.max(padTop + 2, fillY - tagH - 3);
+        ctx.globalAlpha = 0.94;
+        ctx.fillStyle = isLightTheme ? 'rgba(255,255,255,0.93)' : 'rgba(13,14,17,0.9)';
+        ctx.fillRect(tagX, tagY, tagW, tagH);
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(tagX, tagY, tagW, tagH);
+        ctx.fillStyle = col;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tagTxt, tagX + 5, tagY + tagH / 2 + 0.3);
+      }
+      ctx.restore();
+    }
+
+    if (gapsStripEl) {
+      const p = chartGapAnalysis.primary;
+      if (p && !p.isFilled) {
+        const dirCls = p.dir === 'up' ? 'up' : 'down';
+        const dirTitle = p.dir === 'up' ? 'Gap Up (Bullish Bias)' : 'Gap Down (Bearish Bias)';
+        const moveVerb = p.dir === 'up' ? 'drop' : 'rally';
+        const moveAmt = fmtGapAmt(p.moveToFillUsd);
+        const movePct = `${p.moveToFillPct >= 0 ? '+' : '−'}${Math.abs(p.moveToFillPct).toFixed(2)}%`;
+        const gapAmt = fmtGapAmt(p.gapUsd);
+        const gapPct = `${p.gapPct >= 0 ? '+' : '−'}${Math.abs(p.gapPct).toFixed(2)}%`;
+        gapsStripEl.hidden = false;
+        gapsStripEl.innerHTML =
+          `<span class="gap-pill ${dirCls}">${escapeHtml(`${dirTitle} · ${p.kind} ${gapAmt} (${gapPct})`)}</span>` +
+          `<span class="gap-pill neutral">${escapeHtml(`${p.fillPct}% filled · Needs ${moveAmt} (${movePct}) ${moveVerb} to ${fmtChartVal(p.fillTarget, gapDec)} to fill`)}</span>`;
+      } else if (p && p.isFilled) {
+        gapsStripEl.hidden = false;
+        gapsStripEl.innerHTML =
+          `<span class="gap-pill neutral">${escapeHtml(`Recent ${p.dir === 'up' ? 'Gap Up' : 'Gap Down'} at ${fmtChartVal(p.fillTarget, gapDec)} · 100% Filled ✓`)}</span>`;
+      } else {
+        gapsStripEl.hidden = true;
+      }
+    }
+  } else if (gapsStripEl) {
+    gapsStripEl.hidden = true;
+  }
+
   // #9 Personal "My Buys" Plot Directly on the Price Chart
   const buyMarkersByIdx = new Map();
   if (state.settings.showMyBuys && !isRatio && converted.length >= 2) {
@@ -3617,6 +3730,7 @@ function renderChart() {
     rsiValues: rsiData?.values || null,
     buyMarkersByIdx,
     newsPinsByIdx,
+    gapsByIdx,
     detectedPatterns,
     xCandle,
     yAt,
@@ -3727,6 +3841,176 @@ function detectChartPatterns(bars) {
   }
 
   return patterns.slice(0, 4);
+}
+
+function analyzeClientMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1d') {
+  if (!Array.isArray(bars) || bars.length < 2) {
+    return {
+      metal,
+      tf,
+      tfLabel: CHART_TF_META[tf]?.label || '1D',
+      gaps: [],
+      primary: null,
+      openCount: 0,
+      signal: 0,
+      predictionBoost: 0,
+      bias: 'neutral',
+      status: 'No Open Gap',
+    };
+  }
+  const isSilver = metal === 'silver';
+  const isRatio = metal === 'ratio';
+  const minGapPct =
+    tf === '15min' || tf === '1h'
+      ? (isSilver || isRatio ? 0.22 : 0.12)
+      : tf === '4h' || tf === '1d'
+        ? (isSilver || isRatio ? 0.40 : 0.22)
+        : tf === '7d' || tf === '1m' || tf === '6m'
+          ? (isSilver || isRatio ? 0.65 : 0.35)
+          : (isSilver || isRatio ? 1.15 : 0.70);
+
+  const spot =
+    Number.isFinite(Number(liveSpot)) && Number(liveSpot) > 0
+      ? Number(liveSpot)
+      : bars[bars.length - 1].c;
+  const gaps = [];
+
+  for (let i = 1; i < bars.length; i++) {
+    const prev = bars[i - 1];
+    const curr = bars[i];
+    if (!prev || !curr || !(prev.c > 0) || !(curr.o > 0)) continue;
+    const rawGapUsd = curr.o - prev.c;
+    const rawGapPct = (rawGapUsd / prev.c) * 100;
+    const absPct = Math.abs(rawGapPct);
+    if (absPct < minGapPct) continue;
+
+    const dir = rawGapUsd >= 0 ? 'up' : 'down';
+    const fillTarget = prev.c;
+    const gapEdge = curr.o;
+    const zoneLow = Math.min(fillTarget, gapEdge);
+    const zoneHigh = Math.max(fillTarget, gapEdge);
+    const zoneSpan = Math.max(0.0001, zoneHigh - zoneLow);
+    const dtMs = (curr.t || 0) - (prev.t || 0);
+    const kind =
+      dtMs >= 24 * 3600000
+        ? 'Weekend Gap'
+        : dtMs >= 45 * 60000
+          ? 'Session Gap'
+          : absPct >= (isSilver ? 1.0 : 0.6)
+            ? 'Breakaway Gap'
+            : 'Price Gap';
+
+    let extremeSince = dir === 'up' ? curr.l : curr.h;
+    let filledAtIdx = null;
+    for (let j = i; j < bars.length; j++) {
+      const b = bars[j];
+      if (dir === 'up') {
+        if (b.l < extremeSince) extremeSince = b.l;
+        if (filledAtIdx == null && b.l <= fillTarget) filledAtIdx = j;
+      } else {
+        if (b.h > extremeSince) extremeSince = b.h;
+        if (filledAtIdx == null && b.h >= fillTarget) filledAtIdx = j;
+      }
+    }
+    if (dir === 'up' && spot < extremeSince) extremeSince = spot;
+    if (dir === 'down' && spot > extremeSince) extremeSince = spot;
+    if (filledAtIdx == null) {
+      if ((dir === 'up' && spot <= fillTarget) || (dir === 'down' && spot >= fillTarget)) {
+        filledAtIdx = bars.length - 1;
+      }
+    }
+
+    const fillRatio =
+      dir === 'up'
+        ? clampNum((zoneHigh - extremeSince) / zoneSpan, 0, 1)
+        : clampNum((extremeSince - zoneLow) / zoneSpan, 0, 1);
+    const isFilled = fillRatio >= 0.99 || filledAtIdx != null;
+    const fillPct = isFilled ? 100 : Math.round(fillRatio * 100);
+    const moveToFillUsd = fillTarget - spot;
+    const moveToFillPct = spot > 0 ? (moveToFillUsd / spot) * 100 : 0;
+    const holdingBeyond = dir === 'up' ? spot >= zoneHigh : spot <= zoneLow;
+    const unfilledFrac = isFilled ? 0 : 1 - fillRatio;
+    const magNorm = clampNum(absPct / (isSilver ? 2.4 : 1.35), 0.25, 1.0);
+    const holdMult = holdingBeyond ? 1.15 : 0.72;
+    const signal = isFilled
+      ? 0
+      : clampNum((dir === 'up' ? 1 : -1) * magNorm * unfilledFrac * holdMult * 0.78, -0.85, 0.85);
+    const predictionBoost = isFilled ? 0 : clampNum(signal * 0.20, -0.16, 0.16);
+
+    gaps.push({
+      idx: i,
+      t: curr.t,
+      prevT: prev.t,
+      dir,
+      kind,
+      tf,
+      tfLabel: CHART_TF_META[tf]?.label || '1D',
+      gapUsd: +rawGapUsd.toFixed(2),
+      gapPct: +rawGapPct.toFixed(2),
+      fillTarget: +fillTarget.toFixed(2),
+      gapEdge: +gapEdge.toFixed(2),
+      zoneLow: +zoneLow.toFixed(2),
+      zoneHigh: +zoneHigh.toFixed(2),
+      fillPct,
+      isFilled,
+      filledAtIdx,
+      holdingBeyond,
+      moveToFillUsd: +moveToFillUsd.toFixed(2),
+      moveToFillPct: +moveToFillPct.toFixed(2),
+      signal: +signal.toFixed(3),
+      predictionBoost: +predictionBoost.toFixed(4),
+    });
+  }
+
+  const openGaps = gaps.filter((g) => !g.isFilled);
+  const rankGap = (g) => {
+    const kindW = g.kind === 'Weekend Gap' ? 1.55 : g.kind === 'Session Gap' ? 1.25 : 1.0;
+    return Math.abs(g.gapPct) * (1 - g.fillPct / 100) * kindW;
+  };
+  const primary = openGaps.length
+    ? [...openGaps].sort((a, b) => rankGap(b) - rankGap(a) || b.idx - a.idx)[0]
+    : gaps.length
+      ? gaps[gaps.length - 1]
+      : null;
+
+  return {
+    metal,
+    tf,
+    tfLabel: CHART_TF_META[tf]?.label || '1D',
+    gaps: gaps.slice(-4),
+    primary,
+    openCount: openGaps.length,
+    signal: primary ? primary.signal : 0,
+    predictionBoost: primary ? primary.predictionBoost : 0,
+    bias: primary && !primary.isFilled ? (primary.dir === 'up' ? 'bullish' : 'bearish') : 'neutral',
+    status: !primary
+      ? 'No Open Gap'
+      : primary.isFilled
+        ? 'Gap Filled ✓'
+        : primary.dir === 'up'
+          ? 'Gap Up · Bullish ↑'
+          : 'Gap Down · Bearish ↓',
+  };
+}
+
+function computeMetalGapSummary(metal, liveSpotUsd) {
+  const candidates = [
+    { tf: '4h', bars: state.candles[metal] },
+    { tf: '1d', bars: state.candles[metal].length >= 60 ? aggregateBarsByInterval(state.candles[metal], 30 * 60000) : state.candles[metal] },
+    { tf: '7d', bars: state.timeframes?.['7d']?.[metal] || [] },
+    { tf: '1m', bars: state.timeframes?.['1m']?.[metal] || [] },
+  ];
+  let bestFilled = null;
+  for (const c of candidates) {
+    if (!Array.isArray(c.bars) || c.bars.length < 2) continue;
+    const res = analyzeClientMarketGaps(c.bars, liveSpotUsd, metal, c.tf);
+    if (res.openCount > 0 && res.primary && !res.primary.isFilled) return res;
+    if (!bestFilled && res.primary) bestFilled = res;
+  }
+  if (bestFilled) return bestFilled;
+  const fallbackSaved = outlookState.data?.marketGaps?.[metal];
+  if (fallbackSaved) return fallbackSaved;
+  return analyzeClientMarketGaps([], liveSpotUsd, metal, '1d');
 }
 
 function stopChartReplay(reRender = true) {
@@ -3893,6 +4177,16 @@ function renderCrosshairOverlay(idx = state.hoverCandleIdx) {
         )
         .join(' · ');
       extraRows.push(`<div class="tt-sub tt-buy">${escapeHtml(lotTxt)}</div>`);
+    }
+    const gapHit = g.gapsByIdx?.get(activeIdx);
+    if (gapHit) {
+      const gapLbl = gapHit.dir === 'up' ? 'Gap Up (Bullish)' : 'Gap Down (Bearish)';
+      const gapStatusTxt = gapHit.isFilled
+        ? '100% Filled ✓'
+        : `${gapHit.fillPct}% filled · Fill target ${g.fmtChartVal(gapHit.fillTarget, dec)}`;
+      extraRows.push(
+        `<div class="tt-sub ${gapHit.dir === 'up' ? 'tt-up' : 'tt-dn'}">⚡ ${escapeHtml(`${gapHit.kind}: ${gapLbl} · ${gapStatusTxt}`)}</div>`
+      );
     }
     const newsPin = g.newsPinsByIdx?.get(activeIdx);
     if (newsPin) {
@@ -4116,6 +4410,7 @@ const DRIVER_FRIENDLY_LABELS = {
   shanghai_sge: 'China Physical Demand',
   positioning_miners: 'Big Traders & Mining Stocks',
   comex_paper: 'Paper Contracts vs. Vaults',
+  market_gaps: 'Chart Gaps & Fill Targets',
 };
 
 const DRIVER_WEIGHTS = {
@@ -5044,8 +5339,26 @@ function computeInteractiveOutlook() {
   const backwBoostGold = futures.gold?.priceDiscoveryBoost || 0;
   const backwBoostSilver = futures.silver?.priceDiscoveryBoost || 0;
 
-  const gUnit = clampNum(gComp * 1.45 + driftG + backwBoostGold, -1, 1);
-  const sUnit = clampNum(sComp * 1.45 + driftS + backwBoostSilver, -1, 1);
+  // Market Gap Analyzer (unfilled Gap Up = bullish momentum, unfilled Gap Down = bearish momentum)
+  const marketGaps = {
+    gold: computeMetalGapSummary('gold', spotGold),
+    silver: computeMetalGapSummary('silver', spotSilver),
+  };
+  const gapBoostGold = marketGaps.gold?.predictionBoost || 0;
+  const gapBoostSilver = marketGaps.silver?.predictionBoost || 0;
+  if (!drivers.some((d) => d.id === 'market_gaps')) {
+    drivers.push({
+      id: 'market_gaps',
+      label: 'Chart Gaps & Fill Targets',
+      shortLabel: 'Chart Gaps',
+      gold: +(marketGaps.gold?.signal || 0).toFixed(3),
+      silver: +(marketGaps.silver?.signal || 0).toFixed(3),
+      headlineCount: (marketGaps.gold?.openCount || 0) + (marketGaps.silver?.openCount || 0),
+    });
+  }
+
+  const gUnit = clampNum(gComp * 1.45 + driftG + backwBoostGold + gapBoostGold, -1, 1);
+  const sUnit = clampNum(sComp * 1.45 + driftS + backwBoostSilver + gapBoostSilver, -1, 1);
   const gScore = Math.round(gUnit * 100);
   const sScore = Math.round(sUnit * 100);
 
@@ -5177,6 +5490,21 @@ function computeInteractiveOutlook() {
       `${which} futures are cheaper than today's spot price (backwardation), signaling tight physical supply that tends to push prices up.`
     );
   }
+  const openGapNotes = [];
+  for (const [mKey, mName] of [['gold', 'Gold'], ['silver', 'Silver']]) {
+    const gp = marketGaps[mKey]?.primary;
+    if (gp && !gp.isFilled) {
+      const kindPrefix = gp.kind.replace(/\s+Gap$/, '');
+      const dirTxt = gp.dir === 'up' ? 'Gap Up (bullish)' : 'Gap Down (bearish)';
+      const moveVerb = gp.dir === 'up' ? 'drop' : 'rally';
+      openGapNotes.push(
+        `${mName} has an open ${kindPrefix} ${dirTxt} (${gp.fillPct}% filled — needs a ${formatSignedMoney(convertUnit(gp.moveToFillUsd), 2)} ${moveVerb} to ${formatMoney(convertUnit(gp.fillTarget), 2)} to fill)`
+      );
+    }
+  }
+  if (openGapNotes.length) {
+    plainParts.push(`${openGapNotes.join('; ')}, factored directly into today's forecast.`);
+  }
   if (ratioAnalytics.tone !== 'neutral') {
     plainParts.push(
       `At ${liveRatio.toFixed(1)} oz of silver per oz of gold, ${ratioAnalytics.regime.toLowerCase()} (higher than ${ratioAnalytics.percentile5y}% of the past 5 years).`
@@ -5222,6 +5550,7 @@ function computeInteractiveOutlook() {
     futures,
     dollarStrength,
     marketRegime,
+    marketGaps,
     ratioAnalytics,
     setupQuality,
     gold: {
@@ -5916,7 +6245,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=45', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=46', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -6779,6 +7108,114 @@ function renderPurchasingPower(res) {
     .join('');
 }
 
+function renderGapAnalyzer(res) {
+  if (!document.getElementById('panel-gap-analyzer')) return;
+  const gaps = res?.marketGaps;
+  if (!gaps) return;
+
+  const badgeEl = document.getElementById('gap-analyzer-badge');
+  const openTotal = (gaps.gold?.openCount || 0) + (gaps.silver?.openCount || 0);
+  if (badgeEl) {
+    if (openTotal > 0) {
+      const anyUp = (gaps.gold?.primary && !gaps.gold.primary.isFilled && gaps.gold.primary.dir === 'up') ||
+        (gaps.silver?.primary && !gaps.silver.primary.isFilled && gaps.silver.primary.dir === 'up');
+      const anyDn = (gaps.gold?.primary && !gaps.gold.primary.isFilled && gaps.gold.primary.dir === 'down') ||
+        (gaps.silver?.primary && !gaps.silver.primary.isFilled && gaps.silver.primary.dir === 'down');
+      badgeEl.textContent = `${openTotal} Open Gap${openTotal > 1 ? 's' : ''} Active`;
+      badgeEl.className = `signal-pill ${anyUp && !anyDn ? 'bullish' : anyDn && !anyUp ? 'bearish' : ''}`;
+    } else {
+      badgeEl.textContent = 'All Gaps Filled';
+      badgeEl.className = 'signal-pill';
+    }
+  }
+
+  for (const [metal, name] of [['gold', 'Gold'], ['silver', 'Silver']]) {
+    const info = gaps[metal];
+    const p = info?.primary || null;
+    const card = document.getElementById(`gap-card-${metal}`);
+    const statusEl = document.getElementById(`gap-${metal}-status`);
+    const metaEl = document.getElementById(`gap-${metal}-meta`);
+    const barWrap = document.getElementById(`gap-${metal}-bar-wrap`);
+    const zoneEl = document.getElementById(`gap-${metal}-zone`);
+    const pctEl = document.getElementById(`gap-${metal}-fillpct`);
+    const barEl = document.getElementById(`gap-${metal}-fillbar`);
+    const actionEl = document.getElementById(`gap-${metal}-action`);
+    const impactEl = document.getElementById(`gap-${metal}-impact`);
+
+    if (!p) {
+      if (card) card.className = 'gap-card';
+      if (statusEl) {
+        statusEl.textContent = 'No Open Gap';
+        statusEl.className = 'signal-pill';
+      }
+      if (metaEl) metaEl.textContent = 'Recent 4H–1M candles show continuous trading with no unclosed gap.';
+      if (barWrap) barWrap.hidden = true;
+      if (actionEl) actionEl.textContent = `No open gap right now — ${name} is trading smoothly without an unfilled gap magnet.`;
+      if (impactEl) {
+        impactEl.textContent = 'Forecast impact: Neutral (0 pts)';
+        impactEl.className = 'gap-impact';
+      }
+      continue;
+    }
+
+    const isUp = p.dir === 'up';
+    const toneCls = p.isFilled ? '' : isUp ? 'bullish' : 'bearish';
+    if (card) card.className = `gap-card ${toneCls}`;
+    if (statusEl) {
+      statusEl.textContent = info.status;
+      statusEl.className = `signal-pill ${toneCls}`;
+    }
+
+    const gapUsdDisp = formatSignedMoney(convertUnit(p.gapUsd), 2);
+    const gapPctDisp = `${p.gapPct >= 0 ? '+' : '−'}${Math.abs(p.gapPct).toFixed(2)}%`;
+    const fillTargetDisp = formatMoney(convertUnit(p.fillTarget), 2);
+    const gapEdgeDisp = formatMoney(convertUnit(p.gapEdge), 2);
+    const moveDisp = formatSignedMoney(convertUnit(p.moveToFillUsd), 2);
+    const movePctDisp = `${p.moveToFillPct >= 0 ? '+' : '−'}${Math.abs(p.moveToFillPct).toFixed(2)}%`;
+
+    if (metaEl) {
+      metaEl.textContent = `${p.kind} (${p.tfLabel || info.tfLabel || '1D'}) · Gap Size ${gapUsdDisp} (${gapPctDisp})`;
+    }
+    if (barWrap) barWrap.hidden = false;
+    if (zoneEl) zoneEl.textContent = `Gap Zone ${fillTargetDisp} → ${gapEdgeDisp}`;
+    if (pctEl) pctEl.textContent = `${p.fillPct}% filled`;
+    if (barEl) {
+      barEl.style.width = `${clampNum(p.fillPct, 0, 100)}%`;
+      barEl.className = `gap-fill-bar ${p.isFilled ? 'filled' : isUp ? 'up' : 'down'}`;
+    }
+
+    if (actionEl) {
+      if (p.isFilled) {
+        actionEl.textContent = `Recent ${isUp ? 'Gap Up' : 'Gap Down'} to ${fillTargetDisp} is already 100% filled ✓ — no open gap magnet pulling ${name} right now.`;
+      } else if (isUp) {
+        const holdTxt = p.holdingBeyond
+          ? `Holding above ${gapEdgeDisp} keeps buyers in control (breakaway strength).`
+          : `Price is currently testing inside the gap pocket (${p.fillPct}% filled).`;
+        actionEl.textContent = `To fill this bullish gap, ${name} would need to drop ${moveDisp} (${movePctDisp}) back to ${fillTargetDisp}. ${holdTxt}`;
+      } else {
+        const holdTxt = p.holdingBeyond
+          ? `Staying below ${gapEdgeDisp} keeps sellers in control (downside pressure).`
+          : `Price is currently bouncing inside the gap pocket (${p.fillPct}% filled).`;
+        actionEl.textContent = `To fill this bearish gap, ${name} needs a ${moveDisp} (${movePctDisp}) rally back up to ${fillTargetDisp}. ${holdTxt}`;
+      }
+    }
+
+    if (impactEl) {
+      const pts = Math.round((info.predictionBoost || 0) * 100);
+      if (p.isFilled || pts === 0) {
+        impactEl.textContent = 'Forecast impact: Neutral (0 pts — already filled)';
+        impactEl.className = 'gap-impact';
+      } else if (pts > 0) {
+        impactEl.textContent = `Forecast impact: +${pts} pts bullish momentum (pullback magnet at ${fillTargetDisp})`;
+        impactEl.className = 'gap-impact up';
+      } else {
+        impactEl.textContent = `Forecast impact: −${Math.abs(pts)} pts bearish pressure (bounce magnet at ${fillTargetDisp})`;
+        impactEl.className = 'gap-impact down';
+      }
+    }
+  }
+}
+
 function renderOutlook() {
   const view = document.getElementById('view-outlook');
   if (!view) return;
@@ -6823,6 +7260,7 @@ function renderOutlook() {
   document.getElementById('outlook-confidence').textContent = `Signal Agreement ${res.base.confidence || 62}%`;
   document.getElementById('outlook-narrative').textContent = res.narrative;
   renderSetupQuality(res);
+  renderGapAnalyzer(res);
   renderRatioAnalytics(res);
   renderBuyLadder(res);
   renderDollarStrength(res);
@@ -9600,6 +10038,12 @@ function wireEvents() {
     savePersistedState();
   });
 
+  document.getElementById('btn-toggle-gaps')?.addEventListener('click', () => {
+    state.settings.showGaps = !state.settings.showGaps;
+    renderChart();
+    savePersistedState();
+  });
+
   document.getElementById('btn-toggle-newsdots')?.addEventListener('click', () => {
     state.settings.showNewsDots = !state.settings.showNewsDots;
     renderChart();
@@ -10091,7 +10535,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 45,
+      version: 46,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),

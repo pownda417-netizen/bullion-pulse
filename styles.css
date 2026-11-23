@@ -1037,7 +1037,7 @@ body {
 .dot-up { background: var(--up); }
 .dot-down { background: var(--down); }
 
-.line-bull, .line-base, .line-bear, .line-fib, .line-spot {
+.line-bull, .line-base, .line-bear, .line-fib, .line-spot, .line-gap {
   width: 12px;
   height: 2px;
   border-radius: 2px;
@@ -1045,6 +1045,12 @@ body {
 
 .line-spot {
   background: repeating-linear-gradient(90deg, var(--gold-bright) 0 4px, transparent 4px 7px);
+}
+
+.line-gap {
+  height: 8px;
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.55) 50%, rgba(244, 63, 94, 0.55) 50%);
+  border: 1px dashed rgba(34, 197, 94, 0.75);
 }
 
 .line-bull { background: var(--up); }
@@ -5222,11 +5228,142 @@ button.sector-chip.selected {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.chart-patterns-strip {
+.chart-patterns-strip[hidden],
+.chart-gaps-strip[hidden],
+.gap-fill-wrap[hidden] {
+  display: none;
+}
+.chart-patterns-strip,
+.chart-gaps-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin: 6px 0 8px;
+}
+.chip-toggle.chip-gaps.active {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.65);
+  color: #34D399;
+}
+.gap-pill {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text-muted);
+}
+.gap-pill.up {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--up);
+}
+.gap-pill.down {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--down);
+}
+
+/* Market Gap Analyzer & Fill Targets Panel (Outlook) */
+.gap-analyzer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 720px) {
+  .gap-analyzer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+body[data-desk-active="ultrawide"] .gap-analyzer-grid {
+  grid-template-columns: 1fr;
+}
+.gap-card {
+  padding: 12px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.gap-card.bullish {
+  border-color: rgba(34, 197, 94, 0.42);
+}
+.gap-card.bearish {
+  border-color: rgba(239, 68, 68, 0.42);
+}
+.gap-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gap-meta-row {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.gap-fill-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gap-fill-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.gap-fill-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.gap-fill-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+  background: var(--gold);
+}
+.gap-fill-bar.up {
+  background: var(--up);
+}
+.gap-fill-bar.down {
+  background: var(--down);
+}
+.gap-fill-bar.filled {
+  background: var(--gold-bright);
+}
+.gap-action {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.48;
+  color: var(--text);
+}
+.gap-impact {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+.gap-impact.up {
+  color: var(--up);
+}
+.gap-impact.down {
+  color: var(--down);
 }
 .pattern-badge {
   font-size: 11px;

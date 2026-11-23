@@ -1359,6 +1359,102 @@
         })[l];
       },
     ],
+    // Market Gap Analyzer dynamic patterns (Chart strip + Outlook Gap Analyzer cards)
+    [
+      /^(\d+) Open Gaps? Active$/,
+      (m, l) => ({
+        th: `พบแก๊ปเปิดอยู่ ${m[1]} จุด`, lo: `ພົບແກັບເປີດຢູ່ ${m[1]} ຈຸດ`,
+        es: `${m[1]} Hueco(s) Abierto(s)`, zh: `${m[1]} 个未回补缺口活跃`,
+        ja: `未埋めギャップ ${m[1]}件`, hi: `${m[1]} खुले गैप सक्रिय`,
+      })[l],
+    ],
+    [
+      /^(Gap Up \(Bullish Bias\)|Gap Down \(Bearish Bias\)) · (Weekend Gap|Session Gap|Breakaway Gap|Price Gap) (.+)$/,
+      (m, l) => {
+        const dir = m[1].startsWith('Gap Up')
+          ? { th: 'กระโดดขึ้น (สัญญาณขาขึ้น)', lo: 'ກະໂດດຂຶ້ນ (ຂາຂຶ້ນ)', es: 'Hueco Alcista', zh: '向上跳空（偏看涨）', ja: 'ギャップアップ（強気）', hi: 'गैप अप (तेज़ी संकेत)' }[l]
+          : { th: 'กระโดดลง (สัญญาณขาลง)', lo: 'ກະໂດດລົງ (ຂາລົງ)', es: 'Hueco Bajista', zh: '向下跳空（偏看跌）', ja: 'ギャップダウン（弱気）', hi: 'गैप डाउन (मंदी संकेत)' }[l];
+        return `${dir} · ${ex(m[2], l)} ${m[3]}`;
+      },
+    ],
+    [
+      /^(\d+%) filled · Needs (.+?) (drop|rally) to (.+?) to fill$/,
+      (m, l) => {
+        const act = m[3] === 'drop'
+          ? { th: 'ย่อลง', lo: 'ຫຼຸດລົງ', es: 'bajar', zh: '回落', ja: '下落', hi: 'गिरना' }[l]
+          : { th: 'ดีดขึ้น', lo: 'ຂຶ້ນ', es: 'subir', zh: '反弹', ja: '上昇', hi: 'चढ़ना' }[l];
+        return ({
+          th: `ปิดแล้ว ${m[1]} · ต้อง${act} ${m[2]} แตะ ${m[4]} เพื่อปิดแก๊ป`,
+          lo: `ປິດແລ້ວ ${m[1]} · ຕ້ອງ${act} ${m[2]} ຫາ ${m[4]} ເພື່ອປິດແກັບ`,
+          es: `${m[1]} cerrado · Necesita ${act} ${m[2]} hasta ${m[4]} para cerrar`,
+          zh: `已回补 ${m[1]} · 需${act} ${m[2]} 至 ${m[4]} 才能完全补缺`,
+          ja: `${m[1]}窓埋め済・完全窓埋めには ${m[4]} まで ${m[2]} ${act}が必要`,
+          hi: `${m[1]} भरा · गैप भरने हेतु ${m[4]} तक ${m[2]} ${act} ज़रूरी`,
+        })[l];
+      },
+    ],
+    [
+      /^(Weekend Gap|Session Gap|Breakaway Gap|Price Gap) \(([^)]+)\) · Gap Size (.+)$/,
+      (m, l) => ({
+        th: `${ex(m[1], l)} (${m[2]}) · ขนาดแก๊ป ${m[3]}`,
+        lo: `${ex(m[1], l)} (${m[2]}) · ຂະໜາດແກັບ ${m[3]}`,
+        es: `${ex(m[1], l)} (${m[2]}) · Tamaño ${m[3]}`,
+        zh: `${ex(m[1], l)}（${m[2]}）· 缺口幅度 ${m[3]}`,
+        ja: `${ex(m[1], l)}（${m[2]}）・ギャップ幅 ${m[3]}`,
+        hi: `${ex(m[1], l)} (${m[2]}) · गैप आकार ${m[3]}`,
+      })[l],
+    ],
+    [
+      /^Gap Zone (.+?) → (.+)$/,
+      (m, l) => ({
+        th: `โซนแก๊ป ${m[1]} → ${m[2]}`, lo: `ເຂດແກັບ ${m[1]} → ${m[2]}`,
+        es: `Zona hueco ${m[1]} → ${m[2]}`, zh: `缺口区间 ${m[1]} → ${m[2]}`,
+        ja: `ギャップ帯 ${m[1]} → ${m[2]}`, hi: `गैप क्षेत्र ${m[1]} → ${m[2]}`,
+      })[l],
+    ],
+    [
+      /^(\d+%) filled$/,
+      (m, l) => ({
+        th: `ปิดแล้ว ${m[1]}`, lo: `ປິດແລ້ວ ${m[1]}`, es: `${m[1]} cerrado`,
+        zh: `已回补 ${m[1]}`, ja: `${m[1]}埋め済`, hi: `${m[1]} भरा`,
+      })[l],
+    ],
+    [
+      /^Forecast impact: ([+\-−]\d+ pts) (bullish momentum|bearish pressure) \((pullback|bounce) magnet at (.+)\)$/,
+      (m, l) => {
+        const mood = m[2] === 'bullish momentum'
+          ? { th: 'แรงส่งขาขึ้น', lo: 'ແຮງສົ່ງຂາຂຶ້ນ', es: 'impulso alcista', zh: '看涨动能', ja: '強気モメンタム', hi: 'तेज़ी की गति' }[l]
+          : { th: 'แรงกดดันขาลง', lo: 'ແຮງກົດດັນຂາລົງ', es: 'presión bajista', zh: '看跌压力', ja: '弱気圧力', hi: 'मंदी का दबाव' }[l];
+        return ({
+          th: `ผลต่อคาดการณ์: ${m[1]} ${mood} (จุดดึงดูดปิดแก๊ปที่ ${m[4]})`,
+          lo: `ຜົນຕໍ່ຄາດຄະເນ: ${m[1]} ${mood} (ເປົ້າປິດແກັບ ${m[4]})`,
+          es: `Impacto en pronóstico: ${m[1]} ${mood} (imán de cierre en ${m[4]})`,
+          zh: `对预测影响：${m[1]} ${mood}（回补引力位 ${m[4]}）`,
+          ja: `予測への影響：${m[1]} ${mood}（窓埋め目安 ${m[4]}）`,
+          hi: `अनुमान पर प्रभाव: ${m[1]} ${mood} (भरपाई स्तर ${m[4]})`,
+        })[l];
+      },
+    ],
+    [
+      /^To fill this (bullish|bearish) gap, (Gold|Silver) (?:would need to drop|needs a) (.+?) back (?:up )?to (.+?)\. (.+)$/,
+      (m, l) => {
+        const met = ex(m[2], l);
+        const dir = m[1] === 'bullish'
+          ? { th: 'ขาขึ้น', lo: 'ຂາຂຶ້ນ', es: 'alcista', zh: '向上', ja: '強気', hi: 'तेज़ी' }[l]
+          : { th: 'ขาลง', lo: 'ຂາລົງ', es: 'bajista', zh: '向下', ja: '弱気', hi: 'मंदी' }[l];
+        const move = m[1] === 'bullish'
+          ? { th: 'ย่อตัวลง', lo: 'ຫຼຸດລົງ', es: 'bajar', zh: '回落', ja: '下落', hi: 'नीचे गिरना' }[l]
+          : { th: 'ดีดตัวขึ้น', lo: 'ຂຶ້ນ', es: 'subir', zh: '反弹', ja: '反発', hi: 'ऊपर चढ़ना' }[l];
+        return ({
+          th: `เพื่อปิดแก๊ป${dir}นี้ ${met} ต้อง${move} ${m[3]} กลับไปที่ ${m[4]}`,
+          lo: `ເພື່ອປິດແກັບ${dir}ນີ້ ${met} ຕ້ອງ${move} ${m[3]} ກັບໄປທີ່ ${m[4]}`,
+          es: `Para cerrar este hueco ${dir}, ${met} necesita ${move} ${m[3]} hasta ${m[4]}.`,
+          zh: `要回补该${dir}缺口，${met}需${move} ${m[3]} 回到 ${m[4]}。`,
+          ja: `この${dir}ギャップを埋めるには、${met}が ${m[4]} まで ${m[3]} ${move}する必要があります。`,
+          hi: `इस ${dir} गैप को भरने के लिए ${met} को ${m[4]} तक ${m[3]} ${move} होगा।`,
+        })[l];
+      },
+    ],
     // Market Hub Open / Close Countdowns ("Opens in 1h 34m", "Main open in 13h 54m", "Closes in 2h 10m", "Break in 3h 20m", "Lunch in 45m 12s")
     [
       /^(Opens in|Main open in|Closes in|Break in|Lunch in) (.+)$/,
@@ -2165,6 +2261,22 @@
     '⋮ menu': ['เมนู ⋮', 'ເມນູ ⋮', 'menú ⋮', '⋮ 菜单', '⋮ メニュー', '⋮ मेनू'],
     '1m Live': ['สด 1 นาที', 'ສົດ 1 ນາທີ', '1m Vivo', '1分实时', '1分ライブ', '1मि लाइव'],
     'Live Spot': ['ราคาสดตอนนี้', 'ລາຄາສົດຕອນນີ້', 'Precio Actual', '当前现货价', '現在スポット', 'लाइव स्पॉट'],
+    'Gaps': ['ช่องว่างราคา', 'ຊ່ອງວ່າງລາຄາ', 'Huecos', '跳空缺口', '窓(ギャップ)', 'गैप'],
+    'Gap Zone': ['โซนช่องว่างราคา', 'ເຂດຊ່ອງວ່າງ', 'Zona de Hueco', '缺口区间', 'ギャップ帯', 'गैप क्षेत्र'],
+    'Market Gap Analyzer & Fill Targets': ['วิเคราะห์ช่องว่างราคาและเป้าปิดแก๊ป', 'ວິເຄາະຊ່ອງວ່າງລາຄາ ແລະ ເປົ້າປິດແກັບ', 'Analizador de Huecos y Objetivos de Cierre', '市场跳空缺口分析与回补目标', 'マーケットギャップ分析・窓埋め目標', 'बाज़ार गैप विश्लेषक और भरपाई लक्ष्य'],
+    'Detects open price gaps (bullish Gap Up / bearish Gap Down), tracks fill progress, and feeds directly into predictions': ['ตรวจจับช่องว่างราคาที่ยังไม่ปิด (กระโดดขึ้นขาขึ้น / กระโดดลงขาลง) ติดตามความคืบหน้าการปิดแก๊ป และนำไปคำนวณในคาดการณ์โดยตรง', 'ກວດຈັບຊ່ອງວ່າງລາຄາທີ່ຍັງບໍ່ປິດ ຕິດຕາມຄວາມຄືບໜ້າການປິດແກັບ ແລະ ນຳໄປຄຳນວນໃນຄາດຄະເນ', 'Detecta huecos de precio abiertos (alcistas o bajistas), mide su relleno y los incluye en el pronóstico', '检测未回补的跳空缺口（看涨高开 / 看跌低开），实时追踪回补进度并直接计入预测模型', '未埋めの価格ギャップ（強気ギャップアップ／弱気ギャップダウン）を検出し、窓埋め進捗を追跡して予測に反映します', 'खुले मूल्य गैप (तेज़ी गैप अप / मंदी गैप डाउन) का पता लगाता है, भरपाई ट्रैक करता है और सीधे अनुमान में शामिल करता है'],
+    'All Gaps Filled': ['ปิดแก๊ปครบแล้ว', 'ປິດແກັບຄົບແລ້ວ', 'Todos Cerrados', '缺口已全补', '全窓埋め完了', 'सभी गैप भरे गए'],
+    'No Open Gap': ['ไม่มีแก๊ปค้าง', 'ບໍ່ມີແກັບຄ້າງ', 'Sin Hueco Abierto', '无未补缺口', '未埋め窓なし', 'कोई खुला गैप नहीं'],
+    'Gap Filled ✓': ['ปิดแก๊ปแล้ว ✓', 'ປິດແກັບແລ້ວ ✓', 'Hueco Cerrado ✓', '缺口已回补 ✓', '窓埋め完了 ✓', 'गैप भर गया ✓'],
+    'Gap Up · Bullish ↑': ['กระโดดขึ้น · ขาขึ้น ↑', 'ກະໂດດຂຶ້ນ · ຂາຂຶ້ນ ↑', 'Hueco Alcista ↑', '向上跳空 · 看涨 ↑', 'ギャップアップ・強気 ↑', 'गैप अप · तेज़ी ↑'],
+    'Gap Down · Bearish ↓': ['กระโดดลง · ขาลง ↓', 'ກະໂດດລົງ · ຂາລົງ ↓', 'Hueco Bajista ↓', '向下跳空 · 看跌 ↓', 'ギャップダウン・弱気 ↓', 'गैप डाउन · मंदी ↓'],
+    'Chart Gaps & Fill Targets': ['ช่องว่างกราฟและเป้าปิดแก๊ป', 'ຊ່ອງວ່າງກຣາຟ ແລະ ເປົ້າປິດ', 'Huecos del Gráfico y Relleno', '图表跳空缺口与回补', 'チャートギャップ・窓埋め', 'चार्ट गैप और भरपाई लक्ष्य'],
+    'Weekend Gap': ['แก๊ปสุดสัปดาห์', 'ແກັບທ້າຍອາທິດ', 'Hueco de Fin de Semana', '周末跳空', '週末ギャップ', 'सप्ताहांत गैप'],
+    'Session Gap': ['แก๊ปเปิดรอบตลาด', 'ແກັບເປີດຮອບຕະຫຼາດ', 'Hueco de Sesión', '开盘跳空', 'セッションギャップ', 'सत्र गैप'],
+    'Breakaway Gap': ['แก๊ปทะลุแนว', 'ແກັບທະລຸແນວ', 'Hueco de Ruptura', '突破性缺口', 'ブレイクアウェイ窓', 'ब्रेकअवे गैप'],
+    'Price Gap': ['ช่องว่างราคา', 'ຊ່ອງວ່າງລາຄາ', 'Hueco de Precio', '价格缺口', '価格ギャップ', 'कीमत गैप'],
+    'Forecast impact: Neutral (0 pts)': ['ผลต่อคาดการณ์: เป็นกลาง (0 คะแนน)', 'ຜົນຕໍ່ຄາດຄະເນ: ເປັນກາງ (0 ຄະແນນ)', 'Impacto en pronóstico: Neutral (0 pts)', '对预测影响：中性（0分）', '予測への影響：中立（0点）', 'अनुमान पर प्रभाव: तटस्थ (0 अंक)'],
+    'Forecast impact: Neutral (0 pts — already filled)': ['ผลต่อคาดการณ์: เป็นกลาง (0 คะแนน — ปิดแก๊ปแล้ว)', 'ຜົນຕໍ່ຄາດຄະເນ: ເປັນກາງ (0 ຄະແນນ — ປິດແລ້ວ)', 'Impacto: Neutral (0 pts — ya cerrado)', '对预测影响：中性（0分 — 已回补）', '予測への影響：中立（0点・窓埋め済）', 'अनुमान पर प्रभाव: तटस्थ (0 अंक — भर चुका है)'],
     'Scroll or pinch to zoom · Drag to pan': ['เลื่อนลูกกลิ้งหรือถ่างนิ้วเพื่อซูม · ลากเพื่อเลื่อนดู', 'ເລື່ອນ ຫຼື ຖ່າງນິ້ວເພື່ອຊູມ · ລາກເພື່ອເລື່ອນເບິ່ງ', 'Desplaza o pellizca para acercar · Arrastra para mover', '滚轮或双指缩放 · 拖动查看历史', 'スクロール・ピンチで拡大縮小・ドラッグで移動', 'ज़ूम के लिए स्क्रॉल/पिंच करें · खिसकाने को खींचें'],
     'Open · Sunday Open': ['เปิด · รอบคืนวันอาทิตย์', 'ເປີດ · ຮອບຄືນວັນອາທິດ', 'Abierto · Apertura Dominical', '开盘 · 周日早盘', '開場・日曜オープン', 'खुला · रविवार सत्र'],
     'Open · Overnight': ['เปิด · รอบกลางคืน', 'ເປີດ · ຮອບກາງຄືນ', 'Abierto · Nocturno', '开盘 · 夜盘电子盘', '開場・夜間取引', 'खुला · रात्रि सत्र'],

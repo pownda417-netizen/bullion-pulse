@@ -1235,6 +1235,152 @@ export function computeMarketRegimeDecomposition({
   };
 }
 
+export function analyzeMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1d') {
+  if (!Array.isArray(bars) || bars.length < 2) {
+    return {
+      metal,
+      tf,
+      gaps: [],
+      primary: null,
+      openCount: 0,
+      signal: 0,
+      predictionBoost: 0,
+      bias: 'neutral',
+      status: 'No Open Gap',
+    };
+  }
+  const isSilver = metal === 'silver';
+  const minGapPct =
+    tf === '15min' || tf === '1h'
+      ? (isSilver ? 0.22 : 0.12)
+      : tf === '4h' || tf === '1d'
+        ? (isSilver ? 0.40 : 0.22)
+        : tf === '7d' || tf === '1m' || tf === '6m'
+          ? (isSilver ? 0.65 : 0.35)
+          : (isSilver ? 1.15 : 0.70);
+
+  const spot =
+    Number.isFinite(Number(liveSpot)) && Number(liveSpot) > 0
+      ? Number(liveSpot)
+      : bars[bars.length - 1].c;
+  const gaps = [];
+
+  for (let i = 1; i < bars.length; i++) {
+    const prev = bars[i - 1];
+    const curr = bars[i];
+    if (!prev || !curr || !(prev.c > 0) || !(curr.o > 0)) continue;
+    const rawGapUsd = curr.o - prev.c;
+    const rawGapPct = (rawGapUsd / prev.c) * 100;
+    const absPct = Math.abs(rawGapPct);
+    if (absPct < minGapPct) continue;
+
+    const dir = rawGapUsd >= 0 ? 'up' : 'down';
+    const fillTarget = prev.c;
+    const gapEdge = curr.o;
+    const zoneLow = Math.min(fillTarget, gapEdge);
+    const zoneHigh = Math.max(fillTarget, gapEdge);
+    const zoneSpan = Math.max(0.0001, zoneHigh - zoneLow);
+    const dtMs = (curr.t || 0) - (prev.t || 0);
+    const kind =
+      dtMs >= 24 * 3600000
+        ? 'Weekend Gap'
+        : dtMs >= 45 * 60000
+          ? 'Session Gap'
+          : absPct >= (isSilver ? 1.0 : 0.6)
+            ? 'Breakaway Gap'
+            : 'Price Gap';
+
+    let extremeSince = dir === 'up' ? curr.l : curr.h;
+    let filledAtIdx = null;
+    for (let j = i; j < bars.length; j++) {
+      const b = bars[j];
+      if (dir === 'up') {
+        if (b.l < extremeSince) extremeSince = b.l;
+        if (filledAtIdx == null && b.l <= fillTarget) filledAtIdx = j;
+      } else {
+        if (b.h > extremeSince) extremeSince = b.h;
+        if (filledAtIdx == null && b.h >= fillTarget) filledAtIdx = j;
+      }
+    }
+    if (dir === 'up' && spot < extremeSince) extremeSince = spot;
+    if (dir === 'down' && spot > extremeSince) extremeSince = spot;
+    if (filledAtIdx == null) {
+      if ((dir === 'up' && spot <= fillTarget) || (dir === 'down' && spot >= fillTarget)) {
+        filledAtIdx = bars.length - 1;
+      }
+    }
+
+    const fillRatio =
+      dir === 'up'
+        ? clamp((zoneHigh - extremeSince) / zoneSpan, 0, 1)
+        : clamp((extremeSince - zoneLow) / zoneSpan, 0, 1);
+    const isFilled = fillRatio >= 0.99 || filledAtIdx != null;
+    const fillPct = isFilled ? 100 : Math.round(fillRatio * 100);
+    const moveToFillUsd = fillTarget - spot;
+    const moveToFillPct = spot > 0 ? (moveToFillUsd / spot) * 100 : 0;
+    const holdingBeyond = dir === 'up' ? spot >= zoneHigh : spot <= zoneLow;
+    const unfilledFrac = isFilled ? 0 : 1 - fillRatio;
+    const magNorm = clamp(absPct / (isSilver ? 2.4 : 1.35), 0.25, 1.0);
+    const holdMult = holdingBeyond ? 1.15 : 0.72;
+    const signal = isFilled
+      ? 0
+      : clamp((dir === 'up' ? 1 : -1) * magNorm * unfilledFrac * holdMult * 0.78, -0.85, 0.85);
+    const predictionBoost = isFilled ? 0 : clamp(signal * 0.20, -0.16, 0.16);
+
+    gaps.push({
+      idx: i,
+      t: curr.t,
+      prevT: prev.t,
+      dir,
+      kind,
+      tf,
+      gapUsd: +rawGapUsd.toFixed(2),
+      gapPct: +rawGapPct.toFixed(2),
+      fillTarget: +fillTarget.toFixed(2),
+      gapEdge: +gapEdge.toFixed(2),
+      zoneLow: +zoneLow.toFixed(2),
+      zoneHigh: +zoneHigh.toFixed(2),
+      fillPct,
+      isFilled,
+      filledAtIdx,
+      holdingBeyond,
+      moveToFillUsd: +moveToFillUsd.toFixed(2),
+      moveToFillPct: +moveToFillPct.toFixed(2),
+      signal: +signal.toFixed(3),
+      predictionBoost: +predictionBoost.toFixed(4),
+    });
+  }
+
+  const openGaps = gaps.filter((g) => !g.isFilled);
+  const rankGap = (g) => {
+    const kindW = g.kind === 'Weekend Gap' ? 1.55 : g.kind === 'Session Gap' ? 1.25 : 1.0;
+    return Math.abs(g.gapPct) * (1 - g.fillPct / 100) * kindW;
+  };
+  const primary = openGaps.length
+    ? [...openGaps].sort((a, b) => rankGap(b) - rankGap(a) || b.idx - a.idx)[0]
+    : gaps.length
+      ? gaps[gaps.length - 1]
+      : null;
+
+  return {
+    metal,
+    tf,
+    gaps: gaps.slice(-4),
+    primary,
+    openCount: openGaps.length,
+    signal: primary ? primary.signal : 0,
+    predictionBoost: primary ? primary.predictionBoost : 0,
+    bias: primary && !primary.isFilled ? (primary.dir === 'up' ? 'bullish' : 'bearish') : 'neutral',
+    status: !primary
+      ? 'No Open Gap'
+      : primary.isFilled
+        ? 'Gap Filled ✓'
+        : primary.dir === 'up'
+          ? 'Gap Up · Bullish ↑'
+          : 'Gap Down · Bearish ↓',
+  };
+}
+
 export function buildOutlook({
   spotGold,
   spotSilver,
@@ -1245,6 +1391,7 @@ export function buildOutlook({
   comex = null,
   proSignals = null,
   institutionalSignals = null,
+  candles = null,
   learnedWeights = null,
   accuracy = null,
   coneMultiplier = 1.0,
@@ -1420,9 +1567,19 @@ export function buildOutlook({
     basis?.silver?.priceDiscoveryBoost ??
     (basis?.silver?.isBackwardation || (basis?.silver?.basisUsd ?? 1) < 0 ? 0.14 : 0);
 
-  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation price-discovery lift
+  // Market Gap Analyzer (unfilled Gap Up = bullish momentum, unfilled Gap Down = bearish momentum)
+  const goldGapBars = candles?.gold || candles?.timeframes?.['1d']?.gold || [];
+  const silverGapBars = candles?.silver || candles?.timeframes?.['1d']?.silver || [];
+  const marketGaps = {
+    gold: analyzeMarketGaps(goldGapBars, spotGold, 'gold', '1d'),
+    silver: analyzeMarketGaps(silverGapBars, spotSilver, 'silver', '1d'),
+  };
+  const gapBoostGold = marketGaps.gold.predictionBoost || 0;
+  const gapBoostSilver = marketGaps.silver.predictionBoost || 0;
+
+  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap momentum
   const goldUnit = clamp(
-    goldDriverComposite * 1.48 * 0.78 + quant.goldTrend * 0.22 + driftNudgeGold + backwBoostGold,
+    goldDriverComposite * 1.48 * 0.78 + quant.goldTrend * 0.22 + driftNudgeGold + backwBoostGold + gapBoostGold,
     -1,
     1
   );
@@ -1431,7 +1588,8 @@ export function buildOutlook({
       quant.silverTrend * 0.15 +
       quant.ratioSignalSilver * 0.10 +
       driftNudgeSilver +
-      backwBoostSilver,
+      backwBoostSilver +
+      gapBoostSilver,
     -1,
     1
   );
@@ -1705,6 +1863,7 @@ export function buildOutlook({
       jumpDiffusion30d: silverMc30d,
     },
     marketRegime,
+    marketGaps,
     setupQuality,
     ratioAnalytics,
     dollarStrength,
