@@ -2999,10 +2999,12 @@ function renderChart() {
       const yTop = clampNum(yAt(gp.zoneHigh), padTop, padTop + plotH);
       const yBot = clampNum(yAt(gp.zoneLow), padTop, padTop + plotH);
       const bandH = Math.max(3, yBot - yTop);
+      const fresh = gp.freshness ?? (gp.isFilled ? 0 : 1);
+      const fillAlpha = gp.isFilled ? 0.05 : +(0.045 + 0.115 * fresh).toFixed(3);
       ctx.save();
       ctx.fillStyle = gp.dir === 'up'
-        ? (gp.isFilled ? 'rgba(34, 197, 94, 0.06)' : 'rgba(34, 197, 94, 0.16)')
-        : (gp.isFilled ? 'rgba(239, 68, 68, 0.06)' : 'rgba(239, 68, 68, 0.16)');
+        ? `rgba(34, 197, 94, ${fillAlpha})`
+        : `rgba(239, 68, 68, ${fillAlpha})`;
       ctx.fillRect(x1, yTop, Math.max(6, x2 - x1), bandH);
       ctx.restore();
     }
@@ -3483,20 +3485,23 @@ function renderChart() {
       const fillY = yAt(gp.fillTarget);
       if (fillY < padTop + 4 || fillY > padTop + plotH - 4) continue;
       const col = gp.dir === 'up' ? '#22C55E' : '#F43F5E';
+      const fresh = gp.freshness ?? (gp.isFilled ? 0 : 1);
       ctx.save();
       ctx.strokeStyle = col;
-      ctx.globalAlpha = gp.isFilled ? 0.42 : 0.9;
-      ctx.lineWidth = gp.isFilled ? 1.0 : 1.35;
-      ctx.setLineDash(gp.isFilled ? [2, 4] : [6, 3]);
+      ctx.globalAlpha = gp.isFilled ? 0.36 : +(0.30 + 0.60 * fresh).toFixed(2);
+      ctx.lineWidth = gp.isFilled || fresh < 0.25 ? 1.0 : 1.35;
+      ctx.setLineDash(gp.isFilled || fresh < 0.25 ? [2, 4] : [6, 3]);
       ctx.beginPath();
       ctx.moveTo(x1, fillY);
       ctx.lineTo(x2, fillY);
       ctx.stroke();
 
-      if (!gp.isFilled || gp === chartGapAnalysis.primary) {
+      if ((!gp.isFilled && fresh > 0.15) || gp === chartGapAnalysis.primary) {
         const tagTxt = gp.isFilled
           ? `${gp.dir === 'up' ? 'Gap Up' : 'Gap Down'} Filled ✓`
-          : `${gp.dir === 'up' ? 'Gap Up' : 'Gap Down'} · Fill ${fmtChartVal(gp.fillTarget, gapDec)}`;
+          : gp.isBreakawayAged
+            ? `Breakaway ${gp.dir === 'up' ? 'Up' : 'Down'} (${Math.round(gp.ageDays)}d)`
+            : `${gp.dir === 'up' ? 'Gap Up' : 'Gap Down'} · Fill ${fmtChartVal(gp.fillTarget, gapDec)}`;
         ctx.setLineDash([]);
         ctx.font = `700 ${desktopCanvas ? 9.5 : 8.5}px "JetBrains Mono", monospace`;
         const tw = ctx.measureText(tagTxt).width;
@@ -3930,19 +3935,34 @@ function analyzeClientMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1d
     const moveToFillPct = spot > 0 ? (moveToFillUsd / spot) * 100 : 0;
     const holdingBeyond = dir === 'up' ? spot >= zoneHigh : spot <= zoneLow;
     const unfilledFrac = isFilled ? 0 : 1 - fillRatio;
+
+    // Age-decay: full weight for 48h, fades smoothly over days 2–10, retires after 10d as a confirmed Breakaway
+    const refNowMs = bars[bars.length - 1]?.t || curr.t || 0;
+    const ageHours = curr.t && refNowMs > curr.t ? (refNowMs - curr.t) / 3600000 : 0;
+    const ageDays = ageHours / 24;
+    const isBreakawayAged = !isFilled && ageDays >= 4 && fillPct < 50 && holdingBeyond;
+    const freshness = isFilled
+      ? 0
+      : ageDays <= 2
+        ? 1
+        : ageDays >= 10
+          ? 0
+          : +clampNum(Math.exp(-(ageDays - 2) / 3.2), 0, 1).toFixed(3);
+
     const magNorm = clampNum(absPct / (isSilver ? 2.4 : 1.35), 0.25, 1.0);
     const holdMult = holdingBeyond ? 1.15 : 0.72;
-    const signal = isFilled
-      ? 0
-      : clampNum((dir === 'up' ? 1 : -1) * magNorm * unfilledFrac * holdMult * 0.78, -0.85, 0.85);
-    const predictionBoost = isFilled ? 0 : clampNum(signal * 0.20, -0.16, 0.16);
+    const signal =
+      isFilled || freshness <= 0
+        ? 0
+        : clampNum((dir === 'up' ? 1 : -1) * magNorm * unfilledFrac * holdMult * freshness * 0.78, -0.85, 0.85);
+    const predictionBoost = isFilled || freshness <= 0 ? 0 : clampNum(signal * 0.20, -0.16, 0.16);
 
     gaps.push({
       idx: i,
       t: curr.t,
       prevT: prev.t,
       dir,
-      kind,
+      kind: isBreakawayAged ? 'Breakaway Gap (Confirmed)' : kind,
       tf,
       tfLabel: CHART_TF_META[tf]?.label || '1D',
       gapUsd: +rawGapUsd.toFixed(2),
@@ -3955,6 +3975,9 @@ function analyzeClientMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1d
       isFilled,
       filledAtIdx,
       holdingBeyond,
+      ageDays: +ageDays.toFixed(1),
+      freshness,
+      isBreakawayAged,
       moveToFillUsd: +moveToFillUsd.toFixed(2),
       moveToFillPct: +moveToFillPct.toFixed(2),
       signal: +signal.toFixed(3),
@@ -3962,10 +3985,10 @@ function analyzeClientMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1d
     });
   }
 
-  const openGaps = gaps.filter((g) => !g.isFilled);
+  const openGaps = gaps.filter((g) => !g.isFilled && g.freshness > 0);
   const rankGap = (g) => {
     const kindW = g.kind === 'Weekend Gap' ? 1.55 : g.kind === 'Session Gap' ? 1.25 : 1.0;
-    return Math.abs(g.gapPct) * (1 - g.fillPct / 100) * kindW;
+    return Math.abs(g.gapPct) * (1 - g.fillPct / 100) * Math.max(0.15, g.freshness) * kindW;
   };
   const primary = openGaps.length
     ? [...openGaps].sort((a, b) => rankGap(b) - rankGap(a) || b.idx - a.idx)[0]
@@ -3982,14 +4005,16 @@ function analyzeClientMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1d
     openCount: openGaps.length,
     signal: primary ? primary.signal : 0,
     predictionBoost: primary ? primary.predictionBoost : 0,
-    bias: primary && !primary.isFilled ? (primary.dir === 'up' ? 'bullish' : 'bearish') : 'neutral',
+    bias: primary && !primary.isFilled && primary.freshness > 0 ? (primary.dir === 'up' ? 'bullish' : 'bearish') : 'neutral',
     status: !primary
       ? 'No Open Gap'
       : primary.isFilled
         ? 'Gap Filled ✓'
-        : primary.dir === 'up'
-          ? 'Gap Up · Bullish ↑'
-          : 'Gap Down · Bearish ↓',
+        : primary.freshness <= 0
+          ? 'Breakaway (Aged)'
+          : primary.dir === 'up'
+            ? 'Gap Up · Bullish ↑'
+            : 'Gap Down · Bearish ↓',
   };
 }
 
@@ -6245,7 +6270,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=46', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=47', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -7187,15 +7212,21 @@ function renderGapAnalyzer(res) {
     if (actionEl) {
       if (p.isFilled) {
         actionEl.textContent = `Recent ${isUp ? 'Gap Up' : 'Gap Down'} to ${fillTargetDisp} is already 100% filled ✓ — no open gap magnet pulling ${name} right now.`;
+      } else if (p.freshness === 0) {
+        actionEl.textContent = `Unfilled for ${Math.round(p.ageDays || 10)}+ days — now treated as a confirmed Breakaway Gap (short-term fill pull has faded out).`;
       } else if (isUp) {
-        const holdTxt = p.holdingBeyond
-          ? `Holding above ${gapEdgeDisp} keeps buyers in control (breakaway strength).`
-          : `Price is currently testing inside the gap pocket (${p.fillPct}% filled).`;
+        const holdTxt = p.isBreakawayAged
+          ? `Unfilled for ${Math.round(p.ageDays)}d — fading toward a confirmed Breakaway Gap.`
+          : p.holdingBeyond
+            ? `Holding above ${gapEdgeDisp} keeps buyers in control (breakaway strength).`
+            : `Price is currently testing inside the gap pocket (${p.fillPct}% filled).`;
         actionEl.textContent = `To fill this bullish gap, ${name} would need to drop ${moveDisp} (${movePctDisp}) back to ${fillTargetDisp}. ${holdTxt}`;
       } else {
-        const holdTxt = p.holdingBeyond
-          ? `Staying below ${gapEdgeDisp} keeps sellers in control (downside pressure).`
-          : `Price is currently bouncing inside the gap pocket (${p.fillPct}% filled).`;
+        const holdTxt = p.isBreakawayAged
+          ? `Unfilled for ${Math.round(p.ageDays)}d — fading toward a confirmed Breakaway Gap.`
+          : p.holdingBeyond
+            ? `Staying below ${gapEdgeDisp} keeps sellers in control (downside pressure).`
+            : `Price is currently bouncing inside the gap pocket (${p.fillPct}% filled).`;
         actionEl.textContent = `To fill this bearish gap, ${name} needs a ${moveDisp} (${movePctDisp}) rally back up to ${fillTargetDisp}. ${holdTxt}`;
       }
     }
@@ -7203,7 +7234,9 @@ function renderGapAnalyzer(res) {
     if (impactEl) {
       const pts = Math.round((info.predictionBoost || 0) * 100);
       if (p.isFilled || pts === 0) {
-        impactEl.textContent = 'Forecast impact: Neutral (0 pts — already filled)';
+        impactEl.textContent = p.isFilled
+          ? 'Forecast impact: Neutral (0 pts — already filled)'
+          : 'Forecast impact: Neutral (0 pts — aged breakaway)';
         impactEl.className = 'gap-impact';
       } else if (pts > 0) {
         impactEl.textContent = `Forecast impact: +${pts} pts bullish momentum (pullback magnet at ${fillTargetDisp})`;
@@ -10535,7 +10568,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 46,
+      version: 47,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),

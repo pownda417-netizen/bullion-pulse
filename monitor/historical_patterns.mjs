@@ -1320,19 +1320,34 @@ export function analyzeMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1
     const moveToFillPct = spot > 0 ? (moveToFillUsd / spot) * 100 : 0;
     const holdingBeyond = dir === 'up' ? spot >= zoneHigh : spot <= zoneLow;
     const unfilledFrac = isFilled ? 0 : 1 - fillRatio;
+
+    // Age-decay: full weight for first 48h, fades smoothly over days 2–10, and retires after 10 days as a confirmed Breakaway
+    const refNowMs = bars[bars.length - 1]?.t || curr.t || 0;
+    const ageHours = curr.t && refNowMs > curr.t ? (refNowMs - curr.t) / 3600000 : 0;
+    const ageDays = ageHours / 24;
+    const isBreakawayAged = !isFilled && ageDays >= 4 && fillPct < 50 && holdingBeyond;
+    const freshness = isFilled
+      ? 0
+      : ageDays <= 2
+        ? 1
+        : ageDays >= 10
+          ? 0
+          : +clamp(Math.exp(-(ageDays - 2) / 3.2), 0, 1).toFixed(3);
+
     const magNorm = clamp(absPct / (isSilver ? 2.4 : 1.35), 0.25, 1.0);
     const holdMult = holdingBeyond ? 1.15 : 0.72;
-    const signal = isFilled
-      ? 0
-      : clamp((dir === 'up' ? 1 : -1) * magNorm * unfilledFrac * holdMult * 0.78, -0.85, 0.85);
-    const predictionBoost = isFilled ? 0 : clamp(signal * 0.20, -0.16, 0.16);
+    const signal =
+      isFilled || freshness <= 0
+        ? 0
+        : clamp((dir === 'up' ? 1 : -1) * magNorm * unfilledFrac * holdMult * freshness * 0.78, -0.85, 0.85);
+    const predictionBoost = isFilled || freshness <= 0 ? 0 : clamp(signal * 0.20, -0.16, 0.16);
 
     gaps.push({
       idx: i,
       t: curr.t,
       prevT: prev.t,
       dir,
-      kind,
+      kind: isBreakawayAged ? 'Breakaway Gap (Confirmed)' : kind,
       tf,
       gapUsd: +rawGapUsd.toFixed(2),
       gapPct: +rawGapPct.toFixed(2),
@@ -1344,6 +1359,9 @@ export function analyzeMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1
       isFilled,
       filledAtIdx,
       holdingBeyond,
+      ageDays: +ageDays.toFixed(1),
+      freshness,
+      isBreakawayAged,
       moveToFillUsd: +moveToFillUsd.toFixed(2),
       moveToFillPct: +moveToFillPct.toFixed(2),
       signal: +signal.toFixed(3),
@@ -1351,10 +1369,10 @@ export function analyzeMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1
     });
   }
 
-  const openGaps = gaps.filter((g) => !g.isFilled);
+  const openGaps = gaps.filter((g) => !g.isFilled && g.freshness > 0);
   const rankGap = (g) => {
     const kindW = g.kind === 'Weekend Gap' ? 1.55 : g.kind === 'Session Gap' ? 1.25 : 1.0;
-    return Math.abs(g.gapPct) * (1 - g.fillPct / 100) * kindW;
+    return Math.abs(g.gapPct) * (1 - g.fillPct / 100) * Math.max(0.15, g.freshness) * kindW;
   };
   const primary = openGaps.length
     ? [...openGaps].sort((a, b) => rankGap(b) - rankGap(a) || b.idx - a.idx)[0]
@@ -1370,14 +1388,16 @@ export function analyzeMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1
     openCount: openGaps.length,
     signal: primary ? primary.signal : 0,
     predictionBoost: primary ? primary.predictionBoost : 0,
-    bias: primary && !primary.isFilled ? (primary.dir === 'up' ? 'bullish' : 'bearish') : 'neutral',
+    bias: primary && !primary.isFilled && primary.freshness > 0 ? (primary.dir === 'up' ? 'bullish' : 'bearish') : 'neutral',
     status: !primary
       ? 'No Open Gap'
       : primary.isFilled
         ? 'Gap Filled ✓'
-        : primary.dir === 'up'
-          ? 'Gap Up · Bullish ↑'
-          : 'Gap Down · Bearish ↓',
+        : primary.freshness <= 0
+          ? 'Breakaway (Aged)'
+          : primary.dir === 'up'
+            ? 'Gap Up · Bullish ↑'
+            : 'Gap Down · Bearish ↓',
   };
 }
 

@@ -994,4 +994,22 @@ assert.ok(withGapOut.gold.score > baseNoGapOut.gold.score, 'Unfilled Gold Gap Up
 assert.ok(withGapOut.silver.score < baseNoGapOut.silver.score, 'Unfilled Silver Gap Down must lower Silver forecast score');
 assert.ok(withGapOut.marketGaps?.gold?.primary && withGapOut.marketGaps?.silver?.primary, 'buildOutlook must attach marketGaps');
 
+// Aged unfilled gap (>5d decays weight & marks Breakaway Gap (Confirmed); >=10d retires boost to 0)
+const aged5dBars = [
+  ...gapUpBars,
+  { t: tSunOpen + 5 * 86400000, o: 3602, h: 3640, l: 3598, c: 3630 },
+];
+const gAged5d = analyzeMarketGaps(aged5dBars, 3630, 'gold', '1d');
+assert.equal(gAged5d.primary.isBreakawayAged, true);
+assert.equal(gAged5d.primary.kind, 'Breakaway Gap (Confirmed)');
+assert.ok(gAged5d.predictionBoost > 0 && gAged5d.predictionBoost < gUpRes.predictionBoost, '5-day old unfilled gap must decay prediction boost');
+
+const aged12dBars = [
+  ...gapUpBars,
+  { t: tSunOpen + 12 * 86400000, o: 3602, h: 3660, l: 3600, c: 3655 },
+];
+const gAged12d = analyzeMarketGaps(aged12dBars, 3655, 'gold', '1d');
+assert.equal(gAged12d.predictionBoost, 0, '10+ day old unfilled gap must retire boost to 0');
+assert.equal(gAged12d.status, 'Breakaway (Aged)');
+
 console.log('All 26 Bullion Pulse suites (Market Gap Analyzer & Predictions, Security RSS/URL XSS Defense, Asymmetric Regime Jump-Diffusion, Au/Ag Ratio Z-Score/Swap, Setup Quality, Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, FRED, COT, Miners, Shanghai & Accuracy) passed!');
