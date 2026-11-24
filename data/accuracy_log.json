@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-23T23:55:26.451Z",
+  "updatedAt": "2026-11-24T01:14:16.282Z",
   "scorecard": {
     "live7d": {
       "count": 0,
@@ -221,6 +221,58 @@
         "bearPct": -13.75,
         "expectedPct": -0.91,
         "bullPct": 11.93
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-24-gold",
+      "createdAt": "2026-11-24T01:14:16.282Z",
+      "metal": "gold",
+      "spotAtForecast": 3660.9,
+      "score": -5,
+      "signal": "Neutral",
+      "horizon7d": {
+        "bear": 3514.46,
+        "base": 3656,
+        "bull": 3797.54,
+        "bearPct": -4,
+        "expectedPct": -0.13,
+        "bullPct": 3.73
+      },
+      "horizon30d": {
+        "bear": 3360.79,
+        "base": 3650.86,
+        "bull": 3940.92,
+        "bearPct": -8.2,
+        "expectedPct": -0.27,
+        "bullPct": 7.65
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-24-silver",
+      "createdAt": "2026-11-24T01:14:16.282Z",
+      "metal": "silver",
+      "spotAtForecast": 43.34,
+      "score": -20,
+      "signal": "Bearish",
+      "horizon7d": {
+        "bear": 40.48,
+        "base": 43.01,
+        "bull": 45.54,
+        "bearPct": -6.61,
+        "expectedPct": -0.77,
+        "bullPct": 5.07
+      },
+      "horizon30d": {
+        "bear": 37.47,
+        "base": 42.66,
+        "bull": 47.84,
+        "bearPct": -13.54,
+        "expectedPct": -1.58,
+        "bullPct": 10.39
       },
       "graded7d": null,
       "graded30d": null
