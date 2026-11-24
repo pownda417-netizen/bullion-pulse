@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-24T14:26:14.780Z",
+  "updatedAt": "2026-11-24T15:41:18.637Z",
   "liveFetched": true,
   "oiLive": true,
   "vaultLive": true,
@@ -52,6 +52,6 @@
     "jumpBoost": 0.104,
     "regime": "Elevated Paper Claims",
     "date": "2026-11-17",
-    "source": "CFTC Live OI + Public COMEX Mirror"
+    "source": "Public COMEX Mirror"
   }
 }
