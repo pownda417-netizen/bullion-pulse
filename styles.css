@@ -1037,10 +1037,31 @@ body {
 .dot-up { background: var(--up); }
 .dot-down { background: var(--down); }
 
-.line-bull, .line-base, .line-bear, .line-fib, .line-spot, .line-gap {
+.chart-overlay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.chart-overlay-bar .chip-toggle {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.line-bull, .line-base, .line-bear, .line-fib, .line-spot, .line-gap, .line-forecast {
   width: 12px;
   height: 2px;
   border-radius: 2px;
+}
+
+.line-forecast {
+  height: 2.5px;
+  background: linear-gradient(90deg, var(--gold-bright), var(--up));
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.35);
 }
 
 .line-spot {
@@ -4242,6 +4263,299 @@ button.sector-chip.selected {
 
 .sl-chart-legend {
   margin-top: 6px;
+}
+
+.sl-chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sl-hover-readout {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sl-hover-readout strong {
+  color: var(--text);
+}
+
+/* Next 30 Days Precision Forecast & Predictions Roadmap */
+.fc30-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .fc30-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fc30-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+.fc30-card.bullish {
+  border-color: rgba(34, 197, 94, 0.30);
+}
+
+.fc30-card.bearish {
+  border-color: rgba(239, 68, 68, 0.30);
+}
+
+.fc30-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fc30-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.fc30-metal {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fc30-metal.gold { color: var(--gold-bright); }
+.fc30-metal.silver { color: var(--silver); }
+
+.fc30-pills {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.fc30-mini-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.fc30-mini-pill.up {
+  color: var(--up);
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.fc30-mini-pill.down {
+  color: var(--down);
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.fc30-spark-wrap {
+  width: 100%;
+  height: 44px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 3px 6px;
+}
+
+.fc30-spark-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.fc30-milestones {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+@media (max-width: 460px) {
+  .fc30-milestones {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.fc30-node {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fc30-node.target {
+  border-color: rgba(212, 168, 67, 0.42);
+  background: rgba(212, 168, 67, 0.05);
+}
+
+.fc30-node-k {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.fc30-node-p {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc30-node-d {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fc30-node-d.up { color: var(--up); }
+.fc30-node-d.down { color: var(--down); }
+
+.fc30-alpha-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.fc30-alpha-tag {
+  font-size: 10.2px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+
+.fc30-alpha-tag strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.fc30-votes-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 10.5px;
+  color: var(--text-subtle);
+  padding-top: 4px;
+  border-top: 1px dashed var(--border);
+}
+
+.fc30-vote-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.fc30-vote {
+  font-size: 9.5px;
+  font-weight: 650;
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.fc30-vote.up { color: var(--up); background: rgba(34, 197, 94, 0.11); }
+.fc30-vote.down { color: var(--down); background: rgba(239, 68, 68, 0.11); }
+
+/* Live World & Space Catalyst Pulse */
+.wsp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .wsp-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.wsp-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wsp-card.active {
+  border-color: rgba(34, 197, 94, 0.36);
+}
+
+.wsp-card.watch {
+  border-color: rgba(212, 168, 67, 0.42);
+}
+
+.wsp-k {
+  font-size: 9.8px;
+  font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.wsp-v {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wsp-v.up { color: var(--up); }
+.wsp-v.down { color: var(--down); }
+.wsp-v.gold { color: var(--gold-bright); }
+
+.wsp-sub {
+  font-size: 10.4px;
+  color: var(--text-muted);
+  line-height: 1.3;
 }
 
 /* Stack Dealer Spread, Lot Ledger & Ratio Swap Calculator */

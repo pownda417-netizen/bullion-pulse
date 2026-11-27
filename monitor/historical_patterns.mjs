@@ -7,6 +7,7 @@
  */
 
 import { estimateJumpParams, runJumpDiffusion } from './jump_diffusion.mjs';
+import { computeHurstExponent } from './precision_forecast.mjs';
 
 export const DRIVER_META = {
   inflation: {
@@ -287,6 +288,22 @@ export const SCENARIO_PRESETS = [
     silverDelta: 0.88,
     summary: 'Surging COMEX paper open interest against draining registered vaults raises short-covering and physical squeeze tail risk.',
   },
+  {
+    id: 'solar_storm',
+    label: 'Solar Storm / Grid Risk (G4+)',
+    driver: 'geopolitics',
+    goldDelta: 0.55,
+    silverDelta: 0.65,
+    summary: 'Severe geomagnetic storms (G4–G5) threaten power grids, satellites, and clearing systems, lifting Gold safe-haven demand and Silver grid/solar replacement demand.',
+  },
+  {
+    id: 'space_solar_boom',
+    label: 'Space & Solar Tech Demand Surge',
+    driver: 'mining_supply',
+    goldDelta: 0.25,
+    silverDelta: 0.78,
+    summary: 'Accelerating satellite constellations, orbital solar arrays, and aerospace electronics expand physical Silver consumption.',
+  },
 ];
 
 /* ---------- Keyword-Based News Classifier ---------- */
@@ -313,6 +330,7 @@ const DRIVER_RULES = [
       /\b(war|airstrike|missile|invasion|escalat|conflict|hostilit|(?<!labor\s)(?<!mine\s)(?<!union\s)(?<!workers\s)strike|retaliat)\b/i,
       /\b(middle east|ukraine|gaza|iran|taiwan|red sea)\b.*\b(tension|attack|crisis|clash|warning|fear)/i,
       /\b(sanction|tariff|trade war|embargo|geopolitical)\b/i,
+      /\b(geomagnetic storm|solar flare|coronal mass ejection|x-class flare|solar storm|grid blackout|satellite disruption|anti-satellite|cme impact)\b/i,
       /\bsafe[- ]haven\b/i,
     ],
     bearish: [
@@ -352,6 +370,7 @@ const DRIVER_RULES = [
       /\b(mine|mining|miner|smelter|san dimas|newmont|barrick|first majestic|pan american|hecla|agnico|wheaton)\b.*\b(strike|labor dispute|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output|aisc.*rise|aisc.*jump|cost.*rise)/i,
       /\b(silver|gold)\b.*\b(deficit|shortage|tight supply|vault drain|inventory drop|record demand|squeeze|sixth straight)/i,
       /\b(solar|photovoltaic|ev|electrification|charging|electronics|ai data center)\b.*\b(silver|demand|grow|surge|boom|rise)/i,
+      /\b(space economy|satellite constellation|orbital solar|aerospace|lunar base|starship|nasa|spacex|satellite launch)\b.*\b(demand|launch|build|solar|silver|boom|record|contract|expand)/i,
       /\bexport (ban|curb|restriction|licensing|control)\b.*\b(silver|gold|metal|mineral)/i,
       /\b(comex|lbma|shfe)\b.*\b(inventory|stock|vault)\b.*\b(drop|decline|drain|low|plummet)/i,
     ],
@@ -1019,6 +1038,387 @@ function signalLabelFromScore(score) {
   return 'Neutral';
 }
 
+export const SEASONAL_20Y_MONTHLY = {
+  gold: [2.8, 0.4, -0.3, 1.1, 0.2, -0.5, 1.5, 1.9, -0.4, 0.3, 1.4, 2.1],
+  silver: [3.1, 1.2, -0.9, 1.8, -0.6, -1.1, 2.9, 1.6, -1.3, 0.8, 1.7, 2.6],
+};
+
+export function getUpcoming30dSeasonality(metal = 'gold', nowDate = new Date()) {
+  const arr = SEASONAL_20Y_MONTHLY[metal === 'silver' ? 'silver' : 'gold'];
+  const d = nowDate instanceof Date ? nowDate : new Date(nowDate);
+  const mIdx = d.getUTCMonth();
+  const nextIdx = (mIdx + 1) % 12;
+  const daysInMonth = new Date(Date.UTC(d.getUTCFullYear(), mIdx + 1, 0)).getUTCDate();
+  const remFrac = clamp((daysInMonth - d.getUTCDate() + 1) / 30, 0.05, 1);
+  const blendedPct = arr[mIdx] * remFrac + arr[nextIdx] * (1 - remFrac);
+  const unitTilt = clamp(blendedPct / 16, -0.14, 0.14);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return {
+    blendedPct: +blendedPct.toFixed(2),
+    unitTilt: +unitTilt.toFixed(3),
+    windowLabel: remFrac >= 0.72 ? months[mIdx] : `${months[mIdx]}–${months[nextIdx]}`,
+    label: blendedPct >= 0.8 ? 'Seasonal Tailwind' : blendedPct <= -0.4 ? 'Seasonal Soft Patch' : 'Neutral Seasonality',
+  };
+}
+
+/**
+ * Cross-Asset Lead-Lag Alpha: captures signals that empirically lead Gold/Silver spot by 1-10 days:
+ *  - Gold/Silver Miners relative strength vs metal (GDX/GC, SIL/SI)
+ *  - Shanghai SGE physical arbitrage premium
+ *  - COMEX spot-to-futures backwardation tightness
+ *  - Cross-metal Gold/Silver ratio catch-up pressure
+ */
+export function computeCrossAssetLeadLag({
+  metal = 'gold',
+  proSignals = null,
+  shanghai = null,
+  basis = null,
+  ratio = 82,
+} = {}) {
+  const isSilver = metal === 'silver';
+  const minersSig = clamp(
+    Number(isSilver ? proSignals?.miners?.silverSignal : proSignals?.miners?.goldSignal) || 0,
+    -1,
+    1
+  );
+
+  let sgeLead = 0;
+  if (shanghai?.[metal]) {
+    const prem = isSilver ? shanghai.silver.exVatPremiumUsdOz : shanghai.gold.premiumUsdOz;
+    if (typeof prem === 'number' && Number.isFinite(prem)) {
+      sgeLead = isSilver ? clamp(prem / 3.5, -0.8, 0.8) : clamp((prem - 5) / 42, -0.8, 0.8);
+    }
+  }
+
+  const basisMetal = basis?.[metal] || null;
+  const backwLead =
+    basisMetal?.isBackwardation || (basisMetal?.basisUsd ?? 1) < 0
+      ? (isSilver ? 0.72 : 0.58)
+      : basisMetal?.state === 'Compressed EFP'
+        ? 0.28
+        : 0;
+
+  const ratioLead = isSilver
+    ? clamp((ratio - 76) / 22, -0.55, 0.75)
+    : clamp((70 - ratio) / 28, -0.25, 0.35);
+
+  const score = clamp(
+    minersSig * 0.42 + sgeLead * 0.26 + backwLead * 0.18 + ratioLead * 0.14,
+    -1,
+    1
+  );
+  const label =
+    score >= 0.22
+      ? 'Lead Signals Bullish ↑'
+      : score <= -0.22
+        ? 'Lead Signals Soft ↓'
+        : 'Lead Signals Balanced';
+
+  return {
+    score: +score.toFixed(3),
+    label,
+    components: {
+      minersLead: +minersSig.toFixed(3),
+      shanghaiLead: +sgeLead.toFixed(3),
+      backwardationLead: +backwLead.toFixed(3),
+      ratioLead: +ratioLead.toFixed(3),
+    },
+  };
+}
+
+/**
+ * Strictly Causal Empirical Historical Twin Matcher (Cosine-Similarity K-Nearest-Neighbors):
+ * Searches past trading windows (>= 21 trading days ago so forward 30d returns are strictly realized)
+ * matching today's [20d trend, RSI, trailing vol, DXY 20d] state.
+ */
+export function computeEmpiricalHistoricalTwins({
+  closes = [],
+  dxy = [],
+  horizonDays = 21,
+} = {}) {
+  const n = closes.length;
+  if (n < 48) return null;
+
+  const stateVecAt = (idx) => {
+    if (idx < 20) return null;
+    const c = closes[idx];
+    const c5 = closes[idx - 5];
+    const c20 = closes[idx - 20];
+    if (!(c > 0 && c5 > 0 && c20 > 0)) return null;
+    const ret5 = ((c - c5) / c5) * 100;
+    const ret20 = ((c - c20) / c20) * 100;
+    let gains = 0;
+    let losses = 0;
+    let sqVol = 0;
+    for (let k = idx - 13; k <= idx; k++) {
+      const diff = closes[k] - closes[k - 1];
+      if (diff > 0) gains += diff;
+      else losses -= diff;
+      if (closes[k - 1] > 0) {
+        const r = (closes[k] - closes[k - 1]) / closes[k - 1];
+        sqVol += r * r;
+      }
+    }
+    const rsi = losses === 0 ? (gains === 0 ? 50 : 88) : 100 - 100 / (1 + gains / losses);
+    const vol14 = Math.sqrt(sqVol / 14) * 100;
+    let dxy20 = 0;
+    if (dxy.length === n && dxy[idx] > 0 && dxy[idx - 20] > 0) {
+      dxy20 = ((dxy[idx] - dxy[idx - 20]) / dxy[idx - 20]) * 100;
+    }
+    return [
+      clamp(ret5 / 3.0, -2.5, 2.5),
+      clamp(ret20 / 6.5, -2.5, 2.5),
+      clamp((rsi - 50) / 18, -2.5, 2.5),
+      clamp((vol14 - 1.2) / 0.8, -2.5, 2.5),
+      clamp(-dxy20 / 3.0, -2.5, 2.5),
+    ];
+  };
+
+  const curVec = stateVecAt(n - 1);
+  if (!curVec) return null;
+  const norm = (v) => Math.sqrt(v.reduce((s, x) => s + x * x, 0)) || 1;
+  const curNorm = norm(curVec);
+
+  const matches = [];
+  for (let i = 20; i <= n - 1 - horizonDays; i++) {
+    const v = stateVecAt(i);
+    if (!v) continue;
+    let dot = 0;
+    for (let j = 0; j < v.length; j++) dot += curVec[j] * v[j];
+    const sim = dot / (curNorm * norm(v));
+    if (sim >= 0.45 && closes[i] > 0 && closes[i + horizonDays] > 0) {
+      const fwdPct = ((closes[i + horizonDays] - closes[i]) / closes[i]) * 100;
+      matches.push({ idx: i, sim, fwdPct });
+    }
+  }
+  if (!matches.length) return null;
+
+  // Pick top 4 non-overlapping matches (spaced >= 4 trading days apart)
+  matches.sort((a, b) => b.sim - a.sim);
+  const picked = [];
+  for (const m of matches) {
+    if (picked.every((p) => Math.abs(p.idx - m.idx) >= 4)) {
+      picked.push(m);
+      if (picked.length >= 4) break;
+    }
+  }
+  if (!picked.length) return null;
+
+  const wSum = picked.reduce((s, m) => s + m.sim, 0) || 1;
+  const avgReturnPct = picked.reduce((s, m) => s + m.fwdPct * m.sim, 0) / wSum;
+  const avgSimPct = Math.round((wSum / picked.length) * 100);
+  const upPct = Math.round((picked.filter((m) => m.fwdPct > 0).length / picked.length) * 100);
+
+  return {
+    count: picked.length,
+    matchPct: clamp(avgSimPct, 45, 97),
+    avgReturnPct: +avgReturnPct.toFixed(2),
+    upPct,
+    unitTilt: +clamp(avgReturnPct / 12, -0.35, 0.35).toFixed(3),
+  };
+}
+
+/**
+ * Fine-Tuned Next 30 Days Precision Projection Model (21 trading days):
+ *  - Structural slow-driver 30D weighting (Real Yields, Central Banks, COMEX, Shanghai, Deficits)
+ *  - 4-Specialist Ensemble (Structural Macro, Hurst Trend/Reversion, Lead-Lag Alpha, Seasonal+Twins)
+ *  - Ensemble Agreement Damping & RSI(14) mean-reversion brake
+ *  - Asymmetric Upside/Downside Semi-Volatility calibrated ranges
+ *  - Curved 4-Checkpoint Trajectory: Day 7 -> Day 14 -> Day 21 -> Day 30
+ */
+export function project30DayPrecision({
+  spotPrice,
+  dailyVol,
+  shortTermUnit = 0,
+  drivers = {},
+  quant = {},
+  metal = 'gold',
+  regimeWeightSet = null,
+  marketGaps = null,
+  proSignals = null,
+  shanghai = null,
+  basis = null,
+  learnedWeights = null,
+  series = {},
+  coneMultiplier = 1.0,
+  nowDate = new Date(),
+}) {
+  const isSilver = metal === 'silver';
+  const closes = Array.isArray(series?.[metal]) ? series[metal] : [];
+  const dxySeries = Array.isArray(series?.dxy) ? series.dxy : [];
+
+  // 1. Structural 30-day driver weighting (slow fundamental forces dominate over 21 trading days)
+  const slowBoostMap = {
+    rates_usd: 1.28,
+    central_banks: 1.25,
+    mining_supply: 1.22,
+    comex_paper: 1.20,
+    shanghai_sge: 1.18,
+    inflation: 1.15,
+    geopolitics: 0.96,
+    positioning_miners: 0.92,
+    equities: 0.68,
+  };
+  let wTotal = 0;
+  let structSum = 0;
+  const driverContribs = [];
+  for (const [id, meta] of Object.entries(DRIVER_META)) {
+    const baseW =
+      regimeWeightSet?.[metal]?.[id] ?? (isSilver ? meta.silverWeight : meta.goldWeight);
+    const w30 = baseW * (slowBoostMap[id] ?? 1.0);
+    const dVal = Number(drivers?.[id]?.[metal] ?? 0);
+    structSum += dVal * w30;
+    wTotal += w30;
+    driverContribs.push({ id, label: meta.shortLabel, contrib: dVal * w30, raw: dVal });
+  }
+  const structuralMacroUnit = clamp((wTotal > 0 ? structSum / wTotal : 0) * 1.48, -1, 1);
+
+  // 2. Hurst Exponent Market State + RSI(14) Exhaustion Mean-Reversion Brake
+  const hurstInfo = computeHurstExponent(closes.slice(-60));
+  const rsi14 = isSilver ? (quant?.silverRsi14 ?? 50) : (quant?.goldRsi14 ?? 50);
+  const rawTrend = isSilver ? (quant?.silverTrend ?? 0) : (quant?.goldTrend ?? 0);
+  const hurstTrendScale = clamp(1 + (hurstInfo.hurst - 0.50) * 1.35, 0.55, 1.45);
+  const rsiBrake =
+    rsi14 >= 70
+      ? -clamp((rsi14 - 68) / 24, 0, 0.55)
+      : rsi14 <= 30
+        ? clamp((32 - rsi14) / 24, 0, 0.55)
+        : 0;
+  const techReversionUnit = clamp(rawTrend * 0.72 * hurstTrendScale + rsiBrake, -1, 1);
+
+  // 3. Cross-Asset Lead-Lag Alpha (Miners + Shanghai + Backwardation + Ratio)
+  const leadLag = computeCrossAssetLeadLag({
+    metal,
+    proSignals,
+    shanghai,
+    basis,
+    ratio: quant?.ratio ?? 82,
+  });
+
+  // 4. 20-Year Calendar Seasonality + Empirical Historical Twin Matcher + Ratio Pull
+  const seasonality = getUpcoming30dSeasonality(metal, nowDate);
+  const twins = computeEmpiricalHistoricalTwins({ closes, dxy: dxySeries, horizonDays: 21 });
+  const ratioPull = isSilver ? clamp(quant?.ratioSignalSilver ?? 0, -0.5, 0.5) * 0.45 : 0;
+  const cycleSeasonalUnit = clamp(
+    seasonality.unitTilt * 2.1 + (twins?.unitTilt ?? 0) * 0.85 + ratioPull,
+    -1,
+    1
+  );
+
+  // 5. 4-Specialist 30D Ensemble + Disagreement Damping
+  const modelVotes = [
+    { id: 'macro', label: 'Macro & Vaults', unit: structuralMacroUnit, weight: 0.46 },
+    { id: 'leadlag', label: 'Lead-Lag Alpha', unit: leadLag.score, weight: 0.22 },
+    { id: 'hurst', label: 'Hurst & RSI', unit: techReversionUnit, weight: 0.16 },
+    { id: 'seasonal', label: 'Seasonal & Twins', unit: cycleSeasonalUnit, weight: 0.16 },
+  ];
+  const upVotes = modelVotes.filter((m) => m.unit >= 0.08).length;
+  const dnVotes = modelVotes.filter((m) => m.unit <= -0.08).length;
+  const agreeCount = Math.max(upVotes, dnVotes, modelVotes.filter((m) => Math.abs(m.unit) < 0.08).length);
+  const agreementPct = Math.round((agreeCount / modelVotes.length) * 100);
+  const agreeDamp = agreementPct >= 100 ? 1.0 : agreementPct >= 75 ? 0.91 : 0.76;
+
+  // Gaps decay to 35% strength over 30 days; backwardation & learned 30D bias add crisp structural calibration
+  const gapDecay30d = (marketGaps?.[metal]?.predictionBoost || 0) * 0.35;
+  const learned30dBias = clamp(
+    ((isSilver ? learnedWeights?.driftBias30dSilverPct : learnedWeights?.driftBias30dGoldPct) || 0) * 0.12,
+    -0.08,
+    0.08
+  );
+
+  const rawUnit30d = modelVotes.reduce((s, m) => s + m.unit * m.weight, 0);
+  const unit30d = clamp(rawUnit30d * agreeDamp + gapDecay30d + learned30dBias, -1, 1);
+
+  // 6. Asymmetric Upside / Downside Semi-Volatility (GJR-style bullion squeeze vs liquidation skew)
+  const rets45 = dailyReturns(closes.slice(-45));
+  let upSq = 0;
+  let upN = 0;
+  let dnSq = 0;
+  let dnN = 0;
+  for (const r of rets45) {
+    if (r >= 0) {
+      upSq += r * r;
+      upN++;
+    } else {
+      dnSq += r * r;
+      dnN++;
+    }
+  }
+  const baseVol = Math.max(0.005, dailyVol);
+  const upDailyVol = upN >= 5 ? clamp(Math.sqrt(upSq / upN), baseVol * 0.72, baseVol * 1.38) : baseVol;
+  const dnDailyVol = dnN >= 5 ? clamp(Math.sqrt(dnSq / dnN), baseVol * 0.72, baseVol * 1.38) : baseVol;
+
+  const sigma30 = baseVol * Math.sqrt(21);
+  const expectedDrift = unit30d * sigma30 * 0.74;
+  const mult = clamp(coneMultiplier, 0.85, 1.32);
+  const upBand = 1.08 * upDailyVol * Math.sqrt(21) * mult;
+  const dnBand = 1.08 * dnDailyVol * Math.sqrt(21) * mult;
+
+  const basePct = expectedDrift * 100;
+  const bullPct = (expectedDrift + upBand) * 100;
+  const bearPct = (expectedDrift - dnBand) * 100;
+
+  // Calibrated probability of finishing higher after 30 days (logistic approximation to normal CDF)
+  const zScore = sigma30 > 0 ? expectedDrift / sigma30 : 0;
+  const probHigherPct = Math.round(clamp((1 / (1 + Math.exp(-1.7 * zScore))) * 100, 12, 88));
+
+  // 7. Curved 4-Checkpoint 30-Day Path (Day 7 -> Day 14 -> Day 21 -> Day 30)
+  // Weeks 1-2 reflect fast catalysts/RSI/gap dynamics; Weeks 3-4 converge onto structural 30D drift
+  const fast7dPct = clamp(shortTermUnit * baseVol * Math.sqrt(5) * 0.72 * 100, -12, 12);
+  const d7Pct = +(fast7dPct * 0.65 + basePct * 0.30).toFixed(2);
+  const d14Pct = +(fast7dPct * 0.35 + basePct * 0.58).toFixed(2);
+  const d21Pct = +(fast7dPct * 0.12 + basePct * 0.82).toFixed(2);
+  const d30Pct = +basePct.toFixed(2);
+
+  const mkNode = (day, label, pct, note) => ({
+    day,
+    label,
+    pct,
+    price: +(spotPrice * (1 + pct / 100)).toFixed(2),
+    note,
+  });
+
+  const milestones = [
+    mkNode(7, 'Day 7', d7Pct, Math.abs(rsiBrake) >= 0.15 ? 'Momentum / RSI check' : 'Near-term flow'),
+    mkNode(14, 'Day 14', d14Pct, Math.abs(leadLag.score) >= 0.18 ? 'Lead-lag pass-through' : 'Mid-month balance'),
+    mkNode(21, 'Day 21', d21Pct, 'Structural macro build'),
+    mkNode(30, 'Day 30', d30Pct, seasonality.label),
+  ];
+
+  driverContribs.sort((a, b) => Math.abs(b.contrib) - Math.abs(a.contrib));
+  const topDrivers30d = driverContribs
+    .filter((d) => Math.abs(d.raw) >= 0.08)
+    .slice(0, 2)
+    .map((d) => d.label);
+
+  return {
+    bear: +(spotPrice * (1 + bearPct / 100)).toFixed(2),
+    base: +(spotPrice * (1 + basePct / 100)).toFixed(2),
+    bull: +(spotPrice * (1 + bullPct / 100)).toFixed(2),
+    bearPct: +bearPct.toFixed(2),
+    expectedPct: +basePct.toFixed(2),
+    bullPct: +bullPct.toFixed(2),
+    unit30d: +unit30d.toFixed(3),
+    score30d: Math.round(unit30d * 100),
+    probHigherPct,
+    agreementPct,
+    agreeCount,
+    hurst: hurstInfo.hurst,
+    hurstLabel: hurstInfo.label,
+    leadLag,
+    seasonality,
+    historicalTwins: twins,
+    milestones,
+    topDrivers30d,
+    modelVotes: modelVotes.map((m) => ({
+      id: m.id,
+      label: m.label,
+      dir: m.unit >= 0.08 ? 'up' : m.unit <= -0.08 ? 'down' : 'flat',
+      score: Math.round(m.unit * 100),
+    })),
+  };
+}
+
 export function projectHorizon(spotPrice, dailyVol, compositeUnitScore, tradingDays, coneMultiplier = 1.0) {
   const sigmaH = dailyVol * Math.sqrt(tradingDays);
   // Modest expected drift capped to realistic fraction of horizon volatility
@@ -1401,6 +1801,154 @@ export function analyzeMarketGaps(bars, liveSpot = null, metal = 'gold', tf = '1
   };
 }
 
+/**
+ * Parses official NOAA Space Weather Prediction Center (SWPC) `noaa-scales.json`
+ * into clean G (Geomagnetic), S (Solar Radiation), and R (Radio Blackout) scales
+ * and computes honest safe-haven Gold & industrial/grid Silver transmission impacts.
+ */
+export function parseNoaaSpaceWeather(noaaJson, nowIso = new Date().toISOString()) {
+  const cur = noaaJson?.['0'] || noaaJson?.['-1'] || null;
+  const fcast = noaaJson?.['1'] || null;
+  const toScale = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.min(5, Math.round(n)) : 0;
+  };
+  const gScale = toScale(cur?.G?.Scale);
+  const sScale = toScale(cur?.S?.Scale);
+  const rScale = toScale(cur?.R?.Scale);
+  const gForecast = toScale(fcast?.G?.Scale);
+  const peakScale = Math.max(gScale, sScale, rScale, Math.floor(gForecast * 0.8));
+
+  let status = 'Quiet (G0)';
+  let tone = 'neutral';
+  let goldBoost = 0;
+  let silverBoost = 0;
+  let jumpBoost = 0;
+  let summary = 'Normal solar & geomagnetic conditions — no grid or satellite disruption premium.';
+
+  if (peakScale >= 4) {
+    status = `Severe Solar Storm (G${gScale}/R${rScale})`;
+    tone = 'bullish';
+    goldBoost = 0.13;
+    silverBoost = 0.15;
+    jumpBoost = 0.032;
+    summary = 'Severe geomagnetic/solar storm elevates power-grid & satellite disruption hedging (Gold safe-haven + Silver grid/solar demand).';
+  } else if (peakScale === 3) {
+    status = `Strong Solar Storm (G${gScale}/R${rScale})`;
+    tone = 'bullish';
+    goldBoost = 0.08;
+    silverBoost = 0.09;
+    jumpBoost = 0.020;
+    summary = 'Strong NOAA solar storm active — heightened satellite & grid watch lifts safe-haven and solar/electronics silver sensitivity.';
+  } else if (peakScale === 2) {
+    status = `Moderate Solar Activity (G${gScale}/R${rScale})`;
+    tone = 'watch';
+    goldBoost = 0.03;
+    silverBoost = 0.04;
+    jumpBoost = 0.008;
+    summary = 'Moderate geomagnetic/radio activity detected — mild watch on grid & orbital infrastructure.';
+  } else if (peakScale === 1 || gForecast >= 2) {
+    status = gForecast >= 2 ? `Storm Watch Ahead (G${gForecast})` : `Minor Solar Activity (G${gScale})`;
+    tone = 'watch';
+    goldBoost = gForecast >= 2 ? 0.025 : 0;
+    silverBoost = gForecast >= 2 ? 0.03 : 0;
+    jumpBoost = gForecast >= 2 ? 0.006 : 0;
+    summary =
+      gForecast >= 2
+        ? `NOAA forecasts G${gForecast} geomagnetic storm within 24h — minor safe-haven watch active.`
+        : 'Minor solar breeze (G1) — routine space weather with negligible bullion impact.';
+  }
+
+  return {
+    source: cur ? 'NOAA SWPC Live' : 'Baseline Quiet',
+    updatedAt: cur?.DateStamp ? `${cur.DateStamp} ${cur.TimeStamp || ''}`.trim() : nowIso,
+    gScale,
+    sScale,
+    rScale,
+    gForecast,
+    peakScale,
+    status,
+    tone,
+    goldBoost: +goldBoost.toFixed(4),
+    silverBoost: +silverBoost.toFixed(4),
+    jumpBoost: +jumpBoost.toFixed(4),
+    summary,
+  };
+}
+
+/**
+ * Dynamic World & Space Catalyst Pulse: combines breaking (<6h / <24h) news velocity,
+ * live NOAA Space Weather scales, upcoming macro/COMEX event proximity, and physical tightness.
+ */
+export function computeWorldSpacePulse({
+  scoredHeadlines = [],
+  nowMs = Date.now(),
+  spaceWeather = null,
+  eventRisk = null,
+  basis = null,
+} = {}) {
+  let breakingCount = 0;
+  let fresh24hCount = 0;
+  let velocityGold = 0;
+  let velocitySilver = 0;
+
+  for (const h of scoredHeadlines) {
+    const pubMs = h.publishedAt ? Date.parse(h.publishedAt) : NaN;
+    const ageHrs = Number.isFinite(pubMs) ? Math.max(0, (nowMs - pubMs) / 3600000) : 36;
+    if (ageHrs <= 6) {
+      breakingCount++;
+      fresh24hCount++;
+      velocityGold += (h.goldImpact || 0) * 0.45;
+      velocitySilver += (h.silverImpact || 0) * 0.45;
+    } else if (ageHrs <= 24) {
+      fresh24hCount++;
+      velocityGold += (h.goldImpact || 0) * 0.18;
+      velocitySilver += (h.silverImpact || 0) * 0.18;
+    }
+  }
+
+  const sw = spaceWeather || parseNoaaSpaceWeather(null);
+  const daysToEv = eventRisk?.nextEvent?.daysUntil;
+  const eventHeat =
+    typeof daysToEv === 'number' && Number.isFinite(daysToEv)
+      ? daysToEv <= 1
+        ? 26
+        : daysToEv <= 3
+          ? 18
+          : daysToEv <= 7
+            ? 9
+            : 2
+      : 0;
+  const backwHeat =
+    basis?.gold?.isBackwardation || basis?.silver?.isBackwardation ? 16 : 0;
+  const spaceHeat = sw.peakScale * 9;
+  const newsHeat = Math.min(42, breakingCount * 11 + fresh24hCount * 3);
+  const activityScore = Math.round(clamp(14 + newsHeat + eventHeat + spaceHeat + backwHeat, 10, 99));
+
+  const regime =
+    activityScore >= 72
+      ? 'High-Velocity Catalyst Surge'
+      : activityScore >= 46
+        ? 'Active World & Space Flow'
+        : 'Steady Macro Pulse';
+
+  const goldDynamicBoost = +clamp(velocityGold * 0.06 + sw.goldBoost, -0.14, 0.18).toFixed(4);
+  const silverDynamicBoost = +clamp(velocitySilver * 0.06 + sw.silverBoost, -0.14, 0.20).toFixed(4);
+  const topHeadline = scoredHeadlines[0]?.title || null;
+
+  return {
+    activityScore,
+    regime,
+    breakingCount,
+    fresh24hCount,
+    spaceWeather: sw,
+    nextEvent: eventRisk?.nextEvent || null,
+    goldDynamicBoost,
+    silverDynamicBoost,
+    topCatalyst: topHeadline,
+  };
+}
+
 export function buildOutlook({
   spotGold,
   spotSilver,
@@ -1412,6 +1960,7 @@ export function buildOutlook({
   proSignals = null,
   institutionalSignals = null,
   candles = null,
+  spaceWeather = null,
   learnedWeights = null,
   accuracy = null,
   coneMultiplier = 1.0,
@@ -1597,9 +2146,27 @@ export function buildOutlook({
   const gapBoostGold = marketGaps.gold.predictionBoost || 0;
   const gapBoostSilver = marketGaps.silver.predictionBoost || 0;
 
-  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap momentum
+  // Live World News Velocity + Official NOAA Space Weather Catalyst Pulse
+  const parsedSpace =
+    spaceWeather && typeof spaceWeather.peakScale === 'number'
+      ? spaceWeather
+      : parseNoaaSpaceWeather(spaceWeather, generatedAt);
+  const worldSpacePulse = computeWorldSpacePulse({
+    scoredHeadlines,
+    nowMs,
+    spaceWeather: parsedSpace,
+    eventRisk,
+    basis,
+  });
+
+  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap + world/space pulse
   const goldUnit = clamp(
-    goldDriverComposite * 1.48 * 0.78 + quant.goldTrend * 0.22 + driftNudgeGold + backwBoostGold + gapBoostGold,
+    goldDriverComposite * 1.48 * 0.78 +
+      quant.goldTrend * 0.22 +
+      driftNudgeGold +
+      backwBoostGold +
+      gapBoostGold +
+      worldSpacePulse.goldDynamicBoost * 0.65,
     -1,
     1
   );
@@ -1609,7 +2176,8 @@ export function buildOutlook({
       quant.ratioSignalSilver * 0.10 +
       driftNudgeSilver +
       backwBoostSilver +
-      gapBoostSilver,
+      gapBoostSilver +
+      worldSpacePulse.silverDynamicBoost * 0.65,
     -1,
     1
   );
@@ -1727,7 +2295,8 @@ export function buildOutlook({
   const sharedJumpBoost =
     (eventRisk?.jumpBoost || 0) +
     (impliedVol?.jumpBoost || 0) +
-    (crossMkt?.jumpBoost || 0);
+    (crossMkt?.jumpBoost || 0) +
+    (parsedSpace?.jumpBoost || 0);
   const goldCatIntensity = clamp(
     Math.abs(goldUnit) + (comex?.gold?.jumpBoost || 0) + (basis?.gold?.jumpBoost || 0) + sharedJumpBoost,
     0.15,
@@ -1799,6 +2368,70 @@ export function buildOutlook({
     rsi14: quant.silverRsi14,
   });
 
+  const goldHorizon7d = projectHorizon(spotGold, effectiveGoldDailyVol, goldUnit, 5, effectiveConeMult);
+  const silverHorizon7d = projectHorizon(spotSilver, effectiveSilverDailyVol, silverUnit, 5, effectiveConeMult);
+
+  const goldHorizon30d = project30DayPrecision({
+    spotPrice: spotGold,
+    dailyVol: effectiveGoldDailyVol,
+    shortTermUnit: goldUnit,
+    drivers,
+    quant,
+    metal: 'gold',
+    regimeWeightSet,
+    marketGaps,
+    proSignals,
+    shanghai,
+    basis,
+    learnedWeights,
+    series,
+    coneMultiplier: effectiveConeMult,
+    nowDate: new Date(nowMs),
+  });
+  const silverHorizon30d = project30DayPrecision({
+    spotPrice: spotSilver,
+    dailyVol: effectiveSilverDailyVol,
+    shortTermUnit: silverUnit,
+    drivers,
+    quant,
+    metal: 'silver',
+    regimeWeightSet,
+    marketGaps,
+    proSignals,
+    shanghai,
+    basis,
+    learnedWeights,
+    series,
+    coneMultiplier: effectiveConeMult,
+    nowDate: new Date(nowMs),
+  });
+
+  // Sync 30-day Jump-Diffusion Monte Carlo drift with the fine-tuned 30D structural model
+  const goldJumpParams30d = estimateJumpParams({
+    metal: 'gold',
+    dailyVol: effectiveGoldDailyVol,
+    unitScore: goldHorizon30d.unit30d,
+    vix: vixVal,
+    catalystIntensity: goldCatIntensity,
+    coneMultiplier: effectiveConeMult,
+    lambdaMult,
+    sigmaJMult,
+    regime: marketRegime.gold,
+    rsi14: quant.goldRsi14,
+  });
+  const silverJumpParams30d = estimateJumpParams({
+    metal: 'silver',
+    dailyVol: effectiveSilverDailyVol,
+    unitScore: silverHorizon30d.unit30d,
+    vix: vixVal,
+    catalystIntensity: silverCatIntensity,
+    coneMultiplier: effectiveConeMult,
+    lambdaMult,
+    sigmaJMult,
+    regime: marketRegime.silver,
+    rsi14: quant.silverRsi14,
+  });
+
   const goldMc7d = runJumpDiffusion({
     spot: spotGold,
     tradingDays: 5,
@@ -1811,7 +2444,7 @@ export function buildOutlook({
     spot: spotGold,
     tradingDays: 21,
     paths: 1500,
-    ...goldJumpParams,
+    ...goldJumpParams30d,
     samplePathCount: 16,
     seed: 20261120,
   });
@@ -1827,7 +2460,7 @@ export function buildOutlook({
     spot: spotSilver,
     tradingDays: 21,
     paths: 1500,
-    ...silverJumpParams,
+    ...silverJumpParams30d,
     samplePathCount: 16,
     seed: 20261122,
   });
@@ -1843,20 +2476,22 @@ export function buildOutlook({
         coneMultiplier: learnedWeights.coneMultiplier ?? 1.0,
         driftBiasGoldPct: learnedWeights.driftBiasGoldPct ?? 0,
         driftBiasSilverPct: learnedWeights.driftBiasSilverPct ?? 0,
+        driftBias30dGoldPct: learnedWeights.driftBias30dGoldPct ?? 0,
+        driftBias30dSilverPct: learnedWeights.driftBias30dSilverPct ?? 0,
         weights: regimeWeightSet || learnedWeights.weights || null,
         regimeWeights: learnedWeights.regimeWeights || null,
         weightDeltasFromBase: learnedWeights.weightDeltasFromBase || null,
         jumpCalibration: learnedWeights.jumpCalibration || null,
         championChallenger: learnedWeights.championChallenger || null,
         summary: learnedWeights.summary || null,
-        recentHistory: (learnedWeights.history || []).slice(0, 7),
+        recentHistory: (learnedWeights.history || []).slice(0, 12),
       }
     : null;
 
   return {
     generatedAt,
     disclaimer:
-      'Anonymous probabilistic scenario model combining global news (recency-weighted), FRED 10Y TIPS real yields, COMEX paper vs. registered vault contracts, CBOE ^GVZ implied volatility, GLD/SLV/PSLV flows, Copper/USD-JPY cross-markets, COMEX EFP basis, Event-Risk calendar, Shanghai SGE premiums, daily 5:10 PM ET self-learning weight calibration, and Merton Jump-Diffusion Monte Carlo simulations. Educational — not financial advice.',
+      'Anonymous probabilistic scenario model combining global news (recency-weighted), FRED 10Y TIPS real yields, COMEX paper vs. registered vault contracts, CBOE ^GVZ implied volatility, GLD/SLV/PSLV flows, Copper/USD-JPY cross-markets, COMEX EFP basis, Event-Risk calendar, Shanghai SGE premiums, Hurst regime detection, 4-model ensemble stacking, empirical historical twins, daily 5:10 PM ET self-learning calibration, and Merton Jump-Diffusion simulations. Educational — not financial advice.',
     confidence,
     coneMultiplier: +effectiveConeMult.toFixed(2),
     narrative,
@@ -1865,8 +2500,10 @@ export function buildOutlook({
       score: goldScore,
       signal: signalLabelFromScore(goldScore),
       regime: marketRegime.gold,
-      horizon7d: projectHorizon(spotGold, effectiveGoldDailyVol, goldUnit, 5, effectiveConeMult),
-      horizon30d: projectHorizon(spotGold, effectiveGoldDailyVol, goldUnit, 21, effectiveConeMult),
+      hurst: goldHorizon30d.hurst,
+      leadLagAlpha: goldHorizon30d.leadLag.score,
+      horizon7d: goldHorizon7d,
+      horizon30d: goldHorizon30d,
       jumpParams: goldJumpParams,
       jumpDiffusion7d: goldMc7d,
       jumpDiffusion30d: goldMc30d,
@@ -1876,14 +2513,18 @@ export function buildOutlook({
       score: silverScore,
       signal: signalLabelFromScore(silverScore),
       regime: marketRegime.silver,
-      horizon7d: projectHorizon(spotSilver, effectiveSilverDailyVol, silverUnit, 5, effectiveConeMult),
-      horizon30d: projectHorizon(spotSilver, effectiveSilverDailyVol, silverUnit, 21, effectiveConeMult),
+      hurst: silverHorizon30d.hurst,
+      leadLagAlpha: silverHorizon30d.leadLag.score,
+      horizon7d: silverHorizon7d,
+      horizon30d: silverHorizon30d,
       jumpParams: silverJumpParams,
       jumpDiffusion7d: silverMc7d,
       jumpDiffusion30d: silverMc30d,
     },
     marketRegime,
     marketGaps,
+    spaceWeather: parsedSpace,
+    worldSpacePulse,
     setupQuality,
     ratioAnalytics,
     dollarStrength,

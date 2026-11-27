@@ -154,6 +154,8 @@ export function createInitialLearnedState() {
     coneMultiplier: 1.0,
     driftBiasGoldPct: 0,
     driftBiasSilverPct: 0,
+    driftBias30dGoldPct: 0,
+    driftBias30dSilverPct: 0,
     weights: structuredClone(base),
     regimeWeights: {
       calm: structuredClone(base),
@@ -333,8 +335,14 @@ export function buildPendingSnapshot(outlook, actualGoldClose, actualSilverClose
 
   const g7 = outlook?.gold?.horizon7d;
   const s7 = outlook?.silver?.horizon7d;
+  const g30 = outlook?.gold?.horizon30d;
+  const s30 = outlook?.silver?.horizon30d;
   const pred1dGoldPct = g7 ? +(g7.expectedPct / 5).toFixed(3) : 0;
   const pred1dSilverPct = s7 ? +(s7.expectedPct / 5).toFixed(3) : 0;
+  const pred5dGoldPct = g7 ? +Number(g7.expectedPct || 0).toFixed(3) : 0;
+  const pred5dSilverPct = s7 ? +Number(s7.expectedPct || 0).toFixed(3) : 0;
+  const pred20dGoldPct = g30 ? +Number(g30.expectedPct || 0).toFixed(3) : +(pred5dGoldPct * 2.05).toFixed(3);
+  const pred20dSilverPct = s30 ? +Number(s30.expectedPct || 0).toFixed(3) : +(pred5dSilverPct * 2.05).toFixed(3);
   const halfCone1dGoldPct = g7
     ? +(((g7.bullPct - g7.bearPct) / 2) / Math.sqrt(5)).toFixed(3)
     : 1.1;
@@ -350,6 +358,10 @@ export function buildPendingSnapshot(outlook, actualGoldClose, actualSilverClose
     silverClose: +actualSilverClose.toFixed(2),
     pred1dGoldPct,
     pred1dSilverPct,
+    pred5dGoldPct,
+    pred5dSilverPct,
+    pred20dGoldPct,
+    pred20dSilverPct,
     halfCone1dGoldPct: Math.max(0.5, halfCone1dGoldPct),
     halfCone1dSilverPct: Math.max(0.9, halfCone1dSilverPct),
     drivers,
@@ -640,7 +652,7 @@ export function runDailyLearningStep({
   }
   state.weightDeltasFromBase = deltas;
 
-  // 4. Gentle EMA drift bias correction (Huber-clipped)
+  // 4. Gentle EMA drift bias correction (Huber-clipped for 1D & matured 20D/30D windows)
   state.driftBiasGoldPct = +clamp(
     (state.driftBiasGoldPct || 0) * (1 - LEARNING_CONFIG.driftAlpha) +
       clamp(errGoldPct, -1.5, 1.5) * LEARNING_CONFIG.driftAlpha,
@@ -654,7 +666,27 @@ export function runDailyLearningStep({
     LEARNING_CONFIG.maxDriftBiasPct
   ).toFixed(3);
 
-  // 5. Rolling 20-day summary + adaptive cone width + Jump-Diffusion tail calibration
+  if (snap20d && snap20d.goldClose > 0 && snap20d.silverClose > 0) {
+    const act20G = ((actualGoldClose - snap20d.goldClose) / snap20d.goldClose) * 100;
+    const act20S = ((actualSilverClose - snap20d.silverClose) / snap20d.silverClose) * 100;
+    const pred20G = Number.isFinite(snap20d.pred20dGoldPct) ? snap20d.pred20dGoldPct : (snap20d.pred1dGoldPct || 0) * 8;
+    const pred20S = Number.isFinite(snap20d.pred20dSilverPct) ? snap20d.pred20dSilverPct : (snap20d.pred1dSilverPct || 0) * 8;
+    state.driftBias30dGoldPct = +clamp(
+      (state.driftBias30dGoldPct || 0) * 0.88 + clamp(act20G - pred20G, -3.0, 3.0) * 0.12,
+      -0.45,
+      0.45
+    ).toFixed(3);
+    state.driftBias30dSilverPct = +clamp(
+      (state.driftBias30dSilverPct || 0) * 0.88 + clamp(act20S - pred20S, -4.5, 4.5) * 0.12,
+      -0.45,
+      0.45
+    ).toFixed(3);
+  } else {
+    state.driftBias30dGoldPct = state.driftBias30dGoldPct ?? 0;
+    state.driftBias30dSilverPct = state.driftBias30dSilverPct ?? 0;
+  }
+
+  // 5. Rolling 20-day summary + conformal error quantiles + precision score + Jump-Diffusion tail calibration
   const n = recent.length;
   const dirGoldPct = Math.round((recent.filter((h) => h.dirHitGold).length / n) * 100);
   const dirSilverPct = Math.round((recent.filter((h) => h.dirHitSilver).length / n) * 100);
@@ -665,8 +697,29 @@ export function runDailyLearningStep({
     recent.filter((h) => h.tailBreachGold).length + recent.filter((h) => h.tailBreachSilver).length;
   const observedTailBreachPct = Math.round((tailBreaches / (n * 2)) * 100);
 
-  const avgAbsErrGoldPct = +(recent.reduce((acc, h) => acc + Math.abs(h.goldErrPct), 0) / n).toFixed(2);
-  const avgAbsErrSilverPct = +(recent.reduce((acc, h) => acc + Math.abs(h.silverErrPct), 0) / n).toFixed(2);
+  const gErrSorted = recent.map((h) => Math.abs(h.goldErrPct)).sort((a, b) => a - b);
+  const sErrSorted = recent.map((h) => Math.abs(h.silverErrPct)).sort((a, b) => a - b);
+  const avgAbsErrGoldPct = +(gErrSorted.reduce((acc, v) => acc + v, 0) / n).toFixed(2);
+  const avgAbsErrSilverPct = +(sErrSorted.reduce((acc, v) => acc + v, 0) / n).toFixed(2);
+  const conformalDailyGoldPct = +gErrSorted[Math.min(n - 1, Math.floor(n * 0.75))].toFixed(2);
+  const conformalDailySilverPct = +sErrSorted[Math.min(n - 1, Math.floor(n * 0.75))].toFixed(2);
+
+  let streakGold = 0;
+  for (const h of state.history) {
+    if (h.dirHitGold) streakGold++;
+    else break;
+  }
+  let streakSilver = 0;
+  for (const h of state.history) {
+    if (h.dirHitSilver) streakSilver++;
+    else break;
+  }
+  const avgDir = (dirGoldPct + dirSilverPct) / 2;
+  const errPenalty = clamp((avgAbsErrGoldPct * 6.5 + avgAbsErrSilverPct * 3.8), 0, 28);
+  const edgeBonus = clamp(edgePct * 0.45, -8, 10);
+  const precisionScore = Math.round(clamp(avgDir * 0.75 + 24 - errPenalty + edgeBonus, 25, 96));
+  const calibrationGrade =
+    precisionScore >= 84 ? 'A+' : precisionScore >= 74 ? 'A' : precisionScore >= 62 ? 'B' : 'C';
 
   if (n >= 3) {
     const gap = (LEARNING_CONFIG.targetInConePct - rollingInConePct) / 100;
@@ -698,6 +751,12 @@ export function runDailyLearningStep({
     rollingInConePct,
     avgAbsErrGoldPct,
     avgAbsErrSilverPct,
+    conformalDailyGoldPct,
+    conformalDailySilverPct,
+    precisionScore,
+    calibrationGrade,
+    streakGold,
+    streakSilver,
     horizonsActive,
     topBoostedDriver: topBoosted && topBoosted.avgDeltaPct > 0.05 ? topBoosted : null,
     topTrimmedDriver: topTrimmed && topTrimmed.avgDeltaPct < -0.05 ? topTrimmed : null,

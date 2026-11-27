@@ -15,7 +15,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildOutlook, projectHorizon } from './historical_patterns.mjs';
+import { buildOutlook, parseNoaaSpaceWeather, projectHorizon } from './historical_patterns.mjs';
 import {
   parseGoldPriceOrg,
   validateAppUrl,
@@ -89,6 +89,10 @@ const RSS_FEEDS = [
   {
     name: 'Silver Sector Companies (PAAS/HL/AG/CDE)',
     url: 'https://news.google.com/rss/search?q=("Pan+American+Silver"+OR+"First+Majestic"+OR+"Hecla+Mining"+OR+"Coeur+Mining"+OR+Fresnillo)+silver+production+strike+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'Space, Solar Weather & Aerospace',
+    url: 'https://news.google.com/rss/search?q=("solar+flare"+OR+"geomagnetic+storm"+OR+"space+weather"+OR+"NOAA+solar"+OR+"satellite+launch"+OR+"space+economy"+OR+"orbital+solar")+when:4d&hl=en-US&gl=US&ceid=US:en',
   },
 ];
 
@@ -166,6 +170,20 @@ export function parseRssItems(xmlText, fallbackSource = 'News') {
     });
   }
   return items;
+}
+
+async function fetchNoaaSpaceWeather() {
+  try {
+    const res = await fetch('https://services.swpc.noaa.gov/products/noaa-scales.json', {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`NOAA HTTP ${res.status}`);
+    return parseNoaaSpaceWeather(await res.json());
+  } catch (err) {
+    console.warn(`NOAA Space Weather fetch skipped (${err.message}); using quiet baseline.`);
+    return parseNoaaSpaceWeather(null);
+  }
 }
 
 async function fetchAllHeadlines() {
@@ -462,7 +480,11 @@ async function main() {
     // First run
   }
 
-  const [rawHeadlines, series] = await Promise.all([fetchAllHeadlines(), fetchMarketSeries()]);
+  const [rawHeadlines, series, spaceWeather] = await Promise.all([
+    fetchAllHeadlines(),
+    fetchMarketSeries(),
+    fetchNoaaSpaceWeather(),
+  ]);
   const { spotGold, spotSilver } = await fetchSpotBaseline(series);
 
   let shanghai = null;
@@ -602,6 +624,7 @@ async function main() {
     proSignals,
     institutionalSignals,
     candles: latestCandles,
+    spaceWeather,
     learnedWeights,
     coneMultiplier,
   });

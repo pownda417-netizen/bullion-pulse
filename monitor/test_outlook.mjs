@@ -4,12 +4,21 @@ import {
   buildOutlook,
   classifyHeadline,
   classifyHeadlines,
+  computeCrossAssetLeadLag,
+  computeEmpiricalHistoricalTwins,
   computeMarketRegimeDecomposition,
   computeQuantSignals,
   computeRatioAnalytics,
   computeSetupQuality,
+  computeWorldSpacePulse,
+  parseNoaaSpaceWeather,
+  project30DayPrecision,
   recencyDecayWeight,
 } from './historical_patterns.mjs';
+import {
+  computeHurstExponent,
+  computePrecisionForecastLine,
+} from './precision_forecast.mjs';
 import { parseRssItems, sanitizeHttpUrl } from './analyze_outlook.mjs';
 import {
   cnyPerGramToUsdPerOz,
@@ -1012,4 +1021,95 @@ const gAged12d = analyzeMarketGaps(aged12dBars, 3655, 'gold', '1d');
 assert.equal(gAged12d.predictionBoost, 0, '10+ day old unfilled gap must retire boost to 0');
 assert.equal(gAged12d.status, 'Breakaway (Aged)');
 
-console.log('All 26 Bullion Pulse suites (Market Gap Analyzer & Predictions, Security RSS/URL XSS Defense, Asymmetric Regime Jump-Diffusion, Au/Ag Ratio Z-Score/Swap, Setup Quality, Dollar Strength DXY, Futures Backwardation, Price Discovery/Short Squeeze Classifier, CME Stocks XLS, Verified CPI Calendar, GK/EWMA Vol, Pinball Skill, Sector Bellwethers, Self-Learning v2, Institutional Signals, COMEX Paper, FRED, COT, Miners, Shanghai & Accuracy) passed!');
+// 27. v48 Precision Forecast Line, Hurst Regime, 30-Day Ensemble Roadmap, NOAA Space Weather & 1D/7D/30D Causal Backtest
+// 27a. Hurst Exponent detects strong persistent trend (>0.56) vs choppy mean-reversion (<0.46)
+const trendSeries = Array.from({ length: 40 }, (_, i) => 3500 + i * 11 + Math.sin(i * 0.4) * 2);
+const chopSeries = Array.from({ length: 40 }, (_, i) => 3500 + (i % 2 === 0 ? 18 : -18));
+const hTrend = computeHurstExponent(trendSeries);
+const hChop = computeHurstExponent(chopSeries);
+assert.ok(hTrend.hurst > 0.56, `Persistent trend should yield Hurst > 0.56, got ${hTrend.hurst}`);
+assert.ok(hChop.hurst < 0.46, `Oscillating mean-reverting series should yield Hurst < 0.46, got ${hChop.hurst}`);
+
+// 27b. Precision Forecast Line (4-specialist stacking + conformal calibration + horizon scaling)
+const t0Bar = Date.UTC(2026, 10, 20, 12, 0);
+const mkSynthBars = (count, stepMs, startP, slopePerBar, amp) =>
+  Array.from({ length: count }, (_, i) => {
+    const o = startP + i * slopePerBar + Math.sin(i * 0.6) * amp;
+    const c = o + slopePerBar * 0.8 + Math.cos(i * 0.7) * (amp * 0.4);
+    return { t: t0Bar + i * stepMs, o, h: Math.max(o, c) + amp * 0.7, l: Math.min(o, c) - amp * 0.7, c };
+  });
+const bars15m = mkSynthBars(36, 60000, 3600, 0.25, 0.8);
+const bars1d = mkSynthBars(48, 1800000, 3580, 1.1, 4.5);
+const bars1m = mkSynthBars(45, 86400000, 3420, 4.2, 16);
+
+const fc15m = computePrecisionForecastLine({ bars: bars15m, tf: '15min', metal: 'gold', macroUnit: 0.4 });
+const fc1d = computePrecisionForecastLine({ bars: bars1d, tf: '1d', metal: 'gold', macroUnit: 0.4 });
+const fc1m = computePrecisionForecastLine({ bars: bars1m, tf: '1m', metal: 'gold', macroUnit: 0.4, seasonalityTilt: 0.10 });
+assert.ok(fc15m && fc1d && fc1m, 'Precision forecast must compute cleanly across 15m, 1D, and 1M');
+assert.equal(fc15m.horizonLabel, '+15m');
+assert.equal(fc1d.horizonLabel, '+24H');
+assert.equal(fc1m.horizonLabel, '+1M');
+assert.ok(fc15m.wTechPct > fc1d.wTechPct && fc1d.wTechPct > fc1m.wTechPct, 'Auto-blend must shift smoothly from Tech on 15m to Macro on 1M');
+assert.ok(Math.abs(fc15m.deltaPct) < Math.abs(fc1m.deltaPct), 'Tight 15m horizon excursion must stay much smaller than 1M horizon');
+assert.equal(fc1d.ensembleBreakdown.length, 4, 'Must stack all 4 specialist models');
+assert.ok(fc1d.calibration.samples >= 3 && fc1d.calibration.conformalRadiusPct >= 0, 'Causal walk-forward conformal calibration must run');
+
+// 27c. NOAA Space Weather & Dynamic World/Space Pulse + Space RSS classification
+const swQuiet = parseNoaaSpaceWeather({ '0': { G: { Scale: '0' }, S: { Scale: '0' }, R: { Scale: '0' } } });
+assert.equal(swQuiet.goldBoost, 0);
+assert.equal(swQuiet.silverBoost, 0);
+const swSevere = parseNoaaSpaceWeather({ '0': { G: { Scale: '4' }, S: { Scale: '2' }, R: { Scale: '3' } }, '1': { G: { Scale: '3' } } });
+assert.ok(swSevere.goldBoost > 0.10 && swSevere.silverBoost > 0.12, 'Severe G4 solar storm must lift safe-haven Gold & Silver grid/solar boost');
+assert.ok(swSevere.jumpBoost > 0.02, 'Severe G4 storm must add jump-risk sensitivity');
+
+const spaceHeadline = classifyHeadline({
+  title: 'NOAA warns severe G4 geomagnetic storm and X-class solar flare risk power grid blackout',
+  publishedAt: new Date().toISOString(),
+  source: 'Space Weather News',
+});
+assert.equal(spaceHeadline.driver, 'geopolitics');
+assert.ok(spaceHeadline.goldImpact > 0, 'Severe solar storm headline must score bullish safe-haven Gold');
+
+const baseCalmOut = buildOutlook({ spotGold: 3600, spotSilver: 43, rawHeadlines: [], spaceWeather: swQuiet });
+const stormOut = buildOutlook({ spotGold: 3600, spotSilver: 43, rawHeadlines: [], spaceWeather: swSevere });
+assert.ok(stormOut.gold.score > baseCalmOut.gold.score, 'Live severe G4 space weather must dynamically lift Gold outlook score');
+assert.ok(stormOut.silver.score > baseCalmOut.silver.score, 'Live severe G4 space weather must dynamically lift Silver outlook score');
+assert.ok(stormOut.worldSpacePulse?.activityScore > baseCalmOut.worldSpacePulse?.activityScore, 'World & Space catalyst pulse must rise during severe storm');
+
+// 27d. Next 30 Days Precision Roadmap + Empirical Historical Twins + 1D/7D/30D Walk-Forward Backtest
+const gold6m = Array.from({ length: 120 }, (_, i) => 3300 + i * 2.5 + Math.sin(i * 0.25) * 45);
+const silver6m = Array.from({ length: 120 }, (_, i) => 38 + i * 0.045 + Math.sin(i * 0.27) * 1.4);
+const dxy6m = Array.from({ length: 120 }, (_, i) => 105 - i * 0.02 + Math.cos(i * 0.22) * 0.9);
+const tnx6m = Array.from({ length: 120 }, (_, i) => 4.35 - i * 0.002 + Math.sin(i * 0.18) * 0.12);
+const twinsRes = computeEmpiricalHistoricalTwins({ closes: gold6m, dxy: dxy6m, horizonDays: 21 });
+assert.ok(twinsRes && twinsRes.count >= 1 && twinsRes.matchPct >= 45, 'Empirical historical twins must match strictly causal prior windows');
+
+const out30 = buildOutlook({
+  spotGold: gold6m[gold6m.length - 1],
+  spotSilver: silver6m[silver6m.length - 1],
+  rawHeadlines: [],
+  series: { gold: gold6m, silver: silver6m, dxy: dxy6m, tnx: tnx6m },
+});
+assert.equal(out30.gold.horizon30d.milestones.length, 4, '30-Day forecast must emit Day 7, 14, 21, 30 checkpoints');
+assert.equal(out30.gold.horizon30d.milestones[3].day, 30);
+assert.equal(out30.gold.horizon30d.modelVotes.length, 4, '30-Day model must emit 4 specialist votes');
+assert.ok(out30.gold.horizon30d.probHigherPct >= 12 && out30.gold.horizon30d.probHigherPct <= 88);
+assert.ok(out30.gold.horizon30d.seasonality?.windowLabel, '30-Day model must attach 20-Yr seasonality');
+
+const wfAudit = runWalkForwardBacktest({ gold: gold6m, silver: silver6m, dxy: dxy6m, tnx: tnx6m });
+assert.ok(wfAudit.gold && wfAudit.silver, '7D walk-forward backtest must remain populated');
+assert.ok(wfAudit.gold30d && wfAudit.silver30d, '30D walk-forward backtest must be computed causally');
+assert.ok(wfAudit.gold1d && wfAudit.silver1d, '1D walk-forward backtest must be computed causally');
+assert.ok(wfAudit.gold30d.conformalRadiusPct >= 0 && wfAudit.gold30d.recentCheckpoints.length >= 3, '30D backtest must include conformal radius & checkpoints');
+
+const accPending = updateAccuracyLog({
+  log: { predictions: [] },
+  outlook: out30,
+  spotGold: gold6m[gold6m.length - 1],
+  spotSilver: silver6m[silver6m.length - 1],
+  now: new Date('2026-11-26T18:00:00Z'),
+});
+assert.equal(accPending.scorecard.pendingStatus.next7dInDays, 7);
+assert.equal(accPending.scorecard.pendingStatus.next30dInDays, 30);
+
+console.log('All 27 Bullion Pulse suites (v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all 26 core suites) passed!');
