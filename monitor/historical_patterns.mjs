@@ -397,7 +397,8 @@ const DRIVER_RULES = [
       /\b(mine|mining|miner|smelter|san dimas|newmont|barrick|first majestic|pan american|hecla|agnico|wheaton)\b.*\b(strike|labor dispute|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output|aisc.*rise|aisc.*jump|cost.*rise)/i,
       /\b(silver|gold)\b.*\b(deficit|shortage|tight supply|vault drain|inventory drop|record demand|squeeze|sixth straight)/i,
       /\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ev|electrification|charging|electronics|semiconductor|ai data center|ai server|antimicrobial)\b.*\b(silver|demand|grow|surge|boom|rise|record|battery|adoption)/i,
-      /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|xai|stargate|tsmc|broadcom|vertiv|eaton|hyperscaler)\b.*\b(data center|ai capex|ai infrastructure|gigawatt|megawatt|switchgear|busbar|grid upgrade|wire bonding|blackwell|rubin|tpu|power deal|billion|buildout|expand|surge)/i,
+      /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|tesla|megapack|spacex|starlink|xai|stargate|tsmc|broadcom|vertiv|eaton|hyperscaler)\b.*\b(data center|ai capex|ai infrastructure|gigawatt|megawatt|switchgear|busbar|grid upgrade|wire bonding|blackwell|rubin|tpu|power deal|satellite|ev|deliveries|billion|buildout|expand|surge)/i,
+      /\b(alibaba|qwen|tencent|hunyuan|baidu|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio)\b.*\b(ai data center|ai capex|ai chip|cloud|semiconductor|ev|electric vehicle|solid[- ]?state|battery|charging|megawatt|gigawatt|deliveries|record|expand|billion|boom|surge)/i,
       /\b(space economy|satellite constellation|orbital solar|aerospace|lunar base|starship|nasa|spacex|satellite launch)\b.*\b(demand|launch|build|solar|silver|boom|record|contract|expand)/i,
       /\b(us mint|royal mint|perth mint|bullion coin|silver eagle|costco gold)\b.*\b(shortage|sell out|sold out|surge|demand|premium|record|backlog)/i,
       /\bexport (ban|curb|restriction|licensing|control)\b.*\b(silver|gold|metal|mineral)/i,
@@ -406,7 +407,7 @@ const DRIVER_RULES = [
     bearish: [
       /\b(mine|mining|newmont|barrick|first majestic|pan american|hecla|loulo)\b.*\b(record output|production surge|ramps?[- ]?up|supply glut|oversupply|reopen|restart|lower.*cost|cut.*cost)/i,
       /\b(silver|gold)\b.*\b(surplus|oversupply|weak industrial demand|thrifting|substitution|narrow)/i,
-      /\b(nvidia|google|microsoft|meta|amazon|hyperscaler|data center|ai capex)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|bubble burst|slump)/i,
+      /\b(nvidia|google|microsoft|meta|amazon|tesla|openai|anthropic|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|hyperscaler|data center|ai capex)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|bubble burst|slump|sales drop)/i,
     ],
   },
   {
@@ -460,7 +461,7 @@ export function classifyHeadlineTopic(text = '', driver = '') {
   if (/\b(solar flare|geomagnetic|space weather|noaa|satellite|aerospace|spacex|nasa|orbital|war|missile|airstrike|sanction|tariff|strait of hormuz|red sea|geopolit|conflict|ceasefire)\b/i.test(text)) {
     return { topic: 'geo_space', topicLabel: NEWS_TOPICS.geo_space };
   }
-  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ai capex|ai infrastructure|hyperscal|gigawatt|switchgear|busbar|wire bonding|nvidia|vertiv|eaton|stargate|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
+  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ai capex|ai infrastructure|hyperscal|gigawatt|switchgear|busbar|wire bonding|nvidia|tesla|megapack|anthropic|openai|stargate|alibaba|qwen|tencent|baidu|deepseek|huawei|smic|byd|catl|xiaomi|xpeng|li auto|nio|vertiv|eaton|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
     return { topic: 'tech_solar_ai', topicLabel: NEWS_TOPICS.tech_solar_ai };
   }
   if (/\b(central bank|brics|pboc|rbi|nbp|repatriat|de-?dollariz|sovereign.*reserve|basel iii|paxg|xaut|tether gold|tokenized gold|gld|slv|pslv|etf)\b/i.test(text)) {

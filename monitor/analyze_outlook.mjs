@@ -123,12 +123,20 @@ const RSS_FEEDS = [
     url: 'https://news.google.com/rss/search?q=("PAXG"+OR+"Tether+Gold"+OR+"XAUT"+OR+"tokenized+gold"+OR+"gold+ETF+inflows"+OR+"SLV+inflows"+OR+"Basel+III+gold")+when:5d&hl=en-US&gl=US&ceid=US:en',
   },
   {
-    name: 'Big Tech AI Data Center CapEx (Google/NVIDIA/MSFT/Meta/AWS)',
-    url: 'https://news.google.com/rss/search?q=(NVIDIA+OR+Google+OR+Microsoft+OR+Meta+OR+Amazon+OR+OpenAI+OR+xAI)+("data+center"+OR+"AI+infrastructure"+OR+"AI+capex"+OR+gigawatt+OR+hyperscale)+when:4d&hl=en-US&gl=US&ceid=US:en',
+    name: 'US Big Tech, Tesla, SpaceX, OpenAI & Anthropic AI Race',
+    url: 'https://news.google.com/rss/search?q=(NVIDIA+OR+Google+OR+Microsoft+OR+Meta+OR+Amazon+OR+Tesla+OR+SpaceX+OR+Starlink+OR+OpenAI+OR+Anthropic+OR+xAI)+("data+center"+OR+"AI+infrastructure"+OR+"AI+capex"+OR+gigawatt+OR+hyperscale+OR+Megapack+OR+satellite)+when:4d&hl=en-US&gl=US&ceid=US:en',
   },
   {
     name: 'AI Power Grid, Switchgear & Server Metals',
     url: 'https://news.google.com/rss/search?q=("data+center+power"+OR+"AI+power+grid"+OR+switchgear+OR+busbar+OR+Vertiv+OR+Eaton+OR+"wire+bonding"+gold+OR+"AI+data+center"+silver)+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'China AI Hyperscalers & Chips (Alibaba/Tencent/Baidu/DeepSeek/Huawei/SMIC)',
+    url: 'https://news.google.com/rss/search?q=(Alibaba+OR+Tencent+OR+Baidu+OR+DeepSeek+OR+Huawei+OR+SMIC+OR+ByteDance)+("AI+data+center"+OR+"AI+capex"+OR+"AI+chips"+OR+"cloud+investment"+OR+semiconductor+OR+gigawatt)+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'Global & China EV Metal Demand (BYD/Tesla/CATL/Xiaomi/XPeng/Li Auto)',
+    url: 'https://news.google.com/rss/search?q=(BYD+OR+Tesla+OR+CATL+OR+Xiaomi+OR+XPeng+OR+"Li+Auto"+OR+NIO)+(EV+OR+"electric+vehicle"+OR+"solid-state+battery"+OR+"silver+demand"+OR+Megapack+OR+charging)+when:5d&hl=en-US&gl=US&ceid=US:en',
   },
 ];
 
@@ -160,17 +168,27 @@ const YAHOO_SYMBOLS = {
   hl: 'HL',
   ag: 'AG',
   cde: 'CDE',
-  // Big Tech AI Data Center Compute & High-Power Switchgear/Grid Infrastructure Basket
+  // US Big Tech AI Data Center, Tesla EV/Dojo & Power/Switchgear Basket
   nvda: 'NVDA',
   googl: 'GOOGL',
   msft: 'MSFT',
   meta: 'META',
   amzn: 'AMZN',
+  tsla: 'TSLA',
   tsm: 'TSM',
   avgo: 'AVGO',
   vrt: 'VRT',
   etn: 'ETN',
   ceg: 'CEG',
+  // China AI Hyperscalers, Foundry Chips & Silver-Heavy EV Giants
+  baba: 'BABA',
+  tencent: '0700.HK',
+  bidu: 'BIDU',
+  smic: '0981.HK',
+  byd: '1211.HK',
+  xiaomi: '1810.HK',
+  li: 'LI',
+  xpev: 'XPEV',
 };
 
 /* ---------- Lightweight Zero-Dependency XML RSS Parser ---------- */

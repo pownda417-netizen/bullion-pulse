@@ -1354,7 +1354,7 @@ const outHidden = buildOutlook({
 });
 assert.ok(outHidden.hiddenAlpha?.gold?.sessionFlow && outHidden.hiddenAlpha?.silver?.opexMagnet, 'buildOutlook must attach complete hiddenAlpha suite');
 
-// 31. v52 AI Data Center & Big Tech Infrastructure Race (Google, NVIDIA, MSFT, Meta, AMZN, TSMC, AVGO + Vertiv, Eaton, Constellation)
+// 31. v52/v56 Global US & China AI Data Center, SpaceX, Tesla & EV Metal Race
 const mkUp = (start, step) => Array.from({ length: 25 }, (_, i) => +(start * Math.pow(1 + step, i)).toFixed(2));
 const mkDn = (start, step) => Array.from({ length: 25 }, (_, i) => +(start * Math.pow(1 - step, i)).toFixed(2));
 
@@ -1364,16 +1364,26 @@ const aiSurgeSeries = {
   msft: mkUp(420, 0.006),
   meta: mkUp(580, 0.009),
   amzn: mkUp(205, 0.007),
+  tsla: mkUp(320, 0.011),
   tsm: mkUp(190, 0.010),
   avgo: mkUp(170, 0.011),
+  baba: mkUp(95, 0.012),
+  tencent: mkUp(420, 0.009),
+  bidu: mkUp(92, 0.008),
+  smic: mkUp(28, 0.013),
+  byd: mkUp(270, 0.011),
+  xiaomi: mkUp(29, 0.010),
+  li: mkUp(24, 0.009),
+  xpev: mkUp(14, 0.012),
   vrt: mkUp(110, 0.015),
   etn: mkUp(330, 0.009),
   ceg: mkUp(240, 0.013),
   copper: mkUp(4.2, 0.006),
 };
 const aiSurgeNews = [
-  { title: 'Google and NVIDIA expand 500MW hyperscale AI data center buildout with massive switchgear and grid upgrades' },
-  { title: 'Microsoft and Meta raise AI CapEx by $40 billion as Vertiv and Eaton report surging busbar demand' },
+  { title: 'Google, OpenAI, and Anthropic expand 500MW hyperscale AI data center buildout with switchgear upgrades' },
+  { title: 'Tesla Megapack and SpaceX Starlink satellite launches accelerate global silver and gold hardware demand' },
+  { title: 'Alibaba Qwen, DeepSeek, Huawei Ascend, and BYD solid-state EV battery expansion boost China AI CapEx and EV deliveries' },
 ];
 const aiSurge = computeAiDatacenterSignal({
   series: aiSurgeSeries,
@@ -1382,10 +1392,13 @@ const aiSurge = computeAiDatacenterSignal({
   basis: { silver: { isBackwardation: true, basisUsd: -0.7 } },
   physicalPremiums: { silver: { tone: 'bullish' } },
 });
-assert.ok(aiSurge.raceIndex >= 74 && aiSurge.tone === 'bullish', `Surging Big Tech + Power stocks must score >= 74 (got ${aiSurge.raceIndex})`);
+assert.ok(aiSurge.raceIndex >= 74 && aiSurge.tone === 'bullish', `Surging US+China AI/EV + Power stocks must score >= 74 (got ${aiSurge.raceIndex})`);
+assert.ok(aiSurge.chinaAiEvBasket?.live && aiSurge.chinaAiEvBasket.members.some((m) => m.key === 'byd'), 'China AI & EV basket must include live BYD/Alibaba/Tencent/Xiaomi tickers');
+assert.ok(aiSurge.computeBasket.members.some((m) => m.key === 'tsla'), 'US AI & Compute basket must include Tesla (TSLA)');
+assert.ok(aiSurge.news.labMentions.openai >= 1 && aiSurge.news.labMentions.anthropic >= 1 && aiSurge.news.labMentions.spacex >= 1 && aiSurge.news.labMentions.deepseek >= 1, 'Private Frontier AI & Space labs (OpenAI, Anthropic, SpaceX, DeepSeek) must be tracked from headlines');
 assert.ok(aiSurge.supplyTightMult > 1.15, `Tight COMEX/backwardation/premiums must amplify AI Silver squeeze (got ${aiSurge.supplyTightMult})`);
-assert.ok(aiSurge.silver.predictionBoost > 0.05 && aiSurge.gold.predictionBoost > 0.015, 'AI race surge must lift both Silver and Gold');
-assert.ok(aiSurge.silver.predictionBoost > aiSurge.gold.predictionBoost * 2.0, 'Silver (non-thriftable switchgear/busbars/grid) must respond >2x stronger than Gold');
+assert.ok(aiSurge.silver.predictionBoost > 0.05 && aiSurge.gold.predictionBoost > 0.015, 'AI/EV race surge must lift both Silver and Gold');
+assert.ok(aiSurge.silver.predictionBoost > aiSurge.gold.predictionBoost * 2.0, 'Silver (non-thriftable switchgear/EVs/Starlink solar) must respond >2x stronger than Gold');
 assert.ok(aiSurge.estSilverMozYr >= 32, `Active surge run-rate must scale inside 20-46 Moz/yr band (got ${aiSurge.estSilverMozYr})`);
 
 const aiPauseSeries = {
@@ -1394,27 +1407,36 @@ const aiPauseSeries = {
   msft: mkDn(440, 0.009),
   meta: mkDn(600, 0.011),
   amzn: mkDn(220, 0.010),
+  tsla: mkDn(350, 0.014),
   tsm: mkDn(210, 0.012),
   avgo: mkDn(190, 0.013),
+  baba: mkDn(110, 0.013),
+  tencent: mkDn(460, 0.010),
+  bidu: mkDn(105, 0.011),
+  smic: mkDn(32, 0.014),
+  byd: mkDn(300, 0.012),
+  xiaomi: mkDn(33, 0.012),
+  li: mkDn(28, 0.012),
+  xpev: mkDn(17, 0.013),
   vrt: mkDn(135, 0.016),
   etn: mkDn(360, 0.011),
   ceg: mkDn(270, 0.014),
   copper: mkDn(4.5, 0.008),
 };
 const aiPauseNews = [
-  { title: 'Hyperscaler AI data center CapEx cut and project delays spark hardware slowdown fears' },
-  { title: 'NVIDIA and Google pause multi-gigawatt server buildout amid power bottleneck halt' },
+  { title: 'Hyperscaler AI data center CapEx cut and BYD/Tesla EV sales drop spark hardware slowdown fears' },
+  { title: 'NVIDIA, Google, and Anthropic pause multi-gigawatt server buildout amid power bottleneck halt' },
 ];
 const aiPause = computeAiDatacenterSignal({ series: aiPauseSeries, headlines: aiPauseNews });
-assert.ok(aiPause.raceIndex <= 34 && aiPause.tone === 'bearish', `AI CapEx pullback must score <= 34 (got ${aiPause.raceIndex})`);
-assert.ok(aiPause.silver.predictionBoost < -0.02, 'AI CapEx slowdown must produce negative Silver industrial drag');
+assert.ok(aiPause.raceIndex <= 34 && aiPause.tone === 'bearish', `AI/EV CapEx pullback must score <= 34 (got ${aiPause.raceIndex})`);
+assert.ok(aiPause.silver.predictionBoost < -0.02, 'AI/EV CapEx slowdown must produce negative Silver industrial drag');
 
 const scoredAiNews = scoreAiDatacenterHeadlines([...aiSurgeNews, ...aiPauseNews]);
-assert.equal(scoredAiNews.bullHits, 2);
+assert.equal(scoredAiNews.bullHits, 3);
 assert.equal(scoredAiNews.bearHits, 2);
 
-const clsAi = classifyHeadline({ title: 'Google and NVIDIA announce 500MW hyperscale AI data center gigawatt buildout boosting switchgear and grid demand' });
-assert.ok(clsAi && clsAi.driver === 'mining_supply' && clsAi.topic === 'tech_solar_ai' && clsAi.silverImpact > 0, 'Big Tech AI data center news must map to mining_supply & tech_solar_ai');
+const clsAi = classifyHeadline({ title: 'BYD and Alibaba expand solid-state EV battery and Qwen AI data center buildout with massive silver demand' });
+assert.ok(clsAi && clsAi.driver === 'mining_supply' && clsAi.topic === 'tech_solar_ai' && clsAi.silverImpact > 0, 'China AI & BYD EV headline must map to mining_supply & tech_solar_ai');
 
 const outAiSurge = buildOutlook({
   spotGold: 3610,
@@ -1430,8 +1452,8 @@ const outAiPause = buildOutlook({
   rawHeadlines: aiPauseNews.map((h) => ({ ...h, source: 'Reuters', publishedAt: new Date().toISOString() })),
   scenarioIds: ['ai_capex_pause'],
 });
-assert.ok(outAiSurge.aiDatacenter?.computeBasket?.live && outAiSurge.aiDatacenter?.powerBasket?.live, 'buildOutlook must attach live Compute & Power AI baskets');
-assert.ok(outAiSurge.silver.horizon30d.expectedPct > outAiPause.silver.horizon30d.expectedPct, 'AI CapEx Surge must lift Silver 30-day forecast clearly above AI CapEx Pause');
-assert.ok(outAiSurge.gold.horizon30d.expectedPct > outAiPause.gold.horizon30d.expectedPct, 'AI CapEx Surge must provide measured Gold 30-day support over AI CapEx Pause');
+assert.ok(outAiSurge.aiDatacenter?.computeBasket?.live && outAiSurge.aiDatacenter?.chinaAiEvBasket?.live && outAiSurge.aiDatacenter?.powerBasket?.live, 'buildOutlook must attach all 3 live US/China/Power AI & EV baskets');
+assert.ok(outAiSurge.silver.horizon30d.expectedPct > outAiPause.silver.horizon30d.expectedPct, 'AI/EV CapEx Surge must lift Silver 30-day forecast clearly above CapEx Pause');
+assert.ok(outAiSurge.gold.horizon30d.expectedPct > outAiPause.gold.horizon30d.expectedPct, 'AI/EV CapEx Surge must provide measured Gold 30-day support over CapEx Pause');
 
-console.log('All 31 Bullion Pulse suites (v52 AI Data Center & Big Tech Metal Race, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt + 18-Feed Multi-Subject News & Global Events Calendar, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');
+console.log('All 31 Bullion Pulse suites (v56 Global US+China AI, SpaceX, Tesla, Anthropic, OpenAI & BYD EV Metal Race, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt + 20-Feed Multi-Subject News & Global Events Calendar, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');

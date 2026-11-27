@@ -7695,10 +7695,48 @@ body.pixel-shift-on .bottom-nav > * {
   flex-wrap: wrap;
 }
 
+.aidc-labs-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+}
+
+.aidc-labs-k {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.aidc-lab-pill {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.aidc-lab-pill.hot {
+  color: var(--gold-bright);
+  border-color: rgba(212, 168, 67, 0.45);
+  background: rgba(212, 168, 67, 0.14);
+}
+
 @media (min-width: 720px) {
   .aidc-baskets-grid,
   .aidc-metals-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+  }
+
+  .aidc-baskets-grid.aidc-baskets-3 > :last-child {
+    grid-column: 1 / -1;
   }
 }

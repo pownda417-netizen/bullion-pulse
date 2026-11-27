@@ -5875,21 +5875,42 @@ function computeClientHiddenAlpha({
   };
 }
 
-/* ---------- AI Data Center & Big Tech Infrastructure Race Engine (Client Mirror) ---------- */
+/* ---------- Global US & China AI Data Center, SpaceX & EV Metal Race Engine (Client Mirror) ---------- */
 const CLIENT_AI_COMPUTE_META = [
   { key: 'nvda', ticker: 'NVDA', name: 'NVIDIA', role: 'AI GPUs & Interconnects' },
   { key: 'googl', ticker: 'GOOGL', name: 'Google', role: 'TPU Hyperscale & Power' },
   { key: 'msft', ticker: 'MSFT', name: 'Microsoft', role: 'Azure AI Campuses' },
   { key: 'meta', ticker: 'META', name: 'Meta', role: 'AI Training Clusters' },
   { key: 'amzn', ticker: 'AMZN', name: 'Amazon', role: 'AWS Cloud Buildout' },
+  { key: 'tsla', ticker: 'TSLA', name: 'Tesla', role: 'EVs, Dojo AI & Megapacks' },
   { key: 'tsm', ticker: 'TSM', name: 'TSMC', role: 'Wafer & Wire Bonding' },
   { key: 'avgo', ticker: 'AVGO', name: 'Broadcom', role: 'AI Silicon & Networking' },
+];
+
+const CLIENT_CHINA_AI_EV_META = [
+  { key: 'baba', ticker: 'BABA', name: 'Alibaba', role: 'Qwen AI & Cloud CapEx' },
+  { key: 'tencent', ticker: '0700.HK', name: 'Tencent', role: 'Hunyuan AI & Clusters' },
+  { key: 'bidu', ticker: 'BIDU', name: 'Baidu', role: 'Ernie AI & Robotaxis' },
+  { key: 'smic', ticker: '0981.HK', name: 'SMIC', role: 'China Chip Foundry' },
+  { key: 'byd', ticker: '1211.HK', name: 'BYD', role: '#1 EVs & Solid-State Batteries' },
+  { key: 'xiaomi', ticker: '1810.HK', name: 'Xiaomi', role: 'SU7 EVs & AI Hardware' },
+  { key: 'li', ticker: 'LI', name: 'Li Auto', role: 'High-Voltage EVs' },
+  { key: 'xpev', ticker: 'XPEV', name: 'XPeng', role: 'AI Smart EVs & Robotics' },
 ];
 
 const CLIENT_AI_POWER_META = [
   { key: 'vrt', ticker: 'VRT', name: 'Vertiv', role: 'Switchgear, Busbars & UPS' },
   { key: 'etn', ticker: 'ETN', name: 'Eaton', role: 'Breakers, Relays & Grid' },
   { key: 'ceg', ticker: 'CEG', name: 'Constellation', role: '24/7 Hyperscale Power' },
+];
+
+const CLIENT_PRIVATE_AI_LABS = [
+  { id: 'openai', name: 'OpenAI', rx: /\b(openai|stargate)\b/i },
+  { id: 'anthropic', name: 'Anthropic', rx: /\b(anthropic|claude)\b/i },
+  { id: 'spacex', name: 'SpaceX', rx: /\b(spacex|starlink|starship)\b/i },
+  { id: 'deepseek', name: 'DeepSeek', rx: /\b(deepseek)\b/i },
+  { id: 'huawei', name: 'Huawei AI', rx: /\b(huawei|ascend)\b/i },
+  { id: 'catl', name: 'CATL', rx: /\b(catl)\b/i },
 ];
 
 function computeClientAiDatacenter({
@@ -5939,38 +5960,48 @@ function computeClientAiDatacenter({
   };
 
   const computeBasket = hydrateBasket(CLIENT_AI_COMPUTE_META, srv?.computeBasket);
+  const chinaAiEvBasket = hydrateBasket(CLIENT_CHINA_AI_EV_META, srv?.chinaAiEvBasket);
   const powerBasket = hydrateBasket(CLIENT_AI_POWER_META, srv?.powerBasket);
 
   const bullRx = [
-    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(data center|ai infrastructure|ai capex|capex|gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|server|blackwell|rubin|tpu|billion|expand|buildout|surge|boom|record)/i,
-    /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding)\b.*\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
-    /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale)/i,
+    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(data center|ai infrastructure|ai capex|capex|gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|server|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries)/i,
+    /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b.*\b(ai data center|ai capex|ai chip|cloud|semiconductor|ev|electric vehicle|solid[- ]?state|battery|charging|megawatt|gigawatt|deliveries|sales surge|record|expand|billion|boom|factory)/i,
+    /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding|solid[- ]?state battery)\b.*\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
+    /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|ev demand)/i,
   ];
   const bearRx = [
-    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity)/i,
-    /\b(ai data center|ai capex|ai chip|server demand)\b.*\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble)/i,
+    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|ev slump)/i,
+    /\b(ai data center|ai capex|ai chip|server demand|ev sales)\b.*\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble|slump)/i,
   ];
   let bullHits = 0;
   let bearHits = 0;
+  const labMentions = {};
+  for (const lab of CLIENT_PRIVATE_AI_LABS) labMentions[lab.id] = 0;
   for (const h of headlines) {
     const txt = `${h?.title || ''} ${h?.summary || ''}`.trim();
     if (!txt) continue;
+    for (const lab of CLIENT_PRIVATE_AI_LABS) {
+      if (lab.rx.test(txt)) labMentions[lab.id]++;
+    }
     const isBear = bearRx.some((rx) => rx.test(txt));
     const isBull = bullRx.some((rx) => rx.test(txt));
     if (isBull && !isBear) bullHits++;
     else if (isBear) bearHits++;
   }
-  const newsScore = clampNum((bullHits - bearHits) * 0.28, -0.85, 0.90);
+  const newsScore = clampNum((bullHits - bearHits) * 0.25, -0.85, 0.90);
 
   const computeMom = computeBasket.live
     ? clampNum((computeBasket.avg5dPct * 0.55 + computeBasket.avg20dPct * 0.28) / 7.5, -1, 1)
     : 0.12;
+  const chinaAiEvMom = chinaAiEvBasket.live
+    ? clampNum((chinaAiEvBasket.avg5dPct * 0.55 + chinaAiEvBasket.avg20dPct * 0.28) / 8.5, -1, 1)
+    : 0.10;
   const powerMom = powerBasket.live
     ? clampNum((powerBasket.avg5dPct * 0.52 + powerBasket.avg20dPct * 0.30 + cu5 * 0.18) / 8.0, -1, 1)
     : clampNum(0.14 + cu5 / 18, -0.6, 0.8);
   const scenarioShift = scenarioMode === 'surge' ? 24 : scenarioMode === 'pause' ? -28 : 0;
 
-  const raceIndex = Math.round(clampNum(56 + computeMom * 18 + powerMom * 20 + newsScore * 16 + scenarioShift, 6, 98));
+  const raceIndex = Math.round(clampNum(56 + computeMom * 14 + chinaAiEvMom * 13 + powerMom * 16 + newsScore * 16 + scenarioShift, 6, 98));
   const agComexRatio = Number(liveComex?.silver?.paperToRegisteredRatio);
   const agBackw = Boolean(futures?.silver?.isBackwardation || (futures?.silver?.basisUsd ?? 1) < 0);
   const agPremHot = physicalPremiums?.silver?.tone === 'bullish';
@@ -5989,26 +6020,26 @@ function computeClientAiDatacenter({
   const goldBoost = +clampNum(goldSignal * 0.105, -0.022, 0.042).toFixed(4);
   const estSilverMozYr = Math.round(clampNum(20 + ((raceIndex - 20) / 78) * 24, 18, 46));
 
-  let status = 'Steady AI Expansion';
+  let status = 'Steady AI & EV Expansion';
   let tone = 'neutral';
   if (raceIndex >= 74) {
-    status = 'Hyperscale Surge ↑';
+    status = 'Hyperscale & EV Surge ↑';
     tone = 'bullish';
   } else if (raceIndex >= 58) {
-    status = 'Active AI Buildout ↑';
+    status = 'Active AI & EV Buildout ↑';
     tone = 'bullish';
   } else if (raceIndex <= 34) {
-    status = 'CapEx Slowdown ↓';
+    status = 'CapEx & EV Slowdown ↓';
     tone = 'bearish';
   }
 
-  let summary = `AI data center race index at ${raceIndex}/100 (${status.replace(/[↑↓]/g, '').trim()}). `;
+  let summary = `Global US & China AI/EV race index at ${raceIndex}/100 (${status.replace(/[↑↓]/g, '').trim()}). `;
   if (tone === 'bullish') {
-    summary += `Hyperscale buildouts (Google, NVIDIA, Microsoft, Meta, Amazon) and power-room switchgear/busbars add non-thriftable physical silver demand (~${estSilverMozYr} Moz/yr run-rate) onto a 6-year structural deficit with 70–80% byproduct supply inelasticity, plus steady gold wire-bonding support.`;
+    summary += `US hyperscalers & labs (Google, NVIDIA, Tesla, SpaceX, OpenAI, Anthropic) plus China AI & EV leaders (Alibaba, Tencent, Baidu, DeepSeek, BYD, CATL, Xiaomi) compound non-thriftable silver demand (~${estSilverMozYr} Moz/yr DC/grid + EV inverters/solid-state batteries) onto a 6-year deficit with 70–80% byproduct inelasticity, plus supporting gold wire-bonding & EV connector demand.`;
   } else if (tone === 'bearish') {
-    summary += `Big Tech AI CapEx stocks and power-grid hardware cooled recently — easing near-term industrial momentum, though long-term 2025–2030 power growth (+165%) remains intact.`;
+    summary += `Global AI CapEx & EV stocks cooled recently — easing near-term industrial momentum, though long-term 2025–2030 data center power (+165%) and EV electrification demand remain intact.`;
   } else {
-    summary += `Steady hyperscale server & power-grid expansion underpins ~${estSilverMozYr} Moz/yr of non-thriftable silver hardware draw and supporting gold connector demand.`;
+    summary += `Steady US & China AI data centers, SpaceX orbital builds, and BYD/Tesla EV production underpin ~${estSilverMozYr} Moz/yr of non-thriftable silver hardware draw and supporting gold connector demand.`;
   }
 
   return {
@@ -6021,19 +6052,25 @@ function computeClientAiDatacenter({
     deficitYears: 6,
     supplyTightMult: +supplyTightMult.toFixed(2),
     computeBasket,
+    chinaAiEvBasket,
     powerBasket,
+    privateLabs: CLIENT_PRIVATE_AI_LABS.map((l) => ({
+      id: l.id,
+      name: l.name,
+      mentions: labMentions[l.id] || 0,
+    })),
     news: { bullHits, bearHits, net: bullHits - bearHits, newsScore: +newsScore.toFixed(3) },
     silver: {
       signal: silverSignal,
       predictionBoost: silverBoost,
       pts: Math.round(silverBoost * 100),
-      role: 'Primary AI Metal (Switchgear, Busbars, Relays, Grid & Thermal — Non-Thriftable)',
+      role: 'Primary AI, EV & Space Metal (Switchgear, Busbars, BYD/Tesla EVs, Starlink Solar — Non-Thriftable)',
     },
     gold: {
       signal: goldSignal,
       predictionBoost: goldBoost,
       pts: Math.round(goldBoost * 100),
-      role: 'Supporting Tech Metal (Corrosion-Proof Wire Bonding, Edge Connectors & Memory Pins)',
+      role: 'Supporting High-Reliability Metal (Wire Bonding, EV/Server Connectors & Satellite Contacts)',
     },
     summary,
   };
@@ -8602,7 +8639,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=55', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=56', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -10002,13 +10039,20 @@ function renderAiDatacenter(res) {
       </div>
     </div>
 
-    <div class="aidc-baskets-grid">
+    <div class="aidc-baskets-grid aidc-baskets-3">
       <div class="aidc-basket-card">
         <div class="aidc-basket-head">
-          <span>Big Tech AI Compute &amp; Silicon</span>
+          <span>US AI, Tesla &amp; Silicon</span>
           ${basketAvgHtml(ai.computeBasket)}
         </div>
         <div class="aidc-tickers">${renderPills(ai.computeBasket)}</div>
+      </div>
+      <div class="aidc-basket-card">
+        <div class="aidc-basket-head">
+          <span>China AI &amp; EV Giants (BYD/Alibaba)</span>
+          ${basketAvgHtml(ai.chinaAiEvBasket)}
+        </div>
+        <div class="aidc-tickers">${renderPills(ai.chinaAiEvBasket)}</div>
       </div>
       <div class="aidc-basket-card">
         <div class="aidc-basket-head">
@@ -10016,25 +10060,34 @@ function renderAiDatacenter(res) {
           ${basketAvgHtml(ai.powerBasket)}
         </div>
         <div class="aidc-tickers">${renderPills(ai.powerBasket)}</div>
+        <div class="aidc-labs-row">
+          <span class="aidc-labs-k">Frontier &amp; Space News:</span>
+          ${(ai.privateLabs || [])
+            .map(
+              (l) =>
+                `<span class="aidc-lab-pill ${l.mentions > 0 ? 'hot' : ''}">${escapeHtml(l.name)}${l.mentions > 0 ? ` (${l.mentions})` : ''}</span>`
+            )
+            .join('')}
+        </div>
       </div>
     </div>
 
     <div class="aidc-metals-grid">
       <article class="aidc-metal-card silver">
         <div class="aidc-metal-head">
-          <span class="aidc-metal-title">Silver · Primary AI Power Metal</span>
+          <span class="aidc-metal-title">Silver · Primary AI, EV &amp; Space Metal</span>
           <span class="signal-pill ${sPts > 0 ? 'bullish' : sPts < 0 ? 'bearish' : ''}">Forecast ${sPts >= 0 ? '+' : '−'}${Math.abs(sPts)} pts</span>
         </div>
-        <div class="aidc-metal-role">Switchgear, busbars, circuit breakers, relays, UPS &amp; grid upgrades</div>
-        <div class="aidc-metal-desc">Highest electrical &amp; thermal conductivity (~7% better heat transfer than copper). Non-thriftable in 50–500MW+ zero-downtime facilities; industrial fabricators pull refined silver from the same pool as bullion bars &amp; coins.</div>
+        <div class="aidc-metal-role">Switchgear, busbars, BYD/Tesla EVs (~25–50g/car), solid-state batteries &amp; Starlink solar</div>
+        <div class="aidc-metal-desc">Highest electrical &amp; thermal conductivity (~7% better heat transfer than copper). Non-thriftable in 50–500MW+ data centers &amp; high-voltage EVs; fabricators compete for the exact same refined silver pool as bullion bars &amp; coins.</div>
       </article>
       <article class="aidc-metal-card gold">
         <div class="aidc-metal-head">
-          <span class="aidc-metal-title">Gold · Supporting AI Tech Metal</span>
+          <span class="aidc-metal-title">Gold · Supporting AI &amp; EV Tech Metal</span>
           <span class="signal-pill ${gPts > 0 ? 'bullish' : gPts < 0 ? 'bearish' : ''}">Forecast ${gPts >= 0 ? '+' : '−'}${Math.abs(gPts)} pts</span>
         </div>
-        <div class="aidc-metal-role">Wire bonding, corrosion-proof edge connectors &amp; memory pins</div>
-        <div class="aidc-metal-desc">Stays chemically stable in high-heat continuous servers without oxidizing. Adds a steady supporting tech layer (moderated by per-chip thrifting) alongside Gold's primary monetary &amp; central-bank drivers.</div>
+        <div class="aidc-metal-role">Wire bonding, corrosion-proof EV/server connectors, memory pins &amp; satellite contacts</div>
+        <div class="aidc-metal-desc">Stays chemically stable in high-heat continuous servers, autonomous EV sensors &amp; orbital hardware. Adds a steady supporting tech layer alongside Gold's primary monetary &amp; central-bank drivers.</div>
       </article>
     </div>`;
 
@@ -13581,7 +13634,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 55,
+      version: 56,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
