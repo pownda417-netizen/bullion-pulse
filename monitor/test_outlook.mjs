@@ -29,6 +29,10 @@ import {
   computeOpexDeliveryMagnet,
   computeHiddenAlphaSuite,
 } from './hidden_alpha.mjs';
+import {
+  computeAiDatacenterSignal,
+  scoreAiDatacenterHeadlines,
+} from './ai_datacenter.mjs';
 import { parseRssItems, sanitizeHttpUrl } from './analyze_outlook.mjs';
 import {
   cnyPerGramToUsdPerOz,
@@ -1350,4 +1354,84 @@ const outHidden = buildOutlook({
 });
 assert.ok(outHidden.hiddenAlpha?.gold?.sessionFlow && outHidden.hiddenAlpha?.silver?.opexMagnet, 'buildOutlook must attach complete hiddenAlpha suite');
 
-console.log('All 30 Bullion Pulse suites (v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt + 16-Feed Multi-Subject News & Global Events Calendar, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');
+// 31. v52 AI Data Center & Big Tech Infrastructure Race (Google, NVIDIA, MSFT, Meta, AMZN, TSMC, AVGO + Vertiv, Eaton, Constellation)
+const mkUp = (start, step) => Array.from({ length: 25 }, (_, i) => +(start * Math.pow(1 + step, i)).toFixed(2));
+const mkDn = (start, step) => Array.from({ length: 25 }, (_, i) => +(start * Math.pow(1 - step, i)).toFixed(2));
+
+const aiSurgeSeries = {
+  nvda: mkUp(120, 0.012),
+  googl: mkUp(175, 0.008),
+  msft: mkUp(420, 0.006),
+  meta: mkUp(580, 0.009),
+  amzn: mkUp(205, 0.007),
+  tsm: mkUp(190, 0.010),
+  avgo: mkUp(170, 0.011),
+  vrt: mkUp(110, 0.015),
+  etn: mkUp(330, 0.009),
+  ceg: mkUp(240, 0.013),
+  copper: mkUp(4.2, 0.006),
+};
+const aiSurgeNews = [
+  { title: 'Google and NVIDIA expand 500MW hyperscale AI data center buildout with massive switchgear and grid upgrades' },
+  { title: 'Microsoft and Meta raise AI CapEx by $40 billion as Vertiv and Eaton report surging busbar demand' },
+];
+const aiSurge = computeAiDatacenterSignal({
+  series: aiSurgeSeries,
+  headlines: aiSurgeNews,
+  comex: { silver: { paperToRegisteredRatio: 8.2 } },
+  basis: { silver: { isBackwardation: true, basisUsd: -0.7 } },
+  physicalPremiums: { silver: { tone: 'bullish' } },
+});
+assert.ok(aiSurge.raceIndex >= 74 && aiSurge.tone === 'bullish', `Surging Big Tech + Power stocks must score >= 74 (got ${aiSurge.raceIndex})`);
+assert.ok(aiSurge.supplyTightMult > 1.15, `Tight COMEX/backwardation/premiums must amplify AI Silver squeeze (got ${aiSurge.supplyTightMult})`);
+assert.ok(aiSurge.silver.predictionBoost > 0.05 && aiSurge.gold.predictionBoost > 0.015, 'AI race surge must lift both Silver and Gold');
+assert.ok(aiSurge.silver.predictionBoost > aiSurge.gold.predictionBoost * 2.0, 'Silver (non-thriftable switchgear/busbars/grid) must respond >2x stronger than Gold');
+assert.ok(aiSurge.estSilverMozYr >= 32, `Active surge run-rate must scale inside 20-46 Moz/yr band (got ${aiSurge.estSilverMozYr})`);
+
+const aiPauseSeries = {
+  nvda: mkDn(140, 0.014),
+  googl: mkDn(190, 0.010),
+  msft: mkDn(440, 0.009),
+  meta: mkDn(600, 0.011),
+  amzn: mkDn(220, 0.010),
+  tsm: mkDn(210, 0.012),
+  avgo: mkDn(190, 0.013),
+  vrt: mkDn(135, 0.016),
+  etn: mkDn(360, 0.011),
+  ceg: mkDn(270, 0.014),
+  copper: mkDn(4.5, 0.008),
+};
+const aiPauseNews = [
+  { title: 'Hyperscaler AI data center CapEx cut and project delays spark hardware slowdown fears' },
+  { title: 'NVIDIA and Google pause multi-gigawatt server buildout amid power bottleneck halt' },
+];
+const aiPause = computeAiDatacenterSignal({ series: aiPauseSeries, headlines: aiPauseNews });
+assert.ok(aiPause.raceIndex <= 34 && aiPause.tone === 'bearish', `AI CapEx pullback must score <= 34 (got ${aiPause.raceIndex})`);
+assert.ok(aiPause.silver.predictionBoost < -0.02, 'AI CapEx slowdown must produce negative Silver industrial drag');
+
+const scoredAiNews = scoreAiDatacenterHeadlines([...aiSurgeNews, ...aiPauseNews]);
+assert.equal(scoredAiNews.bullHits, 2);
+assert.equal(scoredAiNews.bearHits, 2);
+
+const clsAi = classifyHeadline({ title: 'Google and NVIDIA announce 500MW hyperscale AI data center gigawatt buildout boosting switchgear and grid demand' });
+assert.ok(clsAi && clsAi.driver === 'mining_supply' && clsAi.topic === 'tech_solar_ai' && clsAi.silverImpact > 0, 'Big Tech AI data center news must map to mining_supply & tech_solar_ai');
+
+const outAiSurge = buildOutlook({
+  spotGold: 3610,
+  spotSilver: 42.8,
+  series: aiSurgeSeries,
+  rawHeadlines: aiSurgeNews.map((h) => ({ ...h, source: 'Reuters', publishedAt: new Date().toISOString() })),
+  scenarioIds: ['ai_capex_surge'],
+});
+const outAiPause = buildOutlook({
+  spotGold: 3610,
+  spotSilver: 42.8,
+  series: aiPauseSeries,
+  rawHeadlines: aiPauseNews.map((h) => ({ ...h, source: 'Reuters', publishedAt: new Date().toISOString() })),
+  scenarioIds: ['ai_capex_pause'],
+});
+assert.ok(outAiSurge.aiDatacenter?.computeBasket?.live && outAiSurge.aiDatacenter?.powerBasket?.live, 'buildOutlook must attach live Compute & Power AI baskets');
+assert.ok(outAiSurge.silver.horizon30d.expectedPct > outAiPause.silver.horizon30d.expectedPct, 'AI CapEx Surge must lift Silver 30-day forecast clearly above AI CapEx Pause');
+assert.ok(outAiSurge.gold.horizon30d.expectedPct > outAiPause.gold.horizon30d.expectedPct, 'AI CapEx Surge must provide measured Gold 30-day support over AI CapEx Pause');
+
+console.log('All 31 Bullion Pulse suites (v52 AI Data Center & Big Tech Metal Race, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt + 18-Feed Multi-Subject News & Global Events Calendar, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');

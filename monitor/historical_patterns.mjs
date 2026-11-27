@@ -10,6 +10,7 @@ import { estimateJumpParams, runJumpDiffusion } from './jump_diffusion.mjs';
 import { computeHurstExponent } from './precision_forecast.mjs';
 import { computePhysicalPremiumSignals } from './physical_premiums.mjs';
 import { computeHiddenAlphaSuite } from './hidden_alpha.mjs';
+import { computeAiDatacenterSignal } from './ai_datacenter.mjs';
 
 export const DRIVER_META = {
   inflation: {
@@ -396,6 +397,7 @@ const DRIVER_RULES = [
       /\b(mine|mining|miner|smelter|san dimas|newmont|barrick|first majestic|pan american|hecla|agnico|wheaton)\b.*\b(strike|labor dispute|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output|aisc.*rise|aisc.*jump|cost.*rise)/i,
       /\b(silver|gold)\b.*\b(deficit|shortage|tight supply|vault drain|inventory drop|record demand|squeeze|sixth straight)/i,
       /\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ev|electrification|charging|electronics|semiconductor|ai data center|ai server|antimicrobial)\b.*\b(silver|demand|grow|surge|boom|rise|record|battery|adoption)/i,
+      /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|xai|stargate|tsmc|broadcom|vertiv|eaton|hyperscaler)\b.*\b(data center|ai capex|ai infrastructure|gigawatt|megawatt|switchgear|busbar|grid upgrade|wire bonding|blackwell|rubin|tpu|power deal|billion|buildout|expand|surge)/i,
       /\b(space economy|satellite constellation|orbital solar|aerospace|lunar base|starship|nasa|spacex|satellite launch)\b.*\b(demand|launch|build|solar|silver|boom|record|contract|expand)/i,
       /\b(us mint|royal mint|perth mint|bullion coin|silver eagle|costco gold)\b.*\b(shortage|sell out|sold out|surge|demand|premium|record|backlog)/i,
       /\bexport (ban|curb|restriction|licensing|control)\b.*\b(silver|gold|metal|mineral)/i,
@@ -404,6 +406,7 @@ const DRIVER_RULES = [
     bearish: [
       /\b(mine|mining|newmont|barrick|first majestic|pan american|hecla|loulo)\b.*\b(record output|production surge|ramps?[- ]?up|supply glut|oversupply|reopen|restart|lower.*cost|cut.*cost)/i,
       /\b(silver|gold)\b.*\b(surplus|oversupply|weak industrial demand|thrifting|substitution|narrow)/i,
+      /\b(nvidia|google|microsoft|meta|amazon|hyperscaler|data center|ai capex)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|bubble burst|slump)/i,
     ],
   },
   {
@@ -457,7 +460,7 @@ export function classifyHeadlineTopic(text = '', driver = '') {
   if (/\b(solar flare|geomagnetic|space weather|noaa|satellite|aerospace|spacex|nasa|orbital|war|missile|airstrike|sanction|tariff|strait of hormuz|red sea|geopolit|conflict|ceasefire)\b/i.test(text)) {
     return { topic: 'geo_space', topicLabel: NEWS_TOPICS.geo_space };
   }
-  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
+  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ai capex|ai infrastructure|hyperscal|gigawatt|switchgear|busbar|wire bonding|nvidia|vertiv|eaton|stargate|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
     return { topic: 'tech_solar_ai', topicLabel: NEWS_TOPICS.tech_solar_ai };
   }
   if (/\b(central bank|brics|pboc|rbi|nbp|repatriat|de-?dollariz|sovereign.*reserve|basel iii|paxg|xaut|tether gold|tokenized gold|gld|slv|pslv|etf)\b/i.test(text)) {
@@ -1144,6 +1147,7 @@ export function computeCrossAssetLeadLag({
   shanghai = null,
   basis = null,
   physicalPremiums = null,
+  aiDatacenter = null,
   ratio = 82,
 } = {}) {
   const isSilver = metal === 'silver';
@@ -1170,16 +1174,23 @@ export function computeCrossAssetLeadLag({
         : 0;
 
   const physLead = clamp(Number(physicalPremiums?.[metal]?.signal) || 0, -0.4, 0.92);
+  const aiLead = clamp(Number(aiDatacenter?.[metal]?.signal) || 0, -0.65, 0.92);
 
   const ratioLead = isSilver
     ? clamp((ratio - 76) / 22, -0.55, 0.75)
     : clamp((70 - ratio) / 28, -0.25, 0.35);
 
-  const score = clamp(
-    minersSig * 0.35 + sgeLead * 0.22 + backwLead * 0.16 + physLead * 0.17 + ratioLead * 0.10,
-    -1,
-    1
-  );
+  const score = isSilver
+    ? clamp(
+        minersSig * 0.29 + sgeLead * 0.19 + backwLead * 0.14 + physLead * 0.15 + aiLead * 0.15 + ratioLead * 0.08,
+        -1,
+        1
+      )
+    : clamp(
+        minersSig * 0.33 + sgeLead * 0.21 + backwLead * 0.15 + physLead * 0.16 + aiLead * 0.06 + ratioLead * 0.09,
+        -1,
+        1
+      );
   const label =
     score >= 0.22
       ? 'Lead Signals Bullish ↑'
@@ -1195,6 +1206,7 @@ export function computeCrossAssetLeadLag({
       shanghaiLead: +sgeLead.toFixed(3),
       backwardationLead: +backwLead.toFixed(3),
       physicalPremLead: +physLead.toFixed(3),
+      aiDatacenterLead: +aiLead.toFixed(3),
       ratioLead: +ratioLead.toFixed(3),
     },
   };
@@ -1313,6 +1325,7 @@ export function project30DayPrecision({
   shanghai = null,
   basis = null,
   physicalPremiums = null,
+  aiDatacenter = null,
   learnedWeights = null,
   series = {},
   coneMultiplier = 1.0,
@@ -1361,13 +1374,14 @@ export function project30DayPrecision({
         : 0;
   const techReversionUnit = clamp(rawTrend * 0.72 * hurstTrendScale + rsiBrake, -1, 1);
 
-  // 3. Cross-Asset Lead-Lag Alpha (Miners + Shanghai + Backwardation + Physical Dealer Premiums + Ratio)
+  // 3. Cross-Asset Lead-Lag Alpha (Miners + Shanghai + Backwardation + Physical Dealer Premiums + AI Data Centers + Ratio)
   const leadLag = computeCrossAssetLeadLag({
     metal,
     proSignals,
     shanghai,
     basis,
     physicalPremiums,
+    aiDatacenter,
     ratio: quant?.ratio ?? 82,
   });
 
@@ -1403,7 +1417,8 @@ export function project30DayPrecision({
   );
 
   const rawUnit30d = modelVotes.reduce((s, m) => s + m.unit * m.weight, 0);
-  const unit30d = clamp(rawUnit30d * agreeDamp + gapDecay30d + learned30dBias, -1, 1);
+  const ai30dBoost = (aiDatacenter?.[metal]?.predictionBoost || 0) * (isSilver ? 0.85 : 0.45);
+  const unit30d = clamp(rawUnit30d * agreeDamp + gapDecay30d + ai30dBoost + learned30dBias, -1, 1);
 
   // 6. Asymmetric Upside / Downside Semi-Volatility (GJR-style bullion squeeze vs liquidation skew)
   const rets45 = dailyReturns(closes.slice(-45));
@@ -2284,7 +2299,25 @@ export function buildOutlook({
   const hiddenBoostGold = hiddenAlpha.gold.netBoost || 0;
   const hiddenBoostSilver = hiddenAlpha.silver.netBoost || 0;
 
-  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap + physical premiums + hidden alpha + world/space pulse
+  // Big Tech AI Data Center & Hyperscale Power Race (Google, NVIDIA, Microsoft, Meta, Amazon, Vertiv, Eaton, Constellation)
+  const aiScenarioMode = scenarioIds.includes('ai_capex_surge')
+    ? 'surge'
+    : scenarioIds.includes('ai_capex_pause')
+      ? 'pause'
+      : null;
+  const aiDatacenter = computeAiDatacenterSignal({
+    series,
+    headlines: scoredHeadlines,
+    copper5dPct: quant.macroSnapshot.cu5dPct,
+    comex,
+    basis,
+    physicalPremiums,
+    scenarioMode: aiScenarioMode,
+  });
+  const aiBoostGold = aiDatacenter.gold.predictionBoost || 0;
+  const aiBoostSilver = aiDatacenter.silver.predictionBoost || 0;
+
+  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap + physical premiums + hidden alpha + AI data center race + world/space pulse
   const goldUnit = clamp(
     goldDriverComposite * 1.48 * 0.78 +
       quant.goldTrend * 0.22 +
@@ -2293,6 +2326,7 @@ export function buildOutlook({
       gapBoostGold +
       physBoostGold * 0.75 +
       hiddenBoostGold * 0.80 +
+      aiBoostGold * 0.78 +
       worldSpacePulse.goldDynamicBoost * 0.65,
     -1,
     1
@@ -2306,6 +2340,7 @@ export function buildOutlook({
       gapBoostSilver +
       physBoostSilver * 0.75 +
       hiddenBoostSilver * 0.80 +
+      aiBoostSilver * 0.82 +
       worldSpacePulse.silverDynamicBoost * 0.65,
     -1,
     1
@@ -2513,6 +2548,7 @@ export function buildOutlook({
     shanghai,
     basis,
     physicalPremiums,
+    aiDatacenter,
     learnedWeights,
     series,
     coneMultiplier: effectiveConeMult,
@@ -2531,6 +2567,7 @@ export function buildOutlook({
     shanghai,
     basis,
     physicalPremiums,
+    aiDatacenter,
     learnedWeights,
     series,
     coneMultiplier: effectiveConeMult,
@@ -2662,6 +2699,7 @@ export function buildOutlook({
     marketGaps,
     physicalPremiums,
     hiddenAlpha,
+    aiDatacenter,
     spaceWeather: parsedSpace,
     worldSpacePulse,
     setupQuality,

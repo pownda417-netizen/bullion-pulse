@@ -122,6 +122,14 @@ const RSS_FEEDS = [
     name: 'Tokenized Gold, ETFs & Basel III Finance',
     url: 'https://news.google.com/rss/search?q=("PAXG"+OR+"Tether+Gold"+OR+"XAUT"+OR+"tokenized+gold"+OR+"gold+ETF+inflows"+OR+"SLV+inflows"+OR+"Basel+III+gold")+when:5d&hl=en-US&gl=US&ceid=US:en',
   },
+  {
+    name: 'Big Tech AI Data Center CapEx (Google/NVIDIA/MSFT/Meta/AWS)',
+    url: 'https://news.google.com/rss/search?q=(NVIDIA+OR+Google+OR+Microsoft+OR+Meta+OR+Amazon+OR+OpenAI+OR+xAI)+("data+center"+OR+"AI+infrastructure"+OR+"AI+capex"+OR+gigawatt+OR+hyperscale)+when:4d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'AI Power Grid, Switchgear & Server Metals',
+    url: 'https://news.google.com/rss/search?q=("data+center+power"+OR+"AI+power+grid"+OR+switchgear+OR+busbar+OR+Vertiv+OR+Eaton+OR+"wire+bonding"+gold+OR+"AI+data+center"+silver)+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
 ];
 
 const YAHOO_SYMBOLS = {
@@ -152,6 +160,17 @@ const YAHOO_SYMBOLS = {
   hl: 'HL',
   ag: 'AG',
   cde: 'CDE',
+  // Big Tech AI Data Center Compute & High-Power Switchgear/Grid Infrastructure Basket
+  nvda: 'NVDA',
+  googl: 'GOOGL',
+  msft: 'MSFT',
+  meta: 'META',
+  amzn: 'AMZN',
+  tsm: 'TSM',
+  avgo: 'AVGO',
+  vrt: 'VRT',
+  etn: 'ETN',
+  ceg: 'CEG',
 };
 
 /* ---------- Lightweight Zero-Dependency XML RSS Parser ---------- */
@@ -683,6 +702,11 @@ async function main() {
     `  Silver : ${outlook.silver.signal} (${outlook.silver.score}) | 7d base $${outlook.silver.horizon7d.base} | 30d base $${outlook.silver.horizon30d.base}`
   );
   console.log(`  Classified news clusters: ${outlook.headlines.length} | Cone mult: ${coneMultiplier}x`);
+  if (outlook.aiDatacenter) {
+    console.log(
+      `  AI Data Center Race: ${outlook.aiDatacenter.raceIndex}/100 (${outlook.aiDatacenter.status}) | Silver ${outlook.aiDatacenter.silver.pts >= 0 ? '+' : ''}${outlook.aiDatacenter.silver.pts} pts · Gold ${outlook.aiDatacenter.gold.pts >= 0 ? '+' : ''}${outlook.aiDatacenter.gold.pts} pts`
+    );
+  }
 
   await maybeNotifyCatalystShift(prevOutlook, outlook);
 }

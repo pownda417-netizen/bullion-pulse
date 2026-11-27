@@ -7389,3 +7389,200 @@ body.pixel-shift-on .bottom-nav > * {
     gap: 12px;
   }
 }
+
+/* ==========================================================================
+   v52 — AI Data Center & Big Tech Metal Race Panel
+   ========================================================================== */
+.aidc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.aidc-gauge-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aidc-gauge-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.aidc-gauge-head strong {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.aidc-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.aidc-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38BDF8, var(--gold), var(--up));
+  transition: width 0.35s ease;
+}
+
+.aidc-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aidc-stat-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.aidc-baskets-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.aidc-basket-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aidc-basket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.aidc-basket-avg {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.aidc-basket-avg.up { color: var(--up); }
+.aidc-basket-avg.down { color: var(--down); }
+
+.aidc-tickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aidc-ticker-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.aidc-ticker-pill .chg.up { color: var(--up); font-weight: 700; }
+.aidc-ticker-pill .chg.down { color: var(--down); font-weight: 700; }
+.aidc-ticker-pill .chg { color: var(--text-muted); }
+
+.aidc-metals-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.aidc-metal-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aidc-metal-card.silver {
+  border-color: rgba(56, 189, 248, 0.36);
+  background: color-mix(in srgb, rgba(56, 189, 248, 0.10) 45%, var(--bg));
+}
+
+.aidc-metal-card.gold {
+  border-color: rgba(212, 168, 67, 0.36);
+  background: color-mix(in srgb, var(--gold-soft) 24%, var(--bg));
+}
+
+.aidc-metal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.aidc-metal-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.aidc-metal-role {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--gold-bright);
+  line-height: 1.35;
+}
+
+.aidc-metal-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.aidc-sim-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (min-width: 720px) {
+  .aidc-baskets-grid,
+  .aidc-metals-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}

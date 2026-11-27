@@ -5044,6 +5044,8 @@ const OUTLOOK_SCENARIOS = [
   { id: 'solar_storm', label: 'Solar Storm / Grid Risk (G4+)', driver: 'geopolitics', goldDelta: 0.55, silverDelta: 0.65 },
   { id: 'space_solar_boom', label: 'Space & Solar Tech Surge', driver: 'mining_supply', goldDelta: 0.25, silverDelta: 0.78 },
   { id: 'ai_battery_silver', label: 'AI & Solid-State Silver Boom', driver: 'mining_supply', goldDelta: 0.22, silverDelta: 0.85 },
+  { id: 'ai_capex_surge', label: 'Big Tech AI CapEx Surge (+GW)', driver: 'mining_supply', goldDelta: 0.24, silverDelta: 0.84 },
+  { id: 'ai_capex_pause', label: 'AI Data Center CapEx Slowdown', driver: 'mining_supply', goldDelta: -0.18, silverDelta: -0.68 },
   { id: 'sovereign_debt_brics', label: 'BRICS / Sovereign Debt Crisis', driver: 'central_banks', goldDelta: 0.82, silverDelta: 0.55 },
   { id: 'physical_squeeze', label: 'Retail Physical Squeeze (+25% Premiums)', driver: 'comex_paper', goldDelta: 0.58, silverDelta: 0.88 },
 ];
@@ -5288,6 +5290,7 @@ const DRIVER_FRIENDLY_LABELS = {
   market_gaps: 'Chart Gaps & Fill Targets',
   physical_premiums: 'Physical Coin & Bar Premiums',
   hidden_alpha: 'Hidden Market Edges (6 Signals)',
+  ai_datacenter: 'AI Data Center Race (Big Tech)',
 };
 
 const CLIENT_PHYS_BENCHMARKS = {
@@ -5869,6 +5872,170 @@ function computeClientHiddenAlpha({
     summaryLine: standout.length
       ? standout.slice(0, 2).join(' · ')
       : '6 exclusive market-edge detectors active and synced into live forecasts',
+  };
+}
+
+/* ---------- AI Data Center & Big Tech Infrastructure Race Engine (Client Mirror) ---------- */
+const CLIENT_AI_COMPUTE_META = [
+  { key: 'nvda', ticker: 'NVDA', name: 'NVIDIA', role: 'AI GPUs & Interconnects' },
+  { key: 'googl', ticker: 'GOOGL', name: 'Google', role: 'TPU Hyperscale & Power' },
+  { key: 'msft', ticker: 'MSFT', name: 'Microsoft', role: 'Azure AI Campuses' },
+  { key: 'meta', ticker: 'META', name: 'Meta', role: 'AI Training Clusters' },
+  { key: 'amzn', ticker: 'AMZN', name: 'Amazon', role: 'AWS Cloud Buildout' },
+  { key: 'tsm', ticker: 'TSM', name: 'TSMC', role: 'Wafer & Wire Bonding' },
+  { key: 'avgo', ticker: 'AVGO', name: 'Broadcom', role: 'AI Silicon & Networking' },
+];
+
+const CLIENT_AI_POWER_META = [
+  { key: 'vrt', ticker: 'VRT', name: 'Vertiv', role: 'Switchgear, Busbars & UPS' },
+  { key: 'etn', ticker: 'ETN', name: 'Eaton', role: 'Breakers, Relays & Grid' },
+  { key: 'ceg', ticker: 'CEG', name: 'Constellation', role: '24/7 Hyperscale Power' },
+];
+
+function computeClientAiDatacenter({
+  base = null,
+  futures = null,
+  liveComex = null,
+  physicalPremiums = null,
+  scenarioMode = null,
+} = {}) {
+  const srv = base?.aiDatacenter || null;
+  const macro = base?.macroSnapshot || {};
+  const headlines = base?.headlines || [];
+  const cu5 = Number.isFinite(Number(macro.cu5dPct)) ? Number(macro.cu5dPct) : 0;
+
+  const hydrateBasket = (metaList, srvBasket) => {
+    const map = new Map((srvBasket?.members || []).map((m) => [m.key, m]));
+    let sum5d = 0;
+    let sum20d = 0;
+    let cnt5d = 0;
+    let cnt20d = 0;
+    let rising = 0;
+    const members = metaList.map((m) => {
+      const s = map.get(m.key);
+      const p5 = s && Number.isFinite(Number(s.pct5d)) ? Number(s.pct5d) : null;
+      const p20 = s && Number.isFinite(Number(s.pct20d)) ? Number(s.pct20d) : null;
+      const price = s && Number.isFinite(Number(s.price)) ? Number(s.price) : null;
+      if (p5 != null) {
+        sum5d += p5;
+        cnt5d++;
+        if (p5 > 0) rising++;
+      }
+      if (p20 != null) {
+        sum20d += p20;
+        cnt20d++;
+      }
+      return { ...m, price, pct5d: p5, pct20d: p20 };
+    });
+    return {
+      members,
+      avg5dPct: cnt5d > 0 ? +(sum5d / cnt5d).toFixed(2) : 0,
+      avg20dPct: cnt20d > 0 ? +(sum20d / cnt20d).toFixed(2) : 0,
+      risingCount: rising,
+      trackedCount: cnt5d,
+      totalCount: metaList.length,
+      live: cnt5d > 0,
+    };
+  };
+
+  const computeBasket = hydrateBasket(CLIENT_AI_COMPUTE_META, srv?.computeBasket);
+  const powerBasket = hydrateBasket(CLIENT_AI_POWER_META, srv?.powerBasket);
+
+  const bullRx = [
+    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(data center|ai infrastructure|ai capex|capex|gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|server|blackwell|rubin|tpu|billion|expand|buildout|surge|boom|record)/i,
+    /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding)\b.*\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
+    /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale)/i,
+  ];
+  const bearRx = [
+    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity)/i,
+    /\b(ai data center|ai capex|ai chip|server demand)\b.*\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble)/i,
+  ];
+  let bullHits = 0;
+  let bearHits = 0;
+  for (const h of headlines) {
+    const txt = `${h?.title || ''} ${h?.summary || ''}`.trim();
+    if (!txt) continue;
+    const isBear = bearRx.some((rx) => rx.test(txt));
+    const isBull = bullRx.some((rx) => rx.test(txt));
+    if (isBull && !isBear) bullHits++;
+    else if (isBear) bearHits++;
+  }
+  const newsScore = clampNum((bullHits - bearHits) * 0.28, -0.85, 0.90);
+
+  const computeMom = computeBasket.live
+    ? clampNum((computeBasket.avg5dPct * 0.55 + computeBasket.avg20dPct * 0.28) / 7.5, -1, 1)
+    : 0.12;
+  const powerMom = powerBasket.live
+    ? clampNum((powerBasket.avg5dPct * 0.52 + powerBasket.avg20dPct * 0.30 + cu5 * 0.18) / 8.0, -1, 1)
+    : clampNum(0.14 + cu5 / 18, -0.6, 0.8);
+  const scenarioShift = scenarioMode === 'surge' ? 24 : scenarioMode === 'pause' ? -28 : 0;
+
+  const raceIndex = Math.round(clampNum(56 + computeMom * 18 + powerMom * 20 + newsScore * 16 + scenarioShift, 6, 98));
+  const agComexRatio = Number(liveComex?.silver?.paperToRegisteredRatio);
+  const agBackw = Boolean(futures?.silver?.isBackwardation || (futures?.silver?.basisUsd ?? 1) < 0);
+  const agPremHot = physicalPremiums?.silver?.tone === 'bullish';
+  const supplyTightMult = clampNum(
+    1.0 +
+      (agBackw ? 0.14 : 0) +
+      (agPremHot ? 0.10 : 0) +
+      (Number.isFinite(agComexRatio) && agComexRatio > 5.0 ? clampNum((agComexRatio - 5.0) * 0.03, 0, 0.12) : 0),
+    1.0,
+    1.32
+  );
+
+  const silverSignal = +clampNum(((raceIndex - 45) / 48) * supplyTightMult, -0.65, 0.92).toFixed(3);
+  const silverBoost = +clampNum(silverSignal * 0.115, -0.055, 0.105).toFixed(4);
+  const goldSignal = +clampNum(silverSignal * 0.36, -0.28, 0.38).toFixed(3);
+  const goldBoost = +clampNum(goldSignal * 0.105, -0.022, 0.042).toFixed(4);
+  const estSilverMozYr = Math.round(clampNum(20 + ((raceIndex - 20) / 78) * 24, 18, 46));
+
+  let status = 'Steady AI Expansion';
+  let tone = 'neutral';
+  if (raceIndex >= 74) {
+    status = 'Hyperscale Surge ↑';
+    tone = 'bullish';
+  } else if (raceIndex >= 58) {
+    status = 'Active AI Buildout ↑';
+    tone = 'bullish';
+  } else if (raceIndex <= 34) {
+    status = 'CapEx Slowdown ↓';
+    tone = 'bearish';
+  }
+
+  let summary = `AI data center race index at ${raceIndex}/100 (${status.replace(/[↑↓]/g, '').trim()}). `;
+  if (tone === 'bullish') {
+    summary += `Hyperscale buildouts (Google, NVIDIA, Microsoft, Meta, Amazon) and power-room switchgear/busbars add non-thriftable physical silver demand (~${estSilverMozYr} Moz/yr run-rate) onto a 6-year structural deficit with 70–80% byproduct supply inelasticity, plus steady gold wire-bonding support.`;
+  } else if (tone === 'bearish') {
+    summary += `Big Tech AI CapEx stocks and power-grid hardware cooled recently — easing near-term industrial momentum, though long-term 2025–2030 power growth (+165%) remains intact.`;
+  } else {
+    summary += `Steady hyperscale server & power-grid expansion underpins ~${estSilverMozYr} Moz/yr of non-thriftable silver hardware draw and supporting gold connector demand.`;
+  }
+
+  return {
+    raceIndex,
+    status,
+    tone,
+    estSilverMozYr,
+    dcPowerGrowth2030Pct: 165,
+    byproductSilverSharePct: '70–80%',
+    deficitYears: 6,
+    supplyTightMult: +supplyTightMult.toFixed(2),
+    computeBasket,
+    powerBasket,
+    news: { bullHits, bearHits, net: bullHits - bearHits, newsScore: +newsScore.toFixed(3) },
+    silver: {
+      signal: silverSignal,
+      predictionBoost: silverBoost,
+      pts: Math.round(silverBoost * 100),
+      role: 'Primary AI Metal (Switchgear, Busbars, Relays, Grid & Thermal — Non-Thriftable)',
+    },
+    gold: {
+      signal: goldSignal,
+      predictionBoost: goldBoost,
+      pts: Math.round(goldBoost * 100),
+      role: 'Supporting Tech Metal (Corrosion-Proof Wire Bonding, Edge Connectors & Memory Pins)',
+    },
+    summary,
   };
 }
 
@@ -6949,13 +7116,39 @@ function computeInteractiveOutlook() {
     });
   }
 
+  // Big Tech AI Data Center & Hyperscale Power Race (Google, NVIDIA, Microsoft, Meta, Amazon, Vertiv, Eaton, Constellation)
+  const aiScenarioMode = outlookState.activeScenarios.has('ai_capex_surge')
+    ? 'surge'
+    : outlookState.activeScenarios.has('ai_capex_pause')
+      ? 'pause'
+      : null;
+  const aiDatacenter = computeClientAiDatacenter({
+    base,
+    futures,
+    liveComex,
+    physicalPremiums,
+    scenarioMode: aiScenarioMode,
+  });
+  const aiBoostGold = aiDatacenter.gold?.predictionBoost || 0;
+  const aiBoostSilver = aiDatacenter.silver?.predictionBoost || 0;
+  if (!drivers.some((d) => d.id === 'ai_datacenter')) {
+    drivers.push({
+      id: 'ai_datacenter',
+      label: 'AI Data Center Race (Big Tech)',
+      shortLabel: 'AI Data Centers',
+      gold: +(aiDatacenter.gold?.signal || 0).toFixed(3),
+      silver: +(aiDatacenter.silver?.signal || 0).toFixed(3),
+      headlineCount: (aiDatacenter.news?.bullHits || 0) + (aiDatacenter.news?.bearHits || 0),
+    });
+  }
+
   const gUnit = clampNum(
-    gComp * 1.45 + driftG + backwBoostGold + gapBoostGold + physBoostGold * 0.75 + hiddenBoostGold * 0.80 + goldDynamicPulse * 0.72,
+    gComp * 1.45 + driftG + backwBoostGold + gapBoostGold + physBoostGold * 0.75 + hiddenBoostGold * 0.80 + aiBoostGold * 0.78 + goldDynamicPulse * 0.72,
     -1,
     1
   );
   const sUnit = clampNum(
-    sComp * 1.45 + driftS + backwBoostSilver + gapBoostSilver + physBoostSilver * 0.75 + hiddenBoostSilver * 0.80 + silverDynamicPulse * 0.72,
+    sComp * 1.45 + driftS + backwBoostSilver + gapBoostSilver + physBoostSilver * 0.75 + hiddenBoostSilver * 0.80 + aiBoostSilver * 0.82 + silverDynamicPulse * 0.72,
     -1,
     1
   );
@@ -7016,14 +7209,21 @@ function computeInteractiveOutlook() {
           ? 0.28
           : 0;
     const physLead = clampNum(Number(physicalPremiums?.[metal]?.signal) || 0, -0.4, 0.92);
+    const aiLead = clampNum(Number(aiDatacenter?.[metal]?.signal) || 0, -0.65, 0.92);
     const ratioLead = isSilver
       ? clampNum((liveRatioVal - 76) / 22, -0.55, 0.75)
       : clampNum((70 - liveRatioVal) / 28, -0.25, 0.35);
-    const score = clampNum(
-      minersSig * 0.35 + sgeLead * 0.22 + backwLead * 0.16 + physLead * 0.17 + ratioLead * 0.10,
-      -1,
-      1
-    );
+    const score = isSilver
+      ? clampNum(
+          minersSig * 0.29 + sgeLead * 0.19 + backwLead * 0.14 + physLead * 0.15 + aiLead * 0.15 + ratioLead * 0.08,
+          -1,
+          1
+        )
+      : clampNum(
+          minersSig * 0.33 + sgeLead * 0.21 + backwLead * 0.15 + physLead * 0.16 + aiLead * 0.06 + ratioLead * 0.09,
+          -1,
+          1
+        );
     const label =
       score >= 0.22
         ? 'Lead Signals Bullish ↑'
@@ -7207,7 +7407,8 @@ function computeInteractiveOutlook() {
     );
     const rawUnit30d = modelVotes.reduce((s, m) => s + m.unit * m.weight, 0);
     const hidden30d = (hiddenAlpha?.[metal]?.netBoost || 0) * 0.55;
-    const unit30d = clampNum(rawUnit30d * agreeDamp + gapDecay30d + hidden30d + learned30dBias, -1, 1);
+    const ai30d = (aiDatacenter?.[metal]?.predictionBoost || 0) * (isSilver ? 0.85 : 0.45);
+    const unit30d = clampNum(rawUnit30d * agreeDamp + gapDecay30d + hidden30d + ai30d + learned30dBias, -1, 1);
 
     // Asymmetric Up/Down Semi-Vol from trailing 45 daily bars
     let upSq = 0;
@@ -7416,6 +7617,11 @@ function computeInteractiveOutlook() {
   if (hiddenAlpha?.summaryLine && !hiddenAlpha.summaryLine.startsWith('6 exclusive')) {
     plainParts.push(`Exclusive market-edge alert: ${hiddenAlpha.summaryLine}.`);
   }
+  if (aiDatacenter?.tone === 'bullish' && (aiDatacenter.silver?.pts || 0) >= 4) {
+    plainParts.push(
+      `Big Tech AI data center expansion (index ${aiDatacenter.raceIndex}/100, ~${aiDatacenter.estSilverMozYr} Moz/yr silver hardware & grid draw) adds structural upside to Silver (+${aiDatacenter.silver.pts} pts) and supporting tech demand to Gold.`
+    );
+  }
   if (ratioAnalytics.tone !== 'neutral') {
     plainParts.push(
       `At ${liveRatio.toFixed(1)} oz of silver per oz of gold, ${ratioAnalytics.regime.toLowerCase()} (higher than ${ratioAnalytics.percentile5y}% of the past 5 years).`
@@ -7470,6 +7676,7 @@ function computeInteractiveOutlook() {
     marketGaps,
     physicalPremiums,
     hiddenAlpha,
+    aiDatacenter,
     worldSpacePulse,
     ratioAnalytics,
     setupQuality,
@@ -8395,7 +8602,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=51', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=52', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -9739,6 +9946,103 @@ function renderHiddenAlpha(res) {
   }
 }
 
+function renderAiDatacenter(res) {
+  const bodyEl = document.getElementById('aidc-body');
+  const badgeEl = document.getElementById('aidc-status-badge');
+  const noteEl = document.getElementById('aidc-note');
+  const ai = res?.aiDatacenter;
+  if (!bodyEl || !ai) return;
+
+  if (badgeEl) {
+    badgeEl.textContent = `${ai.status} · ${ai.raceIndex}/100`;
+    badgeEl.className = `signal-pill ${ai.tone === 'bullish' ? 'bullish' : ai.tone === 'bearish' ? 'bearish' : ''}`;
+  }
+
+  const fmtChg = (v) => {
+    if (v == null || !Number.isFinite(v)) return '<span class="chg">Track</span>';
+    const cls = v >= 0.05 ? 'up' : v <= -0.05 ? 'down' : '';
+    return `<span class="chg ${cls}">${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}%</span>`;
+  };
+  const basketAvgHtml = (b) => {
+    if (!b.live) return '<span class="aidc-basket-avg">Structural Baseline</span>';
+    const cls = b.avg5dPct >= 0.05 ? 'up' : b.avg5dPct <= -0.05 ? 'down' : '';
+    return `<span class="aidc-basket-avg ${cls}">5d ${b.avg5dPct >= 0 ? '+' : '−'}${Math.abs(b.avg5dPct).toFixed(1)}% (${b.risingCount}/${b.trackedCount} ↑)</span>`;
+  };
+  const renderPills = (b) =>
+    b.members
+      .map(
+        (m) =>
+          `<span class="aidc-ticker-pill" title="${escapeHtml(`${m.name}: ${m.role}`)}"><strong>${escapeHtml(m.ticker)}</strong>${fmtChg(m.pct5d)}</span>`
+      )
+      .join('');
+
+  const sPts = ai.silver?.pts || 0;
+  const gPts = ai.gold?.pts || 0;
+  const isSurge = outlookState.activeScenarios.has('ai_capex_surge');
+  const isPause = outlookState.activeScenarios.has('ai_capex_pause');
+
+  bodyEl.innerHTML = `
+    <div class="aidc-gauge-box">
+      <div class="aidc-gauge-head">
+        <span>Hyperscale AI Buildout &amp; Power Intensity</span>
+        <strong>${ai.raceIndex} / 100</strong>
+      </div>
+      <div class="aidc-track"><div class="aidc-fill" style="width:${clampNum(ai.raceIndex, 6, 100)}%"></div></div>
+      <div class="aidc-stats-row">
+        <span class="aidc-stat-chip">+${ai.dcPowerGrowth2030Pct}% DC Power by 2030</span>
+        <span class="aidc-stat-chip">~${ai.estSilverMozYr} Moz/yr Silver Draw</span>
+        <span class="aidc-stat-chip">${escapeHtml(ai.byproductSilverSharePct)} Byproduct Supply</span>
+        <span class="aidc-stat-chip">${ai.deficitYears}-Yr Structural Deficit</span>
+        ${ai.supplyTightMult > 1.02 ? `<span class="aidc-stat-chip">Tightness ${ai.supplyTightMult.toFixed(2)}×</span>` : ''}
+      </div>
+      <div class="aidc-sim-row" role="group" aria-label="Simulate AI CapEx race scenarios">
+        <button type="button" class="chip-toggle ${!isSurge && !isPause ? 'active' : ''}" data-aidc-sim="live">Live Signal</button>
+        <button type="button" class="chip-toggle ${isSurge ? 'active' : ''}" data-aidc-sim="surge">Simulate +GW Surge</button>
+        <button type="button" class="chip-toggle ${isPause ? 'active' : ''}" data-aidc-sim="pause">Simulate CapEx Pause</button>
+      </div>
+    </div>
+
+    <div class="aidc-baskets-grid">
+      <div class="aidc-basket-card">
+        <div class="aidc-basket-head">
+          <span>Big Tech AI Compute &amp; Silicon</span>
+          ${basketAvgHtml(ai.computeBasket)}
+        </div>
+        <div class="aidc-tickers">${renderPills(ai.computeBasket)}</div>
+      </div>
+      <div class="aidc-basket-card">
+        <div class="aidc-basket-head">
+          <span>Power Room, Switchgear &amp; Grid</span>
+          ${basketAvgHtml(ai.powerBasket)}
+        </div>
+        <div class="aidc-tickers">${renderPills(ai.powerBasket)}</div>
+      </div>
+    </div>
+
+    <div class="aidc-metals-grid">
+      <article class="aidc-metal-card silver">
+        <div class="aidc-metal-head">
+          <span class="aidc-metal-title">Silver · Primary AI Power Metal</span>
+          <span class="signal-pill ${sPts > 0 ? 'bullish' : sPts < 0 ? 'bearish' : ''}">Forecast ${sPts >= 0 ? '+' : '−'}${Math.abs(sPts)} pts</span>
+        </div>
+        <div class="aidc-metal-role">Switchgear, busbars, circuit breakers, relays, UPS &amp; grid upgrades</div>
+        <div class="aidc-metal-desc">Highest electrical &amp; thermal conductivity (~7% better heat transfer than copper). Non-thriftable in 50–500MW+ zero-downtime facilities; industrial fabricators pull refined silver from the same pool as bullion bars &amp; coins.</div>
+      </article>
+      <article class="aidc-metal-card gold">
+        <div class="aidc-metal-head">
+          <span class="aidc-metal-title">Gold · Supporting AI Tech Metal</span>
+          <span class="signal-pill ${gPts > 0 ? 'bullish' : gPts < 0 ? 'bearish' : ''}">Forecast ${gPts >= 0 ? '+' : '−'}${Math.abs(gPts)} pts</span>
+        </div>
+        <div class="aidc-metal-role">Wire bonding, corrosion-proof edge connectors &amp; memory pins</div>
+        <div class="aidc-metal-desc">Stays chemically stable in high-heat continuous servers without oxidizing. Adds a steady supporting tech layer (moderated by per-chip thrifting) alongside Gold's primary monetary &amp; central-bank drivers.</div>
+      </article>
+    </div>`;
+
+  if (noteEl) {
+    noteEl.textContent = ai.summary;
+  }
+}
+
 function renderOutlook() {
   const view = document.getElementById('view-outlook');
   if (!view) return;
@@ -9787,6 +10091,7 @@ function renderOutlook() {
   renderWorldSpacePulse(res);
   renderPhysicalPremiums(res);
   renderHiddenAlpha(res);
+  renderAiDatacenter(res);
   renderSetupQuality(res);
   renderGapAnalyzer(res);
   renderRatioAnalytics(res);
@@ -13166,6 +13471,17 @@ function wireEvents() {
     state.hiddenAlphaMetal = 'silver';
     renderHiddenAlpha(computeInteractiveOutlook());
   });
+  document.getElementById('aidc-body')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-aidc-sim]');
+    if (!btn) return;
+    const mode = btn.getAttribute('data-aidc-sim');
+    outlookState.activeScenarios.delete('ai_capex_surge');
+    outlookState.activeScenarios.delete('ai_capex_pause');
+    if (mode === 'surge') outlookState.activeScenarios.add('ai_capex_surge');
+    else if (mode === 'pause') outlookState.activeScenarios.add('ai_capex_pause');
+    renderOutlook();
+    renderChart();
+  });
   document.getElementById('acc-chart-gold')?.addEventListener('click', () => {
     state.accuracyChartMetal = 'gold';
     state.accuracyHoverIdx = null;
@@ -13256,7 +13572,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 51,
+      version: 52,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
