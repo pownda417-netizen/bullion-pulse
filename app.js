@@ -8602,7 +8602,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=52', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=53', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -12495,6 +12495,15 @@ function switchSubView(viewName, subName) {
   applySubView(viewName, subName);
   savePersistedState();
 
+  // If the user switched sub-pages from the floating bar while scrolled down, scroll cleanly to top
+  if (typeof window !== 'undefined' && window.scrollY > 120) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  const activeSubBtn = document.querySelector(
+    `#view-${viewName} .sub-nav .sub-tab-btn[data-sub-target="${subName}"]`
+  );
+  activeSubBtn?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+
   if (viewName === 'markets') {
     if (subName === 'live') {
       renderMetalCard('gold');
@@ -13572,7 +13581,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 52,
+      version: 53,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
@@ -13926,11 +13935,49 @@ window.__BP_BRIDGE = {
   renderStackTracker,
 };
 
+function initFloatingSubNav() {
+  const topBar = document.querySelector('.top-bar');
+  const syncHeight = () => {
+    const h = topBar ? Math.ceil(topBar.getBoundingClientRect().height) : 64;
+    if (h > 30) {
+      document.documentElement.style.setProperty('--topbar-h', `${h}px`);
+    }
+  };
+  const syncFloatingState = () => {
+    const h = topBar ? Math.ceil(topBar.getBoundingClientRect().height) : 64;
+    const threshold = h + 14;
+    document.querySelectorAll('.sub-nav').forEach((nav) => {
+      const isAct = Boolean(nav.closest('.view-panel.active'));
+      if (!isAct) {
+        nav.classList.remove('is-floating');
+        return;
+      }
+      const rect = nav.getBoundingClientRect();
+      nav.classList.toggle('is-floating', window.scrollY > 24 && rect.top <= threshold);
+    });
+  };
+
+  syncHeight();
+  syncFloatingState();
+  if (topBar && typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => {
+      syncHeight();
+      syncFloatingState();
+    }).observe(topBar);
+  }
+  window.addEventListener('resize', () => {
+    syncHeight();
+    syncFloatingState();
+  }, { passive: true });
+  window.addEventListener('scroll', syncFloatingState, { passive: true });
+}
+
 function init() {
   loadPersistedState();
   applyTheme(state.settings.theme);
   applyPrivacyMode();
   applyAllSubViews();
+  initFloatingSubNav();
   wireEvents();
   populateVoiceSelector();
   window.BullionIntel?.init?.();
