@@ -387,16 +387,19 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [showToast, updateSettings]);
 
-  // Evaluate alert thresholds on live ticks
+  // Evaluate alert thresholds on live ticks (uses refs so callback identity stays 100% stable)
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const sessionAlertedRef = useRef(sessionAlerted);
   sessionAlertedRef.current = sessionAlerted;
+  const fxRatesRef = useRef(fxRates);
+  fxRatesRef.current = fxRates;
 
   const evaluateAlerts = useCallback(
     (nextGold: MetalQuote, nextSilver: MetalQuote) => {
       const s = settingsRef.current;
       const sa = sessionAlertedRef.current;
+      const fx = fxRatesRef.current;
       const day = todayKey();
       const quiet = isInQuietHours(s.quietHours);
 
@@ -413,7 +416,7 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const verb = dir === 'up' ? 'surged' : 'dropped';
         const sign = q.pct >= 0 ? '+' : '−';
         const title = `${label} ${verb} ${sign}${absPct.toFixed(2)}%`;
-        const body = `Spot ${formatMoney(q.price, 2, s.currency, fxRates)} · Threshold ±${thresh}%`;
+        const body = `Spot ${formatMoney(q.price, 2, s.currency, fx)} · Threshold ±${thresh}%`;
 
         setAlertBanner({ visible: true, title, body, tone: dir });
         setAlertLog((prev) => [
@@ -446,7 +449,7 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       checkMetal('gold', nextGold, s.goldThreshold);
       checkMetal('silver', nextSilver, s.silverThreshold);
     },
-    [fxRates]
+    []
   );
 
   const quotesRef = useRef(quotes);
@@ -545,122 +548,170 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     []
   );
 
-  const refreshSpot = useCallback(async () => {
-    const q = quotesRef.current;
-    const c = candlesRef.current;
-    const prevCloseG =
-      (q.gold.prevClose && q.gold.prevClose !== q.gold.price ? q.gold.prevClose : null) ??
-      pick24hPrevClose(c.gold, q.gold.price) ??
-      null;
-    const prevCloseS =
-      (q.silver.prevClose && q.silver.prevClose !== q.silver.price ? q.silver.prevClose : null) ??
-      pick24hPrevClose(c.silver, q.silver.price) ??
-      null;
+  const mergeCandleSeries = useCallback(
+    (prevBars: CandleBar[], incomingBars: CandleBar[], maxLen: number): CandleBar[] => {
+      if (!incomingBars.length) return prevBars;
+      if (!prevBars.length) return incomingBars.slice(-maxLen);
+      const lastIncomingT = incomingBars[incomingBars.length - 1].t;
+      const newerLive = prevBars.filter((b) => b.t > lastIncomingT);
+      if (!newerLive.length) return incomingBars.slice(-maxLen);
+      return [...incomingBars, ...newerLive].slice(-maxLen);
+    },
+    []
+  );
 
-    const res = await fetchLiveSpotQuorum(prevCloseG, prevCloseS, q.gold.price);
-    if (res) {
-      setQuotes({ gold: res.gold, silver: res.silver });
-      syncFuturesFromBasis(res.gold.price, res.silver.price, outlookRef.current);
-      setMode('live');
-      setLastUpdated(res.ts);
-      setFeedHealth((prev) => ({ ...prev, spotAt: res.ts, spotSource: res.source }));
-      setFeedTrust((prev) => ({
-        ...prev,
-        status: res.trustStatus,
-        lastSpreadPct: res.spreadPct,
-        checksCount: prev.checksCount + 1,
-        lastVerifiedAt: res.ts,
-        lastEventNote: res.note,
-      }));
-      setHistory((prev) => ({
-        gold: [...prev.gold.slice(-59), { ts: res.ts, price: res.gold.price! }],
-        silver: [...prev.silver.slice(-59), { ts: res.ts, price: res.silver.price! }],
-      }));
-      // Append/update live 1m & 5m ticker candles every 15s so the candlestick chart ticks live
-      if (res.gold.price != null && res.silver.price != null) {
-        const gp = res.gold.price;
-        const sp = res.silver.price;
-        setCandles1m((prev) => ({
-          gold: upsertLiveCandle(prev.gold, gp, res.ts, CANDLE_1M_MS, 240),
-          silver: upsertLiveCandle(prev.silver, sp, res.ts, CANDLE_1M_MS, 240),
+  const spotInFlightRef = useRef(false);
+  const repoInFlightRef = useRef(false);
+
+  const refreshSpot = useCallback(async () => {
+    if (spotInFlightRef.current) return false;
+    spotInFlightRef.current = true;
+    try {
+      const q = quotesRef.current;
+      const c = candlesRef.current;
+      const prevCloseG =
+        (q.gold.prevClose && q.gold.prevClose !== q.gold.price ? q.gold.prevClose : null) ??
+        pick24hPrevClose(c.gold, q.gold.price) ??
+        null;
+      const prevCloseS =
+        (q.silver.prevClose && q.silver.prevClose !== q.silver.price ? q.silver.prevClose : null) ??
+        pick24hPrevClose(c.silver, q.silver.price) ??
+        null;
+
+      const res = await fetchLiveSpotQuorum(prevCloseG, prevCloseS, q.gold.price);
+      if (res) {
+        setQuotes({ gold: res.gold, silver: res.silver });
+        syncFuturesFromBasis(res.gold.price, res.silver.price, outlookRef.current);
+        setMode('live');
+        setLastUpdated(res.ts);
+        setFeedHealth((prev) => ({ ...prev, spotAt: res.ts, spotSource: res.source }));
+        setFeedTrust((prev) => ({
+          ...prev,
+          status: res.trustStatus,
+          lastSpreadPct: res.spreadPct,
+          checksCount: prev.checksCount + 1,
+          lastVerifiedAt: res.ts,
+          lastEventNote: res.note,
         }));
-        setCandles((prev) => ({
-          gold: upsertLiveCandle(prev.gold, gp, res.ts, CANDLE_INTERVAL_MS, 288),
-          silver: upsertLiveCandle(prev.silver, sp, res.ts, CANDLE_INTERVAL_MS, 288),
+        setHistory((prev) => ({
+          gold: [...prev.gold.slice(-59), { ts: res.ts, price: res.gold.price! }],
+          silver: [...prev.silver.slice(-59), { ts: res.ts, price: res.silver.price! }],
         }));
+        // Append/update live 1m & 5m ticker candles every 15s so the candlestick chart ticks smoothly
+        if (res.gold.price != null && res.silver.price != null) {
+          const gp = res.gold.price;
+          const sp = res.silver.price;
+          setCandles1m((prev) => ({
+            gold: upsertLiveCandle(prev.gold, gp, res.ts, CANDLE_1M_MS, 240),
+            silver: upsertLiveCandle(prev.silver, sp, res.ts, CANDLE_1M_MS, 240),
+          }));
+          setCandles((prev) => ({
+            gold: upsertLiveCandle(prev.gold, gp, res.ts, CANDLE_INTERVAL_MS, 288),
+            silver: upsertLiveCandle(prev.silver, sp, res.ts, CANDLE_INTERVAL_MS, 288),
+          }));
+        }
+        evaluateAlerts(res.gold, res.silver);
+        return true;
       }
-      evaluateAlerts(res.gold, res.silver);
-      return true;
+      return false;
+    } finally {
+      spotInFlightRef.current = false;
     }
-    return false;
   }, [evaluateAlerts, pick24hPrevClose, syncFuturesFromBasis, upsertLiveCandle]);
 
   const refreshRepoAndMacro = useCallback(async () => {
-    const [bundle, liveFx] = await Promise.all([fetchAllRepoData(), fetchLiveFxRates()]);
-    const now = Date.now();
-    if (liveFx) setFxRates(liveFx);
-    if (bundle.outlook) setOutlook(bundle.outlook);
-    if (bundle.shanghai) setShanghai(bundle.shanghai);
-    if (bundle.comex) setComex(bundle.comex);
-    if (bundle.accuracyLog) setAccuracyLog(bundle.accuracyLog);
-    if (Object.keys(bundle.timeframes).length) setTimeframes(bundle.timeframes);
-    if (bundle.candles.gold.length || bundle.candles.silver.length) setCandles(bundle.candles);
-    if (bundle.candles1m.gold.length || bundle.candles1m.silver.length) setCandles1m(bundle.candles1m);
+    if (repoInFlightRef.current) return;
+    repoInFlightRef.current = true;
+    try {
+      const [bundle, liveFx] = await Promise.all([fetchAllRepoData(), fetchLiveFxRates()]);
+      const now = Date.now();
+      if (liveFx) {
+        setFxRates((prev) => {
+          const changed = (Object.keys(liveFx) as CurrencyCode[]).some((k) => prev[k] !== liveFx[k]);
+          return changed ? liveFx : prev;
+        });
+      }
+      if (bundle.outlook) setOutlook(bundle.outlook);
+      if (bundle.shanghai) setShanghai(bundle.shanghai);
+      if (bundle.comex) setComex(bundle.comex);
+      if (bundle.accuracyLog) setAccuracyLog(bundle.accuracyLog);
+      if (Object.keys(bundle.timeframes).length) setTimeframes(bundle.timeframes);
+      // Merge incoming 10m repo candles without ever wiping out newer 15s live bars
+      if (bundle.candles.gold.length || bundle.candles.silver.length) {
+        setCandles((prev) => ({
+          gold: mergeCandleSeries(prev.gold, bundle.candles.gold, 288),
+          silver: mergeCandleSeries(prev.silver, bundle.candles.silver, 288),
+        }));
+      }
+      if (bundle.candles1m.gold.length || bundle.candles1m.silver.length) {
+        setCandles1m((prev) => ({
+          gold: mergeCandleSeries(prev.gold, bundle.candles1m.gold, 240),
+          silver: mergeCandleSeries(prev.silver, bundle.candles1m.silver, 240),
+        }));
+      }
 
-    // Seed spot prices from outlook.json / candles if live spot hasn't landed yet
-    const oGold = Number(bundle.outlook?.gold?.spot) || bundle.candles.gold[bundle.candles.gold.length - 1]?.c;
-    const oSilver = Number(bundle.outlook?.silver?.spot) || bundle.candles.silver[bundle.candles.silver.length - 1]?.c;
-    if (oGold && oSilver) {
-      setQuotes((prev) => {
-        if (prev.gold.price != null && prev.silver.price != null) return prev;
-        const gPrev = pick24hPrevClose(bundle.candles.gold, oGold) || oGold;
-        const sPrev = pick24hPrevClose(bundle.candles.silver, oSilver) || oSilver;
-        return {
-          gold: {
-            price: +oGold.toFixed(2),
-            prevClose: +gPrev.toFixed(2),
-            chg: +(oGold - gPrev).toFixed(2),
-            pct: gPrev > 0 ? +(((oGold - gPrev) / gPrev) * 100).toFixed(2) : 0,
-          },
-          silver: {
-            price: +oSilver.toFixed(2),
-            prevClose: +sPrev.toFixed(2),
-            chg: +(oSilver - sPrev).toFixed(2),
-            pct: sPrev > 0 ? +(((oSilver - sPrev) / sPrev) * 100).toFixed(2) : 0,
-          },
-        };
-      });
+      // Seed spot prices from outlook.json / candles if live spot hasn't landed yet
+      const oGold = Number(bundle.outlook?.gold?.spot) || bundle.candles.gold[bundle.candles.gold.length - 1]?.c;
+      const oSilver = Number(bundle.outlook?.silver?.spot) || bundle.candles.silver[bundle.candles.silver.length - 1]?.c;
+      if (oGold && oSilver) {
+        setQuotes((prev) => {
+          if (prev.gold.price != null && prev.silver.price != null) return prev;
+          const gPrev = pick24hPrevClose(bundle.candles.gold, oGold) || oGold;
+          const sPrev = pick24hPrevClose(bundle.candles.silver, oSilver) || oSilver;
+          return {
+            gold: {
+              price: +oGold.toFixed(2),
+              prevClose: +gPrev.toFixed(2),
+              chg: +(oGold - gPrev).toFixed(2),
+              pct: gPrev > 0 ? +(((oGold - gPrev) / gPrev) * 100).toFixed(2) : 0,
+            },
+            silver: {
+              price: +oSilver.toFixed(2),
+              prevClose: +sPrev.toFixed(2),
+              chg: +(oSilver - sPrev).toFixed(2),
+              pct: sPrev > 0 ? +(((oSilver - sPrev) / sPrev) * 100).toFixed(2) : 0,
+            },
+          };
+        });
+      }
+
+      syncFuturesFromBasis(
+        quotesRef.current.gold.price ?? oGold ?? null,
+        quotesRef.current.silver.price ?? oSilver ?? null,
+        bundle.outlook
+      );
+
+      setFeedHealth((prev) => ({
+        ...prev,
+        outlookAt: bundle.outlook ? now : prev.outlookAt,
+        sgeAt: bundle.shanghai ? now : prev.sgeAt,
+        comexAt: bundle.comex ? now : prev.comexAt,
+        comexLive: Boolean(bundle.comex?.liveFetched),
+        futuresAt: now,
+      }));
+
+      const sw = await fetchLiveNoaaSpaceWeather(bundle.outlook?.spaceWeather);
+      setSpaceWeather(sw);
+    } finally {
+      repoInFlightRef.current = false;
     }
+  }, [mergeCandleSeries, pick24hPrevClose, syncFuturesFromBasis]);
 
-    syncFuturesFromBasis(
-      quotesRef.current.gold.price ?? oGold ?? null,
-      quotesRef.current.silver.price ?? oSilver ?? null,
-      bundle.outlook
-    );
-
-    setFeedHealth((prev) => ({
-      ...prev,
-      outlookAt: bundle.outlook ? now : prev.outlookAt,
-      sgeAt: bundle.shanghai ? now : prev.sgeAt,
-      comexAt: bundle.comex ? now : prev.comexAt,
-      comexLive: Boolean(bundle.comex?.liveFetched),
-      futuresAt: now,
-    }));
-
-    const sw = await fetchLiveNoaaSpaceWeather(bundle.outlook?.spaceWeather);
-    setSpaceWeather(sw);
-  }, []);
+  const refreshSpotRef = useRef(refreshSpot);
+  refreshSpotRef.current = refreshSpot;
+  const refreshRepoRef = useRef(refreshRepoAndMacro);
+  refreshRepoRef.current = refreshRepoAndMacro;
 
   const refreshNow = useCallback(async () => {
-    await Promise.all([refreshRepoAndMacro(), refreshSpot()]);
-  }, [refreshRepoAndMacro, refreshSpot]);
+    await Promise.all([refreshRepoRef.current(), refreshSpotRef.current()]);
+  }, []);
 
-  // Initial load + visibility-aware polling
+  // Initial load + visibility-aware polling (strictly mount-once [] so timers NEVER tear down or loop!)
   useEffect(() => {
     let active = true;
     const boot = async () => {
-      await refreshRepoAndMacro();
-      const gotLive = await refreshSpot();
+      await refreshRepoRef.current();
+      const gotLive = await refreshSpotRef.current();
       if (active && !gotLive) {
         setMode((prev) => (prev === 'connecting' ? 'demo' : prev));
         setFeedTrust((prev) =>
@@ -676,23 +727,26 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     void boot();
 
-    // Live ticker & candlestick chart poll every 15 seconds (REFRESH_MS)
+    // Live ticker & candlestick chart poll strictly every 15 seconds (REFRESH_MS)
     const spotTimer = setInterval(() => {
-      if (!document.hidden) void refreshSpot();
+      if (!document.hidden) void refreshSpotRef.current();
     }, REFRESH_MS);
 
-    // Rest of application (news, outlook, COMEX, Shanghai, FX, NOAA) refreshes every 10 minutes (SLOW_REFRESH_MS)
+    // Rest of application (news, outlook, COMEX, Shanghai, FX, NOAA) refreshes strictly every 10 minutes (SLOW_REFRESH_MS)
+    let lastSlowRefresh = Date.now();
     const slowTimer = setInterval(() => {
-      if (!document.hidden) void refreshRepoAndMacro();
+      if (!document.hidden) {
+        lastSlowRefresh = Date.now();
+        void refreshRepoRef.current();
+      }
     }, SLOW_REFRESH_MS);
 
-    let lastSlowRefresh = Date.now();
     const onVis = () => {
       if (!document.hidden) {
-        void refreshSpot();
+        void refreshSpotRef.current();
         if (Date.now() - lastSlowRefresh >= SLOW_REFRESH_MS) {
           lastSlowRefresh = Date.now();
-          void refreshRepoAndMacro();
+          void refreshRepoRef.current();
         }
       }
     };
@@ -704,7 +758,7 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       clearInterval(slowTimer);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [refreshRepoAndMacro, refreshSpot]);
+  }, []);
 
   // Stack calculations (combining base fields + lot ledger)
   const stackSummary = useMemo<StackSummary>(() => {

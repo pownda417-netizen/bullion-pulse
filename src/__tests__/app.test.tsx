@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import {
   generatePrivateNtfyTopic,
   sanitizeHttpUrl,
@@ -256,5 +256,50 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(screen.getByText('ราคาทองคำสด')).toBeInTheDocument();
     fireEvent.change(langSelect, { target: { value: 'en' } });
     expect(screen.getByText('Gold Spot')).toBeInTheDocument();
+  });
+
+  it('boots strictly once without an infinite fxRates polling loop', async () => {
+    let fxCalls = 0;
+    let bvCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('open.er-api.com')) {
+          fxCalls += 1;
+          return new Response(JSON.stringify({ rates: { USD: 1, EUR: 0.92, THB: 34.1 } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('bullionvault.com')) {
+          bvCalls += 1;
+          return new Response(
+            JSON.stringify({
+              market: {
+                pitches: [
+                  { securityId: 'AUXLN', securityClassNarrative: 'GOLD', considerationCurrency: 'USD', buyPrices: [{ limit: 117000 }], sellPrices: [{ limit: 117100 }] },
+                  { securityId: 'AGXZU', securityClassNarrative: 'SILVER', considerationCurrency: 'USD', buyPrices: [{ limit: 1400 }], sellPrices: [{ limit: 1410 }] },
+                ],
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      })
+    );
+
+    render(
+      <BullionProvider>
+        <App />
+      </BullionProvider>
+    );
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
+    expect(fxCalls).toBe(1);
+    expect(bvCalls).toBe(1);
   });
 });
