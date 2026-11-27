@@ -10,7 +10,12 @@ import {
 import { buildBackupJson, parseBackupJson } from '../utils/storage';
 import { translateText } from '../i18n/I18nContext';
 import { computeFullQuantSuite, projectEquirectangular } from '../engines/outlookEngine';
-import { detectMarketSessionMarkers } from '../engines/chartEngine';
+import {
+  buildExtendedChartForecast,
+  CHART_FORECAST_HALF_SPECS,
+  detectMarketSessionMarkers,
+  resampleBarsForDisplay,
+} from '../engines/chartEngine';
 import { runMonteCarloSync } from '../engines/monteCarlo';
 import { DEFAULT_FX_RATES } from '../utils/format';
 import { defaultSpaceWeather } from '../utils/security';
@@ -326,5 +331,37 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(labels).toContain('Mkt Close');
     expect(labels).toContain('Mkt Open');
     expect(labels).toContain('Mkt Closed');
+  });
+
+  it('extends chart forecast by +50% per timeframe and resamples dense bars cleanly', () => {
+    expect(CHART_FORECAST_HALF_SPECS['1d'].label).toBe('+12H');
+    expect(CHART_FORECAST_HALF_SPECS['7d'].label).toBe('+3.5D');
+    expect(CHART_FORECAST_HALF_SPECS['1m'].label).toBe('+15D');
+    expect(CHART_FORECAST_HALF_SPECS['1y'].label).toBe('+6M');
+
+    const dense = Array.from({ length: 288 }, (_, i) => ({
+      t: 1795700000000 + i * 300_000,
+      o: 3600 + i * 0.1,
+      h: 3605 + i * 0.1,
+      l: 3595 + i * 0.1,
+      c: 3602 + i * 0.1,
+    }));
+    const agg = resampleBarsForDisplay(dense, 48);
+    expect(agg.length).toBeLessThanOrEqual(48);
+    expect(agg.length).toBeGreaterThanOrEqual(24);
+    expect(agg[0].o).toBe(dense[0].o);
+    expect(agg[agg.length - 1].c).toBe(dense[dense.length - 1].c);
+    expect(Math.max(...agg.map((b) => b.h))).toBeCloseTo(Math.max(...dense.map((b) => b.h)), 4);
+    expect(Math.min(...agg.map((b) => b.l))).toBeCloseTo(Math.min(...dense.map((b) => b.l)), 4);
+
+    const fc = buildExtendedChartForecast(
+      { points: [{ price: 3650 }, { price: 3670 }, { price: 3700 }] },
+      '7d',
+      3650,
+      16
+    );
+    expect(fc.horizonLabel).toBe('+3.5D');
+    expect(fc.points).toHaveLength(16);
+    expect(fc.points[15]).toBeCloseTo(3670, 1);
   });
 });

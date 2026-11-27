@@ -209,7 +209,7 @@ export const CandlestickChart: React.FC = () => {
   const inspectedBar = useMemo(() => {
     const g = geomRef.current;
     if (hoverIdx == null || !g) return null;
-    return barsToDraw[g.startIdx + hoverIdx] || null;
+    return g.displayBars?.[hoverIdx] || barsToDraw[g.startIdx + hoverIdx] || null;
   }, [barsToDraw, hoverIdx]);
 
   const fmtVal = (v: number) =>

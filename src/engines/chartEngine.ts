@@ -46,6 +46,7 @@ export interface ChartGeometry {
   padB: number;
   plotW: number;
   plotH: number;
+  candleAreaW: number;
   startIdx: number;
   visibleCount: number;
   totalSlots: number;
@@ -53,6 +54,100 @@ export interface ChartGeometry {
   minP: number;
   maxP: number;
   forecastBars: number;
+  displayBars: CandleBar[];
+}
+
+export const CHART_FORECAST_HALF_SPECS: Readonly<
+  Record<TimeframeKey, { label: string; horizonFrac: number }>
+> = {
+  '15min': { label: '+7.5m', horizonFrac: 0.5 },
+  '1h':    { label: '+30m',  horizonFrac: 0.5 },
+  '4h':    { label: '+2H',   horizonFrac: 0.5 },
+  '1d':    { label: '+12H',  horizonFrac: 0.5 },
+  '7d':    { label: '+3.5D', horizonFrac: 0.5 },
+  '1m':    { label: '+15D',  horizonFrac: 0.5 },
+  '6m':    { label: '+3M',   horizonFrac: 0.5 },
+  '1y':    { label: '+6M',   horizonFrac: 0.5 },
+  '5y':    { label: '+2.5Y', horizonFrac: 0.5 },
+  '10y':   { label: '+5Y',   horizonFrac: 1.0 },
+  all:     { label: '+5Y',   horizonFrac: 1.0 },
+};
+
+export function resampleBarsForDisplay(rawBars: CandleBar[], maxBars: number): CandleBar[] {
+  if (!Array.isArray(rawBars) || rawBars.length <= maxBars || maxBars < 12) {
+    return rawBars;
+  }
+  const groupSize = Math.ceil(rawBars.length / maxBars);
+  if (groupSize <= 1) return rawBars;
+  const out: CandleBar[] = [];
+  for (let i = 0; i < rawBars.length; i += groupSize) {
+    const end = Math.min(rawBars.length, i + groupSize);
+    const first = rawBars[i];
+    const last = rawBars[end - 1];
+    let hi = first.h;
+    let lo = first.l;
+    let vol = 0;
+    for (let j = i; j < end; j++) {
+      if (rawBars[j].h > hi) hi = rawBars[j].h;
+      if (rawBars[j].l < lo) lo = rawBars[j].l;
+      vol += Number(rawBars[j].v || 0);
+    }
+    out.push({
+      t: last.t,
+      o: first.o,
+      h: hi,
+      l: lo,
+      c: last.c,
+      v: vol,
+    });
+  }
+  return out;
+}
+
+export function buildExtendedChartForecast(
+  precisionLine: any,
+  timeframe: TimeframeKey,
+  startPrice: number,
+  steps = 16
+): { points: number[]; horizonLabel: string } {
+  const spec = CHART_FORECAST_HALF_SPECS[timeframe] || CHART_FORECAST_HALF_SPECS['1d'];
+  const rawPts: any[] = Array.isArray(precisionLine?.points)
+    ? precisionLine.points
+    : Array.isArray(precisionLine?.path)
+      ? precisionLine.path
+      : [];
+
+  const parsed: number[] = [];
+  for (const pt of rawPts) {
+    const p = Number(typeof pt === 'number' ? pt : pt?.price ?? pt?.mid ?? pt?.value);
+    if (Number.isFinite(p) && p > 0) parsed.push(p);
+  }
+
+  if (parsed.length >= 2) {
+    // Anchor raw curve cleanly to live startPrice so there is never a discontinuity
+    const base0 = parsed[0];
+    const ratio = base0 > 0 ? startPrice / base0 : 1;
+    const anchored = parsed.map((p) => p * ratio);
+    const maxIdx = Math.max(1, (anchored.length - 1) * spec.horizonFrac);
+    const out: number[] = [];
+    for (let k = 1; k <= steps; k++) {
+      const pos = (k / steps) * maxIdx;
+      const lo = Math.floor(pos);
+      const hi = Math.min(anchored.length - 1, Math.ceil(pos));
+      const t = pos - lo;
+      const val = anchored[lo] * (1 - t) + anchored[hi] * t;
+      out.push(+val.toFixed(2));
+    }
+    return { points: out, horizonLabel: spec.label };
+  }
+
+  // Fallback smooth trajectory when precisionLine has no points yet
+  const pctBias = (clampNum(Number(precisionLine?.expectedMovePct ?? 0.6), -8, 8) / 100) * spec.horizonFrac;
+  const out: number[] = [];
+  for (let k = 1; k <= steps; k++) {
+    out.push(+(startPrice * (1 + pctBias * (k / steps))).toFixed(2));
+  }
+  return { points: out, horizonLabel: spec.label };
 }
 
 function calcSma(values: number[], period: number): Array<number | null> {
@@ -364,47 +459,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
   const total = bars.length;
   const visibleCount = clampNum(zoomCount ?? total, Math.min(6, total), total);
   const startIdx = clampNum(zoomStart ?? Math.max(0, total - visibleCount), 0, Math.max(0, total - visibleCount));
-  const visBars = bars.slice(startIdx, startIdx + visibleCount);
-
-  // Compute dynamic Fair Value (Price Discovery) & Short Squeeze curves causally across full bars, then slice to visible window
-  const fullDiscovery =
-    overlays.showDiscovery && mode !== 'ratio'
-      ? computePriceDiscoverySeries(bars, activeRegime, metalUnit)
-      : null;
-  const fullSqueeze =
-    overlays.showSqueeze && mode !== 'ratio'
-      ? computeShortSqueezeSeries(bars, activeRegime)
-      : null;
-  const discoverySeries = fullDiscovery ? fullDiscovery.slice(startIdx, startIdx + visibleCount) : null;
-  const squeezeSeries = fullSqueeze ? fullSqueeze.slice(startIdx, startIdx + visibleCount) : null;
-
-  // Analyze market gaps directly on the visible window so indices & fill zones align 100% with visible candles
-  const visGapAnalysis =
-    overlays.showGaps && mode !== 'ratio' && visBars.length >= 2
-      ? analyzeMarketGaps(visBars, livePrice ?? visBars[visBars.length - 1].c, mode, opts.timeframe)
-      : null;
-
-  const forecastPts: number[] = [];
-  if (overlays.showForecast && mode !== 'ratio') {
-    const rawPts: any[] = Array.isArray(precisionLine?.points)
-      ? precisionLine.points
-      : Array.isArray(precisionLine?.path)
-        ? precisionLine.path
-        : [];
-    if (rawPts.length > 0) {
-      for (const pt of rawPts.slice(0, 14)) {
-        const p = Number(typeof pt === 'number' ? pt : pt?.price ?? pt?.mid ?? pt?.value);
-        if (Number.isFinite(p) && p > 0) forecastPts.push(p);
-      }
-    } else if (visBars.length >= 2) {
-      const lastC = livePrice ?? visBars[visBars.length - 1].c;
-      const pctBias = clampNum(Number(precisionLine?.expectedMovePct ?? 0.6), -6, 6) / 100;
-      for (let i = 1; i <= 8; i++) {
-        forecastPts.push(+(lastC * (1 + pctBias * (i / 8))).toFixed(2));
-      }
-    }
-  }
-  const forecastSlots = forecastPts.length > 0 ? Math.min(10, forecastPts.length) : 0;
+  const rawVisBars = bars.slice(startIdx, startIdx + visibleCount);
 
   const padL = 12;
   const padR = 66;
@@ -412,8 +467,44 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
   const padB = 26;
   const plotW = Math.max(100, cssW - padL - padR);
   const plotH = Math.max(100, cssH - padT - padB);
+
+  // Allocate exact 2:1 visual ratio (67% candles, 33% future forecast zone = visual +50% horizon extension!)
+  const showFc = overlays.showForecast && mode !== 'ratio';
+  const candleAreaW = showFc ? Math.round(plotW * 0.67) : plotW;
+  const forecastAreaW = showFc ? Math.max(48, plotW - candleAreaW) : 0;
+
+  // Smart OHLC aggregation when not manually zoomed in so candles NEVER collapse into tiny 1px slivers
+  const maxReadableBars = Math.max(28, Math.floor(candleAreaW / 7.5));
+  const visBars = zoomCount == null ? resampleBarsForDisplay(rawVisBars, maxReadableBars) : rawVisBars;
+
+  // Compute dynamic Fair Value (Price Discovery) & Short Squeeze curves cleanly on displayed OHLC bars
+  const discoverySeries =
+    overlays.showDiscovery && mode !== 'ratio'
+      ? computePriceDiscoverySeries(visBars, activeRegime, metalUnit)
+      : null;
+  const squeezeSeries =
+    overlays.showSqueeze && mode !== 'ratio'
+      ? computeShortSqueezeSeries(visBars, activeRegime)
+      : null;
+
+  // Analyze market gaps directly on the displayed window so indices & fill zones align 100% with visible candles
+  const visGapAnalysis =
+    overlays.showGaps && mode !== 'ratio' && visBars.length >= 2
+      ? analyzeMarketGaps(visBars, livePrice ?? visBars[visBars.length - 1].c, mode, opts.timeframe)
+      : null;
+
+  const lastBarClose = visBars[visBars.length - 1].c;
+  const fcStartPrice = livePrice != null && Number.isFinite(livePrice) && livePrice > 0 ? livePrice : lastBarClose;
+  const fcBundle =
+    showFc && visBars.length >= 2
+      ? buildExtendedChartForecast(precisionLine, opts.timeframe, fcStartPrice, 16)
+      : { points: [] as number[], horizonLabel: '' };
+  const forecastPts = fcBundle.points;
+  const forecastHorizonLabel = fcBundle.horizonLabel;
+  const forecastSlots = forecastPts.length;
+
+  const slotW = candleAreaW / Math.max(1, visBars.length);
   const totalSlots = visBars.length + forecastSlots;
-  const slotW = plotW / Math.max(1, totalSlots);
 
   let minP = Infinity;
   let maxP = -Infinity;
@@ -421,7 +512,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     if (b.l < minP) minP = b.l;
     if (b.h > maxP) maxP = b.h;
   }
-  for (const fp of forecastPts.slice(0, forecastSlots)) {
+  for (const fp of forecastPts) {
     if (fp < minP) minP = fp;
     if (fp > maxP) maxP = fp;
   }
@@ -450,13 +541,59 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     minP = mid * 0.99;
     maxP = mid * 1.01;
   }
-  const rangePad = (maxP - minP) * 0.08;
-  minP -= rangePad;
-  maxP += rangePad;
 
-  const yOf = (p: number) => padT + ((maxP - p) / (maxP - minP)) * plotH;
+  // Use Auto-Log Y-axis on multi-decade views (10Y / ALL) when price spans >= 2.5x so historical candles stay bold & readable
+  const useLogScale =
+    (opts.timeframe === '10y' || opts.timeframe === 'all') &&
+    minP > 0 &&
+    maxP / minP >= 2.5;
+
+  let yOf: (p: number) => number;
+  let priceAtFrac: (frac: number) => number;
+  if (useLogScale) {
+    const logMinRaw = Math.log(minP);
+    const logMaxRaw = Math.log(maxP);
+    const logPad = (logMaxRaw - logMinRaw) * 0.05;
+    const logMin = logMinRaw - logPad;
+    const logMax = logMaxRaw + logPad;
+    minP = Math.exp(logMin);
+    maxP = Math.exp(logMax);
+    yOf = (p: number) => {
+      const lp = Math.log(Math.max(1e-4, p));
+      return padT + ((logMax - lp) / Math.max(1e-6, logMax - logMin)) * plotH;
+    };
+    priceAtFrac = (frac: number) => Math.exp(logMax - frac * (logMax - logMin));
+  } else {
+    const rangePad = (maxP - minP) * 0.045;
+    minP -= rangePad;
+    maxP += rangePad;
+    yOf = (p: number) => padT + ((maxP - p) / Math.max(1e-6, maxP - minP)) * plotH;
+    priceAtFrac = (frac: number) => maxP - frac * (maxP - minP);
+  }
+
   const xOf = (i: number) => padL + (i + 0.5) * slotW;
-  const candleAreaRight = padL + visBars.length * slotW;
+  const candleAreaRight = padL + candleAreaW;
+  const xForecast = (k: number) => {
+    const startX = xOf(visBars.length - 1);
+    const endX = cssW - padR - 8;
+    return startX + ((k + 1) / Math.max(1, forecastSlots)) * Math.max(24, endX - startX);
+  };
+
+  // Subtle future forecast zone shading + NOW divider
+  if (showFc && forecastSlots > 0) {
+    ctx.save();
+    ctx.fillStyle = isLightTheme ? 'rgba(0,0,0,0.024)' : 'rgba(255,255,255,0.022)';
+    ctx.fillRect(candleAreaRight, padT, forecastAreaW, plotH);
+    ctx.strokeStyle = isLightTheme ? 'rgba(0,0,0,0.14)' : 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.moveTo(candleAreaRight, padT);
+    ctx.lineTo(candleAreaRight, padT + plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
 
   // 1. Horizontal price grid + right-axis labels
   const gridSteps = 4;
@@ -468,7 +605,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
   for (let i = 0; i <= gridSteps; i++) {
     const frac = i / gridSteps;
     const y = padT + frac * plotH;
-    const price = maxP - frac * (maxP - minP);
+    const price = priceAtFrac(frac);
     ctx.beginPath();
     ctx.moveTo(padL, y);
     ctx.lineTo(cssW - padR, y);
@@ -479,6 +616,14 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
         ? `${price.toFixed(1)}×`
         : formatMoney(convertUnit(price, unit), mode === 'silver' ? 2 : 0, currency, fxRates);
     ctx.fillText(lbl, cssW - padR + 6, y + 3.5);
+  }
+  if (useLogScale) {
+    ctx.save();
+    ctx.font = '600 8.5px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#d4a843';
+    ctx.textAlign = 'right';
+    ctx.fillText('LOG', cssW - 4, padT - 8);
+    ctx.restore();
   }
 
   // 2. Market Gaps overlay (shaded gap zones + dashed fill target + pill label)
@@ -602,8 +747,8 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     ctx.restore();
   }
 
-  // 4. Candlesticks (with clean wick + crisp body)
-  const bodyW = Math.max(2, Math.min(14, slotW * 0.64));
+  // 4. Candlesticks (bold, crisp bodies & clear wicks across every timeframe)
+  const bodyW = clampNum(slotW * 0.72, 4, 16);
   for (let i = 0; i < visBars.length; i++) {
     const b = visBars[i];
     const x = xOf(i);
@@ -615,7 +760,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     const yC = yOf(b.c);
 
     ctx.strokeStyle = col;
-    ctx.lineWidth = 1.25;
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.moveTo(x, yH);
     ctx.lineTo(x, yL);
@@ -623,7 +768,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
 
     ctx.fillStyle = col;
     const top = Math.min(yO, yC);
-    const h = Math.max(1.5, Math.abs(yC - yO));
+    const h = Math.max(2.5, Math.abs(yC - yO));
     ctx.fillRect(x - bodyW / 2, top, bodyW, h);
 
     // Auto Patterns markers (Engulfing / Pin bar)
@@ -758,7 +903,8 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     for (const { marker, x } of placedSessionLabels) {
       const tw = ctx.measureText(marker.label).width;
       const pillW = tw + 8;
-      const px = clampNum(x - pillW / 2, padL + 1, cssW - padR - pillW - 1);
+      const maxPillRight = showFc ? candleAreaRight - 2 : cssW - padR - 1;
+      const px = clampNum(x - pillW / 2, padL + 1, Math.max(padL + 1, maxPillRight - pillW));
       // Small marker dot at bottom of line
       ctx.fillStyle = marker.color;
       ctx.beginPath();
@@ -780,11 +926,11 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     ctx.restore();
   }
 
-  // 7. SMA 20 & SMA 50 overlays
+  // 7. SMA 20 & SMA 50 overlays (aligned to displayed OHLC bars)
   if (overlays.showSma) {
-    const allCloses = bars.map((b) => b.c);
-    const sma20 = calcSma(allCloses, 20).slice(startIdx, startIdx + visibleCount);
-    const sma50 = calcSma(allCloses, 50).slice(startIdx, startIdx + visibleCount);
+    const visCloses = visBars.map((b) => b.c);
+    const sma20 = calcSma(visCloses, Math.min(20, Math.max(5, Math.floor(visCloses.length * 0.25))));
+    const sma50 = calcSma(visCloses, Math.min(50, Math.max(10, Math.floor(visCloses.length * 0.55))));
     const drawLine = (arr: Array<number | null>, color: string) => {
       ctx.save();
       ctx.strokeStyle = color;
@@ -809,39 +955,79 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     drawLine(sma50, '#f59e0b');
   }
 
-  // 8. Single Precision Forecast Line (NO wide shaded cone — clean single trajectory!)
-  if (overlays.showForecast && forecastSlots > 0 && mode !== 'ratio') {
+  // 8. Extended Half-Range (+50%) Precision Forecast Trajectory (occupies right 33% Forecast Zone cleanly)
+  if (showFc && forecastSlots > 0) {
     const lastIdx = visBars.length - 1;
-    const startPrice = livePrice ?? visBars[lastIdx].c;
+    const startPrice = fcStartPrice;
     const endPrice = forecastPts[forecastSlots - 1];
+    const pctDelta = startPrice > 0 ? ((endPrice - startPrice) / startPrice) * 100 : 0;
     const lineCol = endPrice >= startPrice ? '#34d399' : '#f87171';
 
     ctx.save();
+    // Subtle outer glow along the extended forecast line
     ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 2.2;
-    ctx.setLineDash([5, 4]);
+    ctx.globalAlpha = 0.22;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(xOf(lastIdx), yOf(startPrice));
     for (let j = 0; j < forecastSlots; j++) {
-      ctx.lineTo(xOf(lastIdx + 1 + j), yOf(forecastPts[j]));
+      ctx.lineTo(xForecast(j), yOf(forecastPts[j]));
+    }
+    ctx.stroke();
+
+    // Crisp dashed precision trajectory
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2.3;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(xOf(lastIdx), yOf(startPrice));
+    for (let j = 0; j < forecastSlots; j++) {
+      ctx.lineTo(xForecast(j), yOf(forecastPts[j]));
     }
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Crisp endpoint dot & target tag
-    const endX = xOf(lastIdx + forecastSlots);
+    // Midpoint checkpoint dot
+    const midJ = Math.floor(forecastSlots / 2) - 1;
+    if (midJ >= 0 && midJ < forecastSlots) {
+      ctx.fillStyle = lineCol;
+      ctx.beginPath();
+      ctx.arc(xForecast(midJ), yOf(forecastPts[midJ]), 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Crisp endpoint dot + target pill with horizon label (+12H, +3.5D, +15D, etc.)
+    const endX = xForecast(forecastSlots - 1);
     const endY = yOf(endPrice);
     ctx.fillStyle = lineCol;
     ctx.beginPath();
-    ctx.arc(endX, endY, 3.8, 0, Math.PI * 2);
+    ctx.arc(endX, endY, 4.2, 0, Math.PI * 2);
     ctx.fill();
-    ctx.font = '600 10px "JetBrains Mono", monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(
-      `Est ${formatMoney(convertUnit(endPrice, unit), mode === 'silver' ? 2 : 0, currency, fxRates)}`,
-      cssW - padR - 4,
-      Math.max(padT + 11, endY - 7)
-    );
+
+    const sign = pctDelta >= 0 ? '+' : '';
+    const fcLbl = `${forecastHorizonLabel} ${formatMoney(convertUnit(endPrice, unit), mode === 'silver' ? 2 : 0, currency, fxRates)} (${sign}${pctDelta.toFixed(1)}%)`;
+    ctx.font = '700 9.5px "JetBrains Mono", monospace';
+    const tw = ctx.measureText(fcLbl).width;
+    const tagW = tw + 10;
+    const tagH = 16;
+    const tagX = clampNum(endX - tagW + 2, candleAreaRight + 2, cssW - padR - tagW - 2);
+    const highestLineY = Math.min(yOf(startPrice), endY);
+    const lowestLineY = Math.max(yOf(startPrice), endY);
+    const tagY =
+      highestLineY - tagH - 10 >= padT + 2
+        ? highestLineY - tagH - 9
+        : Math.min(padT + plotH - tagH - 18, lowestLineY + 10);
+    ctx.fillStyle = isLightTheme ? 'rgba(255,255,255,0.92)' : 'rgba(13,14,17,0.9)';
+    ctx.fillRect(tagX, tagY, tagW, tagH);
+    ctx.strokeStyle = lineCol;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tagX, tagY, tagW, tagH);
+    ctx.fillStyle = lineCol;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fcLbl, tagX + tagW / 2, tagY + tagH / 2 + 0.5);
     ctx.restore();
   }
 
@@ -922,10 +1108,10 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     ctx.restore();
   }
 
-  // 12. Bottom time axis labels (edge-aligned on first/last tick; 4 ticks on narrow mobile to prevent overlap)
+  // 12. Bottom time axis labels (aligned cleanly to candle zone + explicit future forecast horizon label)
   ctx.fillStyle = textCol;
   ctx.font = '500 9.5px "JetBrains Mono", monospace';
-  const maxTicks = cssW < 440 ? 3 : 5;
+  const maxTicks = showFc ? (cssW < 460 ? 3 : 4) : (cssW < 440 ? 3 : 5);
   const tickCount = Math.min(maxTicks, visBars.length);
   for (let i = 0; i < tickCount; i++) {
     const bi = Math.min(visBars.length - 1, Math.round((i / Math.max(1, tickCount - 1)) * (visBars.length - 1)));
@@ -933,20 +1119,30 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     const label =
       opts.timeframe === '15min' || opts.timeframe === '1h' || opts.timeframe === '4h' || opts.timeframe === '1d'
         ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        : opts.timeframe === '5y' || opts.timeframe === '10y' || opts.timeframe === 'all'
+          ? String(d.getFullYear())
+          : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
     if (i === 0) {
       ctx.textAlign = 'left';
       ctx.fillText(label, padL + 2, cssH - 8);
     } else if (i === tickCount - 1) {
       ctx.textAlign = 'right';
-      ctx.fillText(label, cssW - padR - 2, cssH - 8);
+      ctx.fillText(label, candleAreaRight - 2, cssH - 8);
     } else {
       ctx.textAlign = 'center';
       ctx.fillText(label, xOf(bi), cssH - 8);
     }
   }
+  if (showFc && forecastSlots > 0 && forecastHorizonLabel) {
+    ctx.save();
+    ctx.fillStyle = forecastPts[forecastSlots - 1] >= fcStartPrice ? '#34d399' : '#f87171';
+    ctx.font = '700 9.5px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(forecastHorizonLabel, cssW - padR - 2, cssH - 8);
+    ctx.restore();
+  }
 
-  // 13. Optional RSI-14 sub-canvas
+  // 13. Optional RSI-14 sub-canvas (aligned to displayed candles)
   if (overlays.showRsi && rsiCanvas) {
     const rCtx = rsiCanvas.getContext('2d');
     if (rCtx) {
@@ -959,7 +1155,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
       }
       rCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       rCtx.clearRect(0, 0, rw, rh);
-      const rsiArr = calcRsi(bars.map((b) => b.c), 14).slice(startIdx, startIdx + visibleCount);
+      const rsiArr = calcRsi(visBars.map((b) => b.c), Math.min(14, Math.max(4, visBars.length - 2)));
       const ry = (val: number) => 8 + ((100 - val) / 100) * (rh - 16);
       rCtx.strokeStyle = gridCol;
       rCtx.setLineDash([3, 3]);
@@ -996,12 +1192,14 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     padB,
     plotW,
     plotH,
+    candleAreaW,
     startIdx,
-    visibleCount,
+    visibleCount: visBars.length,
     totalSlots,
     slotW,
     minP,
     maxP,
     forecastBars: forecastSlots,
+    displayBars: visBars,
   };
 }
