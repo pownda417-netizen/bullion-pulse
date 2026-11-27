@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-11-27T06:37:37.434Z",
+  "updatedAt": "2026-11-27T08:05:24.463Z",
   "scorecard": {
     "live7d": {
-      "count": 0,
-      "dirHitPct": null,
-      "inConePct": null,
-      "avgErrPct": null,
-      "rmsePct": null,
-      "conformalRadiusPct": null,
-      "signedBiasPct": null
+      "count": 2,
+      "dirHitPct": 50,
+      "inConePct": 0,
+      "avgErrPct": 3.73,
+      "rmsePct": 3.74,
+      "conformalRadiusPct": 3.84,
+      "signedBiasPct": 3.73
     },
     "live30d": {
       "count": 0,
@@ -21,12 +21,33 @@
     },
     "coneMultiplier": 1,
     "pendingStatus": {
-      "pending7dCount": 16,
+      "pending7dCount": 14,
       "pending30dCount": 16,
       "next7dInDays": 1,
-      "next30dInDays": 24
+      "next30dInDays": 23
     },
-    "recentGrades": [],
+    "recentGrades": [
+      {
+        "date": "2026-11-20",
+        "metal": "silver",
+        "signal": "Neutral",
+        "predictedPct": 0.28,
+        "actualPct": 4.22,
+        "absErrorPct": 3.94,
+        "directionCorrect": true,
+        "insideCone": false
+      },
+      {
+        "date": "2026-11-20",
+        "metal": "gold",
+        "signal": "Neutral",
+        "predictedPct": -0.08,
+        "actualPct": 3.45,
+        "absErrorPct": 3.53,
+        "directionCorrect": false,
+        "insideCone": false
+      }
+    ],
     "recentGrades30d": []
   },
   "predictions": [
@@ -53,7 +74,15 @@
         "expectedPct": -0.17,
         "bullPct": 5.94
       },
-      "graded7d": null,
+      "graded7d": {
+        "actualSpot": 3664.9,
+        "actualPct": 3.45,
+        "directionCorrect": false,
+        "insideCone": false,
+        "signedErrorPct": 3.53,
+        "absErrorPct": 3.53,
+        "gradedAt": "2026-11-27T08:05:24.463Z"
+      },
       "graded30d": null
     },
     {
@@ -79,7 +108,15 @@
         "expectedPct": 0.57,
         "bullPct": 7.25
       },
-      "graded7d": null,
+      "graded7d": {
+        "actualSpot": 44,
+        "actualPct": 4.22,
+        "directionCorrect": true,
+        "insideCone": false,
+        "signedErrorPct": 3.94,
+        "absErrorPct": 3.94,
+        "gradedAt": "2026-11-27T08:05:24.463Z"
+      },
       "graded30d": null
     },
     {
