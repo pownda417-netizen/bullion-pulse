@@ -19,31 +19,19 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchShanghaiMetals } from './shanghai.mjs';
+import {
+  isPrivateOrLocalHost,
+  isSaneSpotPrice,
+  maskNtfyServerForLogs,
+  readResponseJsonWithLimit,
+  safeFetch,
+} from './net_security.mjs';
 
 const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) BullionPulseMonitor/1.0';
 const FETCH_TIMEOUT_MS = 12000;
 
 /* ---------- Security Validators ---------- */
-
-function isPrivateOrLocalHost(hostname) {
-  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
-  if (!h || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) return true;
-  if (h === '::1' || h === '::' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80:')) {
-    return true;
-  }
-  // IPv4 literal check (RFC1918, loopback, link-local / cloud metadata 169.254.x.x, CGNAT 100.64.x.x)
-  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    const [a, b] = [Number(m[1]), Number(m[2])];
-    if (a === 0 || a === 10 || a === 127) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-  }
-  return false;
-}
 
 export function validateNtfyServerUrl(raw) {
   const candidate = String(raw || 'https://ntfy.sh').trim();
@@ -70,7 +58,14 @@ export function validateNtfyTopic(raw) {
     .trim()
     .replace(/^https?:\/\/ntfy\.sh\//i, '')
     .replace(/^\/+|\/+$/g, '');
-  if (!/^[A-Za-z0-9._-]{1,64}$/.test(cleaned)) {
+  if (
+    !/^[A-Za-z0-9._-]{1,64}$/.test(cleaned) ||
+    cleaned === '.' ||
+    cleaned === '..' ||
+    cleaned.includes('..') ||
+    cleaned.startsWith('.') ||
+    cleaned.endsWith('.')
+  ) {
     return '';
   }
   return cleaned;
@@ -81,7 +76,14 @@ export function validateAppUrl(raw) {
   if (!candidate || candidate.length > 1024) return '';
   try {
     const parsed = new URL(candidate);
-    if (parsed.protocol !== 'https:' || isPrivateOrLocalHost(parsed.hostname)) return '';
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.username ||
+      parsed.password ||
+      isPrivateOrLocalHost(parsed.hostname)
+    ) {
+      return '';
+    }
     return parsed.href;
   } catch {
     return '';
@@ -97,7 +99,13 @@ export function maskSecretTopic(topic) {
 
 export function parseGoldPriceOrg(data) {
   const item = data?.items?.[0];
-  if (!item || typeof item.xauPrice !== 'number' || typeof item.xagPrice !== 'number') {
+  if (
+    !item ||
+    typeof item.xauPrice !== 'number' ||
+    typeof item.xagPrice !== 'number' ||
+    !isSaneSpotPrice('gold', item.xauPrice) ||
+    !isSaneSpotPrice('silver', item.xagPrice)
+  ) {
     throw new Error('Invalid goldprice.org response');
   }
   return {
@@ -107,17 +115,17 @@ export function parseGoldPriceOrg(data) {
       symbol: 'XAU',
       name: 'Gold',
       price: item.xauPrice,
-      prevClose: item.xauClose ?? item.xauPrice - (item.chgXau || 0),
-      chg: item.chgXau ?? 0,
-      pct: item.pcXau ?? 0,
+      prevClose: Number.isFinite(item.xauClose) && item.xauClose > 0 ? item.xauClose : item.xauPrice - (Number.isFinite(item.chgXau) ? item.chgXau : 0),
+      chg: Number.isFinite(item.chgXau) ? item.chgXau : 0,
+      pct: Number.isFinite(item.pcXau) ? item.pcXau : 0,
     },
     silver: {
       symbol: 'XAG',
       name: 'Silver',
       price: item.xagPrice,
-      prevClose: item.xagClose ?? item.xagPrice - (item.chgXag || 0),
-      chg: item.chgXag ?? 0,
-      pct: item.pcXag ?? 0,
+      prevClose: Number.isFinite(item.xagClose) && item.xagClose > 0 ? item.xagClose : item.xagPrice - (Number.isFinite(item.chgXag) ? item.chgXag : 0),
+      chg: Number.isFinite(item.chgXag) ? item.chgXag : 0,
+      pct: Number.isFinite(item.pcXag) ? item.pcXag : 0,
     },
   };
 }
@@ -126,7 +134,14 @@ export function parseYahooChart(data, symbol, name) {
   const meta = data?.chart?.result?.[0]?.meta;
   const price = meta?.regularMarketPrice;
   const prevClose = meta?.chartPreviousClose ?? meta?.previousClose;
-  if (typeof price !== 'number' || typeof prevClose !== 'number' || prevClose === 0) {
+  const metalKind = symbol === 'XAG' ? 'silver' : 'gold';
+  if (
+    typeof price !== 'number' ||
+    typeof prevClose !== 'number' ||
+    !isSaneSpotPrice(metalKind, price) ||
+    !Number.isFinite(prevClose) ||
+    prevClose <= 0
+  ) {
     throw new Error(`Invalid Yahoo Finance chart response for ${symbol}`);
   }
   const chg = price - prevClose;
@@ -137,7 +152,7 @@ export function parseYahooChart(data, symbol, name) {
 export function parseGoldApiQuotes(xauJson, xagJson, prevCloses = {}) {
   const gPrice = Number(xauJson?.price);
   const sPrice = Number(xagJson?.price);
-  if (!Number.isFinite(gPrice) || gPrice <= 0 || !Number.isFinite(sPrice) || sPrice <= 0) {
+  if (!isSaneSpotPrice('gold', gPrice) || !isSaneSpotPrice('silver', sPrice)) {
     throw new Error('Invalid gold-api.com response');
   }
   const gPrev = Number.isFinite(Number(prevCloses.gold)) && Number(prevCloses.gold) > 0 ? Number(prevCloses.gold) : gPrice;
@@ -169,16 +184,23 @@ export function parseGoldApiQuotes(xauJson, xagJson, prevCloses = {}) {
 export async function fetchSpotPrices(fetchImpl = fetch) {
   const withTimeout = (headers) => ({
     headers,
+    redirect: 'error',
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
+  const callApi = (url, headers) =>
+    safeFetch(url, withTimeout(headers), {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxRedirects: 0,
+      fetchImpl,
+    });
   // Primary: goldprice.org spot USD feed (XAU + XAG with daily % change)
   try {
-    const res = await fetchImpl(
-      'https://data-asg.goldprice.org/dbXRates/USD',
-      withTimeout({ 'User-Agent': USER_AGENT, Accept: 'application/json' })
-    );
+    const res = await callApi('https://data-asg.goldprice.org/dbXRates/USD', {
+      'User-Agent': USER_AGENT,
+      Accept: 'application/json',
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return parseGoldPriceOrg(await res.json());
+    return parseGoldPriceOrg(await readResponseJsonWithLimit(res, 256 * 1024));
   } catch (primaryErr) {
     console.warn(`Primary feed failed (${primaryErr.message}), trying gold-api.com spot fallback…`);
   }
@@ -186,35 +208,36 @@ export async function fetchSpotPrices(fetchImpl = fetch) {
   // Secondary: gold-api.com live XAU/XAG spot (using Yahoo chartPreviousClose or candles_1d session open for daily % change)
   try {
     const [xauRes, xagRes] = await Promise.all([
-      fetchImpl(
-        'https://api.gold-api.com/price/XAU',
-        withTimeout({ 'User-Agent': USER_AGENT, Accept: 'application/json' })
-      ),
-      fetchImpl(
-        'https://api.gold-api.com/price/XAG',
-        withTimeout({ 'User-Agent': USER_AGENT, Accept: 'application/json' })
-      ),
+      callApi('https://api.gold-api.com/price/XAU', {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      }),
+      callApi('https://api.gold-api.com/price/XAG', {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      }),
     ]);
     if (xauRes.ok && xagRes.ok) {
-      const [xauJson, xagJson] = await Promise.all([xauRes.json(), xagRes.json()]);
+      const [xauJson, xagJson] = await Promise.all([
+        readResponseJsonWithLimit(xauRes, 128 * 1024),
+        readResponseJsonWithLimit(xagRes, 128 * 1024),
+      ]);
       const prevCloses = {};
       try {
         const [gYRes, sYRes] = await Promise.all([
-          fetchImpl(
-            'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m',
-            withTimeout({ 'User-Agent': USER_AGENT })
-          ),
-          fetchImpl(
-            'https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m',
-            withTimeout({ 'User-Agent': USER_AGENT })
-          ),
+          callApi('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m', {
+            'User-Agent': USER_AGENT,
+          }),
+          callApi('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m', {
+            'User-Agent': USER_AGENT,
+          }),
         ]);
         if (gYRes.ok) {
-          const gMeta = (await gYRes.json())?.chart?.result?.[0]?.meta;
+          const gMeta = (await readResponseJsonWithLimit(gYRes, 512 * 1024))?.chart?.result?.[0]?.meta;
           prevCloses.gold = gMeta?.chartPreviousClose ?? gMeta?.previousClose;
         }
         if (sYRes.ok) {
-          const sMeta = (await sYRes.json())?.chart?.result?.[0]?.meta;
+          const sMeta = (await readResponseJsonWithLimit(sYRes, 512 * 1024))?.chart?.result?.[0]?.meta;
           prevCloses.silver = sMeta?.chartPreviousClose ?? sMeta?.previousClose;
         }
       } catch {
@@ -237,19 +260,20 @@ export async function fetchSpotPrices(fetchImpl = fetch) {
 
   // Final fallback: Yahoo Finance COMEX continuous futures (GC=F & SI=F)
   const [goldRes, silverRes] = await Promise.all([
-    fetchImpl(
-      'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m',
-      withTimeout({ 'User-Agent': USER_AGENT })
-    ),
-    fetchImpl(
-      'https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m',
-      withTimeout({ 'User-Agent': USER_AGENT })
-    ),
+    callApi('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m', {
+      'User-Agent': USER_AGENT,
+    }),
+    callApi('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m', {
+      'User-Agent': USER_AGENT,
+    }),
   ]);
   if (!goldRes.ok || !silverRes.ok) {
     throw new Error(`Fallback Yahoo feed failed (${goldRes.status}/${silverRes.status})`);
   }
-  const [goldJson, silverJson] = await Promise.all([goldRes.json(), silverRes.json()]);
+  const [goldJson, silverJson] = await Promise.all([
+    readResponseJsonWithLimit(goldRes, 512 * 1024),
+    readResponseJsonWithLimit(silverRes, 512 * 1024),
+  ]);
   return {
     source: 'Yahoo Finance (GC=F / SI=F)',
     timestamp: new Date().toISOString(),
@@ -618,17 +642,19 @@ async function sendNtfy(serverUrl, payload, token) {
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(safePayload),
-    signal: AbortSignal.timeout(10000),
-  });
+  const res = await safeFetch(
+    endpoint,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(safePayload),
+    },
+    { timeoutMs: 10000, maxRedirects: 0 }
+  );
   if (!res.ok) {
-    const errText = (await res.text().catch(() => '')).replace(/[\r\n]+/g, ' ').slice(0, 120);
-    throw new Error(`ntfy publish failed (${res.status}): ${errText}`);
+    throw new Error(`ntfy publish failed (HTTP ${res.status})`);
   }
-  return res.json().catch(() => ({}));
+  return readResponseJsonWithLimit(res, 64 * 1024).catch(() => ({}));
 }
 
 export function buildMorningDigestPayload({
@@ -751,7 +777,7 @@ async function main() {
       console.log('DRY RUN test payload:', JSON.stringify({ ...testPayload, topic: maskSecretTopic(testPayload.topic) }, null, 2));
     } else {
       await sendNtfy(ntfyServer, testPayload, ntfyToken);
-      console.log(`Test push sent to ${ntfyServer}/${maskSecretTopic(ntfyTopic)}`);
+      console.log(`Test push sent to ${maskNtfyServerForLogs(ntfyServer)}/${maskSecretTopic(ntfyTopic)}`);
     }
     return;
   }
@@ -774,7 +800,7 @@ async function main() {
       console.log('DRY RUN morning digest payload:', JSON.stringify({ ...digestPayload, topic: maskSecretTopic(digestPayload.topic) }, null, 2));
     } else {
       await sendNtfy(ntfyServer, digestPayload, ntfyToken);
-      console.log(`Morning digest sent to ${ntfyServer}/${maskSecretTopic(ntfyTopic)}`);
+      console.log(`Morning digest sent to ${maskNtfyServerForLogs(ntfyServer)}/${maskSecretTopic(ntfyTopic)}`);
     }
     return;
   }

@@ -1562,4 +1562,54 @@ const retainedTopics = new Set(out100.headlines.map((h) => h.topic));
 assert.equal(retainedTopics.size, 7, `All 7 topics must be represented inside the 100 retained articles (got ${retainedTopics.size})`);
 assert.equal(selectBalancedHeadlines(out100.headlines, 100).length, 100);
 
-console.log('All 32 Bullion Pulse suites (v58 100-Article Global News Engine + Precision Polarity/Negation Guards, v57 Planetary 6-Continent AI/Space/EV Metal Race across 36 tickers & 22 feeds, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');
+// 33. v60 ASM Hardening Suite: HTTPS-only public URLs, linear RSS parser, ReDoS bounds, NOAA date validation & copper null fallback fix
+assert.equal(sanitizeHttpUrl('https://news.google.com/rss/articles/abc'), 'https://news.google.com/rss/articles/abc');
+assert.equal(sanitizeHttpUrl('http://insecure.example.com/news'), '', 'Plaintext http: links must be rejected');
+assert.equal(sanitizeHttpUrl('https://reuters.com@phishing.example.com/news'), '', 'Embedded credentials in URLs must be rejected');
+assert.equal(sanitizeHttpUrl('https://127.0.0.1/internal'), '', 'Loopback URLs must be rejected');
+assert.equal(sanitizeHttpUrl('https://169.254.169.254/latest/meta-data/'), '', 'Cloud metadata URLs must be rejected');
+
+// Single-pass XML decode (no double decoding) + BiDi/control char stripping + linear speed on malformed XML
+const trickyRss =
+  '<rss><channel><item>' +
+  '<title>Gold &amp;lt;b&amp;gt;Alert\u202E\u0007 Surge</title>' +
+  '<link>https://news.google.com/rss/articles/test1</link>' +
+  '<description>Clean summary &amp; facts</description>' +
+  '</item>' +
+  '<item>'.repeat(500) +
+  '</channel></rss>';
+const tRss0 = Date.now();
+const parsedTricky = parseRssItems(trickyRss, 'Test');
+const rssMs = Date.now() - tRss0;
+assert.equal(parsedTricky.length, 1);
+assert.equal(parsedTricky[0].title, 'Gold &lt;b&gt;Alert Surge', 'Single-pass entity decode must not double-decode &amp;lt; into <');
+assert.ok(!parsedTricky[0].title.includes('\u202E'), 'Unicode BiDi override must be stripped');
+assert.ok(!parsedTricky[0].title.includes('\u0007'), 'ASCII control characters must be stripped');
+assert.ok(rssMs < 100, `Linear RSS parser must handle repeated unclosed <item> tags fast (took ${rssMs}ms)`);
+
+// ReDoS performance guard on long repeated-keyword non-matching input
+const longNonMatch = `${'nvidia mine silver comex central bank '.repeat(250)}conference`;
+const tCls0 = Date.now();
+classifyHeadline({ title: longNonMatch, summary: longNonMatch });
+scoreAiDatacenterHeadlines([{ title: longNonMatch, summary: longNonMatch }]);
+const clsMs = Date.now() - tCls0;
+assert.ok(clsMs < 50, `News & AI classifiers must execute in linear time without backtracking (took ${clsMs}ms)`);
+
+// Copper null fallback fix in computeAiDatacenterSignal (Number(null) === 0 previously masked series.copper)
+const cuRise = computeAiDatacenterSignal({
+  series: { copper: [4.0, 4.1, 4.2, 4.3, 4.4, 4.8] },
+  copper5dPct: null,
+  headlines: [],
+});
+const cuDrop = computeAiDatacenterSignal({
+  series: { copper: [4.8, 4.7, 4.6, 4.5, 4.4, 4.0] },
+  copper5dPct: null,
+  headlines: [],
+});
+assert.ok(cuRise.silver.signal > cuDrop.silver.signal && cuRise.raceIndex > cuDrop.raceIndex, 'copper5dPct: null must fall back to series.copper rather than coercing to 0');
+
+// NOAA DateStamp sanitization rejects malformed strings
+const badNoaa = parseNoaaSpaceWeather({ '0': { DateStamp: '<img src=x>', TimeStamp: 'bad', G: { Scale: '0' }, R: { Scale: '0' }, S: { Scale: '0' } } });
+assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(badNoaa.updatedAt), 'Malformed NOAA DateStamp must fall back to clean ISO timestamp');
+
+console.log('All 33 Bullion Pulse suites (v60 ASM Security Hardening + ReDoS/URL/RSS/Copper fixes, v58 100-Article Global News Engine + Precision Polarity/Negation Guards, v57 Planetary 6-Continent AI/Space/EV Metal Race across 36 tickers & 22 feeds, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');

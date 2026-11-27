@@ -7,6 +7,13 @@
  * 3. Mining Equities Relative Strength Confirmation (GDX/Gold & SIL/Silver)
  */
 
+import {
+  isSaneIsoDate,
+  readResponseJsonWithLimit,
+  readResponseTextWithLimit,
+  safeFetch,
+} from './net_security.mjs';
+
 const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) BullionPulseQuant/1.0';
 
@@ -17,13 +24,14 @@ function clamp(v, lo, hi) {
 /* ---------- 1. FRED Real Yields (DFII10) & Breakevens (T10YIE) ---------- */
 
 export function parseFredCsv(csvText, maxRows = 60) {
-  const lines = String(csvText || '').trim().split(/\r?\n/);
+  const lines = String(csvText || '').slice(0, 2 * 1024 * 1024).trim().split(/\r?\n/);
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
-    const [date, rawVal] = lines[i].split(',');
+    const [rawDate, rawVal] = lines[i].split(',');
+    const date = String(rawDate || '').trim();
     const val = parseFloat(rawVal);
-    if (date && Number.isFinite(val)) {
-      rows.push({ date: date.trim(), value: val });
+    if (isSaneIsoDate(date) && Number.isFinite(val) && val >= -10 && val <= 30) {
+      rows.push({ date, value: val });
     }
   }
   return rows.slice(-maxRows);
@@ -72,12 +80,13 @@ export function computeRealYieldSignal(dfii10Rows = [], t10yieRows = []) {
 
 export async function fetchFredRealYields() {
   const fetchSeries = async (id) => {
-    const res = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}`, {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(12000),
-    });
+    const res = await safeFetch(
+      `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}`,
+      { headers: { 'User-Agent': USER_AGENT } },
+      { timeoutMs: 12000, maxRedirects: 1, allowedHosts: ['fred.stlouisfed.org'] }
+    );
     if (!res.ok) throw new Error(`FRED ${id} HTTP ${res.status}`);
-    const csv = (await res.text()).slice(0, 2 * 1024 * 1024);
+    const csv = await readResponseTextWithLimit(res, 2 * 1024 * 1024);
     return parseFredCsv(csv, 60);
   };
 
@@ -156,12 +165,13 @@ export async function fetchCftcCot() {
     const url =
       `https://publicreporting.cftc.gov/resource/72hh-3qpy.json` +
       `?$where=${where}&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=52`;
-    const res = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-      signal: AbortSignal.timeout(12000),
-    });
+    const res = await safeFetch(
+      url,
+      { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } },
+      { timeoutMs: 12000, maxRedirects: 0, allowedHosts: ['publicreporting.cftc.gov'] }
+    );
     if (!res.ok) throw new Error(`CFTC ${marketName} HTTP ${res.status}`);
-    return computeCotSignal(parseCftcCotRows(await res.json()));
+    return computeCotSignal(parseCftcCotRows(await readResponseJsonWithLimit(res, 1024 * 1024)));
   };
 
   const [gold, silver] = await Promise.all([

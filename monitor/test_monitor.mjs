@@ -19,6 +19,12 @@ import {
 } from './check_metals.mjs';
 import { fetchSettledCloses, parseGoldApiCloses } from './self_learn.mjs';
 import {
+  isPrivateOrLocalHost,
+  maskNtfyServerForLogs,
+  readResponseTextWithLimit,
+  safeFetch,
+} from './net_security.mjs';
+import {
   aggregateCandles,
   buildSeededMultiTimeframeCandles,
   parseYahooCandles,
@@ -447,4 +453,92 @@ assert.equal(validateAppUrl('https://127.0.0.1/app'), '');
 assert.equal(maskSecretTopic('my-secret-topic-123'), '[redacted-topic]');
 assert.equal(maskSecretTopic('dry-run-topic'), 'dry-run-topic');
 
-console.log('All 21 Bullion Pulse monitor, Security SSRF/Topic, Morning Digest, gold-api fallback, Quiet Hours, Regime/Backwardation/DXY alerts, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');
+// 22. v60 ASM Security Suite: IPv4-mapped IPv6, trailing-dot & fc/fd domain checks, redirect blocking, streaming byte cap, dot-segment topics & price sanity bounds
+assert.equal(isPrivateOrLocalHost('::ffff:127.0.0.1'), true);
+assert.equal(isPrivateOrLocalHost('::ffff:7f00:1'), true);
+assert.equal(isPrivateOrLocalHost('::ffff:a9fe:a9fe'), true);
+assert.equal(isPrivateOrLocalHost('fe90::1'), true);
+assert.equal(isPrivateOrLocalHost('febf::1'), true);
+assert.equal(isPrivateOrLocalHost('ff02::1'), true);
+assert.equal(isPrivateOrLocalHost('localhost.'), true);
+assert.equal(isPrivateOrLocalHost('internal.local.'), true);
+assert.equal(isPrivateOrLocalHost('metadata.internal'), true);
+assert.equal(isPrivateOrLocalHost('2130706433'), true);
+assert.equal(isPrivateOrLocalHost('0x7f000001'), true);
+// Valid public domains starting with fc/fd must NOT be falsely rejected as IPv6 ULA
+assert.equal(isPrivateOrLocalHost('fcnews.example.com'), false);
+assert.equal(isPrivateOrLocalHost('fdic.gov'), false);
+assert.equal(isPrivateOrLocalHost('ntfy.sh'), false);
+
+// Dot-segment topic traversal & embedded-credential APP_URL rejections
+assert.equal(validateNtfyTopic('.'), '');
+assert.equal(validateNtfyTopic('..'), '');
+assert.equal(validateNtfyTopic('.hidden'), '');
+assert.equal(validateNtfyTopic('topic.'), '');
+assert.equal(validateNtfyTopic('a..b'), '');
+assert.equal(validateAppUrl('https://user:pass@example.com/app'), '');
+assert.equal(maskNtfyServerForLogs('https://ntfy.sh/'), 'https://ntfy.sh');
+assert.equal(maskNtfyServerForLogs('https://private-ntfy.example.com/'), '[redacted-ntfy-server]');
+
+// Price sanity bounds reject NaN / negative / absurd values
+assert.throws(() => parseGoldPriceOrg({ items: [{ xauPrice: NaN, xagPrice: 35 }] }), /Invalid goldprice/i);
+assert.throws(() => parseGoldPriceOrg({ items: [{ xauPrice: -50, xagPrice: 35 }] }), /Invalid goldprice/i);
+assert.throws(() => parseGoldPriceOrg({ items: [{ xauPrice: 999999, xagPrice: 35 }] }), /Invalid goldprice/i);
+
+// safeFetch redirect & credential-stripping guards
+await assert.rejects(
+  () =>
+    safeFetch(
+      'https://ntfy.sh/',
+      { method: 'POST', headers: { Authorization: 'Bearer secret' } },
+      {
+        maxRedirects: 0,
+        fetchImpl: async () => new Response('', { status: 302, headers: { location: 'https://169.254.169.254/latest' } }),
+      }
+    ),
+  /Too many redirects/i
+);
+await assert.rejects(
+  () =>
+    safeFetch(
+      'https://news.google.com/rss',
+      {},
+      {
+        maxRedirects: 2,
+        fetchImpl: async () => new Response('', { status: 302, headers: { location: 'https://[::ffff:169.254.169.254]/latest' } }),
+      }
+    ),
+  /private|local/i
+);
+let seenRedirectHeaders = null;
+const redirRes = await safeFetch(
+  'https://news.google.com/rss',
+  { headers: { Authorization: 'Bearer should-strip', 'x-goog-api-key': 'should-strip', Accept: 'text/xml' } },
+  {
+    maxRedirects: 2,
+    allowedHosts: ['news.google.com'],
+    fetchImpl: async (url, opts) => {
+      if (url.endsWith('/rss')) {
+        return new Response('', { status: 302, headers: { location: 'https://news.google.com/rss2' } });
+      }
+      seenRedirectHeaders = opts.headers;
+      return new Response('ok', { status: 200 });
+    },
+  }
+);
+assert.equal(redirRes.status, 200);
+assert.equal(seenRedirectHeaders.Authorization, undefined);
+assert.equal(seenRedirectHeaders['x-goog-api-key'], undefined);
+assert.equal(seenRedirectHeaders.Accept, 'text/xml');
+
+// Streaming response size cap aborts oversized payloads
+const hugeStream = new ReadableStream({
+  start(ctrl) {
+    ctrl.enqueue(new Uint8Array(600));
+    ctrl.enqueue(new Uint8Array(600));
+    ctrl.close();
+  },
+});
+await assert.rejects(() => readResponseTextWithLimit(new Response(hugeStream), 1000), /exceeded max size/i);
+
+console.log('All 22 Bullion Pulse monitor, v60 ASM Security (SSRF/Redirect/IPv6/Stream), Morning Digest, gold-api fallback, Quiet Hours, Regime/Backwardation/DXY alerts, anti-wick confirmation, target-alert, Shanghai alert, split-payload & multi-timeframe candle tests passed!');

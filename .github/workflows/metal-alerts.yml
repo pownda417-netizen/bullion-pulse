@@ -14,26 +14,31 @@ on:
         default: false
         type: boolean
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: bullion-pulse-metal-alerts
+  cancel-in-progress: false
 
 jobs:
   check-metals:
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
       - name: Restore daily alert deduplication state
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: monitor/state.json
           key: bullion-alert-state-${{ github.run_id }}
@@ -41,6 +46,7 @@ jobs:
             bullion-alert-state-
 
       - name: Check spot Gold (XAU), Silver (XAG) & Shanghai SGE Premium
+        id: check
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NTFY_SERVER: ${{ secrets.NTFY_SERVER }}
@@ -65,6 +71,10 @@ jobs:
           APP_URL: ${{ vars.APP_URL }}
           SEND_TEST: ${{ inputs.send_test }}
         run: |
+          BEFORE_HASH=""
+          if [ -f monitor/state.json ]; then
+            BEFORE_HASH="$(sha256sum monitor/state.json | awk '{print $1}')"
+          fi
           if [ -z "$NTFY_TOPIC" ]; then
             echo "NTFY_TOPIC secret is not configured yet — running dry-run check cleanly."
             node monitor/check_metals.mjs --dry-run
@@ -73,10 +83,19 @@ jobs:
           else
             node monitor/check_metals.mjs
           fi
+          AFTER_HASH=""
+          if [ -f monitor/state.json ]; then
+            AFTER_HASH="$(sha256sum monitor/state.json | awk '{print $1}')"
+          fi
+          if [ -n "$AFTER_HASH" ] && [ "$BEFORE_HASH" != "$AFTER_HASH" ]; then
+            echo "state_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "state_changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Save daily alert deduplication state
-        if: always()
-        uses: actions/cache/save@v4
+        if: ${{ success() && steps.check.outputs.state_changed == 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: monitor/state.json
           key: bullion-alert-state-${{ github.run_id }}

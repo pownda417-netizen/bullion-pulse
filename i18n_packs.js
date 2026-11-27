@@ -2671,6 +2671,10 @@
     'Live Logged Checks': ['บันทึกการตรวจสดรายวัน', 'ບັນທຶກການກວດສົດ', 'Registros Verificados en Vivo', '实盘每日校验记录', 'ライブ記録チェック', 'लाइव लॉग जांच'],
     'Resetting toward defaults': ['กำลังรีเซ็ตกลับสู่ค่าเริ่มต้น', 'ກຳລັງຣີເຊັດສູ່ຄ່າເລີ່ມຕົ້ນ', 'Restableciendo valores base', '正向默认权重回调', '標準設定へリセット中', 'डिफ़ॉल्ट पर रीसेट हो रहा है'],
     'Forecast (Gold) vs. Actual (Green/Red) · Daily Gold': ['คาดการณ์ (ทอง) เทียบจริง (เขียว/แดง) · ทองคำรายวัน', 'ຄາດຄະເນ (ຄຳ) ທຽບຈິງ (ຂຽວ/ແດງ) · ຄຳລາຍວັນ', 'Pronóstico (Oro) vs. Real (Verde/Rojo) · Oro Diario', '预测（金色）对比实际（绿/红）· 黄金每日复盘', '予測（金）vs 実績（緑/赤）・金日次', 'पूर्वानुमान (सोना) बनाम वास्तविक (हरा/लाल) · दैनिक सोना'],
+    // v60 Security Hardening controls
+    'Show Channel': ['แสดงชื่อช่อง', 'ສະແດງຊື່ຊ່ອງ', 'Mostrar Canal', '显示频道名', 'チャンネル表示', 'चैनल दिखाएँ'],
+    'Hide Channel': ['ซ่อนชื่อช่อง', 'ເຊື່ອງຊື່ຊ່ອງ', 'Ocultar Canal', '隐藏频道名', 'チャンネル非表示', 'चैनल छिपाएँ'],
+    'Generate Private Channel': ['สุ่มชื่อช่องลับส่วนตัว', 'ສຸ່ມຊື່ຊ່ອງລັບສ່ວນຕົວ', 'Generar Canal Privado', '生成高强度私密频道', '秘密チャンネルを生成', 'निजी चैनल बनाएँ'],
   });
 
   // v59 Dynamic Template Patterns covering all v48–v58 runtime cards, counters, placeholders & live badges
@@ -3459,10 +3463,14 @@
     ])],
     // Chart OHLC timestamp weekday prefix (e.g. "Thu 11:30 PM–12:00 AM")
     [/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (\d{1,2}:\d{2}.*)$/, (m, l) => `${pick(l, DAYS_I18N[m[1]])} ${m[2]}`],
-    // Universal "Label (Count)" pattern (e.g. "All Topics (12)", "Show All (100)", "World & Space (3)")
-    [/^(.+?)\s*\((\d+)\)$/, (m, l) => {
-      const base = EX[m[1]]?.[l];
+    // Universal "Label (Count)" pattern (bounded non-backtracking character class — e.g. "All Topics (12)", "Show All (100)")
+    [/^([^()]{1,80}?[^()\s])\s+\((\d{1,6})\)$/, (m, l) => {
+      const base = Object.hasOwn(EX, m[1]) ? EX[m[1]]?.[l] : null;
       return base ? `${base} (${m[2]})` : null;
     }]
   );
+  // Freeze dictionary & pattern arrays to prevent runtime tampering
+  Object.freeze(EX);
+  Object.freeze(P);
+  Object.freeze(window.__BP_I18N_PACKS);
 })();

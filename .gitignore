@@ -1,4 +1,14 @@
 .DS_Store
+Thumbs.db
+desktop.ini
 node_modules/
+_site/
 monitor/state.json
+bullion-pulse-backup-*.json
+.env
+.env.*
+*.pem
+*.key
 *.log
+.vscode/
+.idea/

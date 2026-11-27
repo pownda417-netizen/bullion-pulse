@@ -5,6 +5,8 @@
  * Zero external dependencies (Node.js 20+ built-in fetch).
  */
 
+import { readResponseJsonWithLimit, readResponseTextWithLimit, safeFetch } from './net_security.mjs';
+
 export const TROY_OZ_TO_GRAMS = 31.1034768;
 export const CHINA_SILVER_VAT = 0.13; // SGE domestic Ag(T+D) includes 13% VAT; investment Au99.99 is VAT-exempt
 
@@ -110,12 +112,14 @@ export function parseSgeHomepageHtml(html) {
       const high = parseFloat(cells[2].replace(/,/g, ''));
       const low = parseFloat(cells[3].replace(/,/g, ''));
       const open = cells[4] ? parseFloat(cells[4].replace(/,/g, '')) : NaN;
-      if (Number.isFinite(latest) && latest > 0) {
+      const isGoldContract = /^(Au99\.99|Au\(T\+D\)|mAu\(T\+D\))$/i.test(code);
+      const saneLatest = isGoldContract ? latest >= 100 && latest <= 10000 : latest >= 1000 && latest <= 200000;
+      if (Number.isFinite(latest) && saneLatest) {
         contracts[code] = {
           contract: code,
           latest,
-          high: Number.isFinite(high) ? high : null,
-          low: Number.isFinite(low) ? low : null,
+          high: Number.isFinite(high) && high > 0 ? high : null,
+          low: Number.isFinite(low) && low > 0 ? low : null,
           open: Number.isFinite(open) && open > 0 ? open : null,
         };
       }
@@ -171,14 +175,15 @@ export function parseSgeHomepageHtml(html) {
 export async function fetchUsdCnyRate() {
   // Primary: Yahoo Finance CNY=X
   try {
-    const res = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/CNY=X?range=5d&interval=1d', {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(10000),
-    });
+    const res = await safeFetch(
+      'https://query1.finance.yahoo.com/v8/finance/chart/CNY=X?range=5d&interval=1d',
+      { headers: { 'User-Agent': USER_AGENT } },
+      { timeoutMs: 10000, maxRedirects: 0, allowedHosts: ['query1.finance.yahoo.com'] }
+    );
     if (res.ok) {
-      const json = await res.json();
+      const json = await readResponseJsonWithLimit(res, 256 * 1024);
       const rate = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (typeof rate === 'number' && rate > 5 && rate < 12) return rate;
+      if (typeof rate === 'number' && Number.isFinite(rate) && rate > 5 && rate < 12) return rate;
     }
   } catch {
     // Fallback below
@@ -186,14 +191,15 @@ export async function fetchUsdCnyRate() {
 
   // Fallback: open.er-api.com
   try {
-    const res = await fetch('https://open.er-api.com/v6/latest/USD', {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(10000),
-    });
+    const res = await safeFetch(
+      'https://open.er-api.com/v6/latest/USD',
+      { headers: { 'User-Agent': USER_AGENT } },
+      { timeoutMs: 10000, maxRedirects: 0, allowedHosts: ['open.er-api.com'] }
+    );
     if (res.ok) {
-      const json = await res.json();
+      const json = await readResponseJsonWithLimit(res, 256 * 1024);
       const rate = json?.rates?.CNY;
-      if (typeof rate === 'number' && rate > 5 && rate < 12) return rate;
+      if (typeof rate === 'number' && Number.isFinite(rate) && rate > 5 && rate < 12) return rate;
     }
   } catch {
     // Final safe fallback
@@ -205,12 +211,13 @@ export async function fetchUsdCnyRate() {
 export async function fetchShanghaiMetals({ westernGoldUsdOz, westernSilverUsdOz }) {
   const [usdCny, sgeHtml] = await Promise.all([
     fetchUsdCnyRate(),
-    fetch('https://en.sge.com.cn/', {
-      headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
-      signal: AbortSignal.timeout(12000),
-    }).then((res) => {
+    safeFetch(
+      'https://en.sge.com.cn/',
+      { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' } },
+      { timeoutMs: 12000, maxRedirects: 2, allowedHosts: ['en.sge.com.cn', 'www.sge.com.cn'] }
+    ).then((res) => {
       if (!res.ok) throw new Error(`SGE HTTP ${res.status}`);
-      return res.text();
+      return readResponseTextWithLimit(res, 2 * 1024 * 1024);
     }),
   ]);
 

@@ -48,15 +48,19 @@ function mcQuantile(sorted, q) {
   const idx = clampNum(q * (sorted.length - 1), 0, sorted.length - 1);
   const lo = Math.floor(idx);
   const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
   return sorted[lo] * (1 - (idx - lo)) + sorted[hi] * (idx - lo);
 }
 
 self.onmessage = (event) => {
   const { reqId, cacheKey, spot, horizonKey, spec, paths: rawPaths = 1500, params, seed } = event.data || {};
-  if (!Number.isFinite(spot) || spot <= 0 || !spec || !params) return;
+  if (!Number.isFinite(spot) || spot <= 0 || !spec || !params) {
+    self.postMessage({ reqId, cacheKey, error: 'invalid_inputs' });
+    return;
+  }
 
   const paths = Math.round(clampNum(Number(rawPaths) || 1500, 1, 5000));
-  const totalDays = clampNum(Number(spec.tradingDays) || 1, 1, 3650);
+  const totalDays = clampNum(Number(spec.tradingDays) || 1, 1, 4000);
   const steps = Math.round(clampNum(Number(spec.steps) || 1, 1, 400));
   const dt = totalDays / steps;
 
@@ -66,7 +70,10 @@ self.onmessage = (event) => {
   const lambda = Number(params.lambda);
   const jumpMean = Number(params.jumpMean);
   const jumpSigma = Number(params.jumpSigma);
-  if (![diffVol, dailyDrift, lambda, jumpMean, jumpSigma].every(Number.isFinite)) return;
+  if (![diffVol, dailyDrift, lambda, jumpMean, jumpSigma].every(Number.isFinite)) {
+    self.postMessage({ reqId, cacheKey, error: 'invalid_params' });
+    return;
+  }
   const safeDiffVol = clampNum(diffVol, 0, 5);
   const safeDailyDrift = clampNum(dailyDrift, -0.5, 0.5);
   const safeLambda = clampNum(lambda, 0, 10);
@@ -100,7 +107,8 @@ self.onmessage = (event) => {
       if (nJumps > 0) {
         jumpSum = nJumps * safeJumpMean + Math.sqrt(nJumps) * safeJumpSigma * mcNormal(rng);
       }
-      s = s * Math.exp(driftStep + stepDiffVol * z + jumpSum);
+      const logStep = clampNum(driftStep + stepDiffVol * z + jumpSum, -20, 20);
+      s = Math.max(0.01, Math.min(1e9, s * Math.exp(logStep)));
       if (s > hi) hi = s;
       if (s < lo) lo = s;
       stepBuckets[st][p] = s;

@@ -5,6 +5,8 @@
  * Zero external dependencies.
  */
 
+import { readResponseJsonWithLimit, safeFetch } from './net_security.mjs';
+
 const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) BullionPulseCandles/1.1';
 
@@ -118,18 +120,27 @@ export function parseYahooCandles(data, maxBars = 48) {
     const h = highs[i];
     const l = lows[i];
     const c = closes[i];
+    const ts = timestamps[i];
     if (
+      typeof ts === 'number' &&
+      Number.isFinite(ts) &&
+      ts > 0 &&
       typeof o === 'number' &&
       typeof h === 'number' &&
       typeof l === 'number' &&
       typeof c === 'number' &&
       Number.isFinite(o) &&
+      Number.isFinite(h) &&
+      Number.isFinite(l) &&
       Number.isFinite(c) &&
       o > 0 &&
-      c > 0
+      h > 0 &&
+      l > 0 &&
+      c > 0 &&
+      h >= l
     ) {
       bars.push({
-        t: timestamps[i] * 1000,
+        t: ts * 1000,
         o: +o.toFixed(2),
         h: +h.toFixed(2),
         l: +l.toFixed(2),
@@ -378,12 +389,13 @@ export async function fetchYahooCandles(
   { range = '1d', interval = '5m', maxBars = 48, aggregate = true } = {}
 ) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
-  const res = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
-    signal: AbortSignal.timeout(12000),
-  });
+  const res = await safeFetch(
+    url,
+    { headers: { 'User-Agent': USER_AGENT } },
+    { timeoutMs: 12000, maxRedirects: 0, allowedHosts: ['query1.finance.yahoo.com'] }
+  );
   if (!res.ok) throw new Error(`Yahoo candles ${symbol} (${range}/${interval}) HTTP ${res.status}`);
-  const raw = parseYahooCandles(await res.json(), 0);
+  const raw = parseYahooCandles(await readResponseJsonWithLimit(res, 2 * 1024 * 1024), 0);
   if (!aggregate) return maxBars ? raw.slice(-maxBars) : raw;
   return aggregateCandles(raw, maxBars);
 }

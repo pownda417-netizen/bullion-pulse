@@ -397,57 +397,85 @@ const DRIVER_RULES = [
   {
     driver: 'mining_supply',
     bullish: [
-      /\b(mine|mining|miner|smelter|san dimas|newmont|barrick|first majestic|pan american|hecla|agnico|wheaton)\b.*\b(strike|labor dispute|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output|aisc.*rise|aisc.*jump|cost.*rise)/i,
-      /\b(silver|gold)\b.*\b(deficit|shortage|tight supply|vault drain|inventory drop|record demand|squeeze|sixth straight)/i,
-      /\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ev|electrification|charging|electronics|semiconductor|ai data center|ai server|antimicrobial)\b.*\b(demand|grow|surge|boom|rise|record|adoption|shortage|boost)/i,
-      /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|tesla|megapack|spacex|starlink|xai|stargate|tsmc|broadcom|vertiv|eaton|hyperscaler)\b.*\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|power deal|grid upgrade|switchgear|busbar|launch|record|deliveries|raise.*capex|boost.*demand)/i,
-      /\b(alibaba|qwen|tencent|hunyuan|baidu|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio)\b.*\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|solid[- ]?state|deliveries|record|sales jump|ramp|boost)/i,
-      /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b.*\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|switchgear|transformer|power grid|solid[- ]?state|hbm|wire bonding|record|order|deal)/i,
-      /\b(space economy|satellite constellation|orbital solar|aerospace|lunar base|starship|nasa|spacex|satellite launch)\b.*\b(demand|launch|build|solar|silver|boom|record|contract|expand)/i,
-      /\b(us mint|royal mint|perth mint|bullion coin|silver eagle|costco gold)\b.*\b(shortage|sell out|sold out|surge|demand|premium|record|backlog)/i,
-      /\bexport (ban|curb|restriction|licensing|control)\b.*\b(silver|gold|metal|mineral)/i,
-      /\b(comex|lbma|shfe)\b.*\b(inventory|stock|vault)\b.*\b(drop|decline|drain|low|plummet)/i,
+      [
+        /\b(mine|mining|miner|smelter|san dimas|newmont|barrick|first majestic|pan american|hecla|agnico|wheaton)\b/i,
+        /\b(strike|labor dispute|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output|aisc\s+(?:\w+\s+){0,3}(?:rises?|rising|jumps?|jumping)|costs?\s+(?:\w+\s+){0,3}(?:rises?|rising|jumps?|jumping))/i,
+      ],
+      /\b(silver|gold)\b.{0,120}\b(deficit|shortage|tight supply|vault drain|inventory drop|record demand|squeeze|sixth straight)/i,
+      /\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ev|electrification|charging|electronics|semiconductor|ai data center|ai server|antimicrobial)\b.{0,120}\b(demand|grow|surge|boom|rise|record|adoption|shortage|boost)/i,
+      [
+        /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|tesla|megapack|spacex|starlink|xai|stargate|tsmc|broadcom|vertiv|eaton|hyperscaler)\b/i,
+        /\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|power deal|grid upgrade|switchgear|busbar|launch|record|deliveries|raise(?:s|d|ing)?\s+(?:\w+\s+){0,3}capex|boost(?:s|ed|ing)?\s+(?:\w+\s+){0,3}demand)/i,
+      ],
+      /\b(alibaba|qwen|tencent|hunyuan|baidu|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio)\b.{0,120}\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|solid[- ]?state|deliveries|record|sales jump|ramp|boost)/i,
+      /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b.{0,120}\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|switchgear|transformer|power grid|solid[- ]?state|hbm|wire bonding|record|order|deal)/i,
+      /\b(space economy|satellite constellation|orbital solar|aerospace|lunar base|starship|nasa|spacex|satellite launch)\b.{0,120}\b(demand|launch|build|solar|silver|boom|record|contract|expand)/i,
+      /\b(us mint|royal mint|perth mint|bullion coin|silver eagle|costco gold)\b.{0,120}\b(shortage|sell out|sold out|surge|demand|premium|record|backlog)/i,
+      /\bexport (ban|curb|restriction|licensing|control)\b.{0,120}\b(silver|gold|metal|mineral)/i,
+      [
+        /\b(comex|lbma|shfe)\b/i,
+        /\b(inventory|stock|vault)/i,
+        /\b(drop|decline|drain|low|plummet)/i,
+      ],
     ],
     bearish: [
-      /\b(mine|mining|newmont|barrick|first majestic|pan american|hecla|loulo)\b.*\b(record output|production surge|ramps?[- ]?up|supply glut|oversupply|reopen|restart|lower.*cost|cut.*cost)/i,
-      /\b(silver|gold)\b.*\b(surplus|oversupply|weak industrial demand|thrifting|substitution|narrow)/i,
-      /\b(nvidia|google|microsoft|meta|amazon|tesla|openai|anthropic|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai capex)\b.*\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|bubble burst|slump|sales drop|sales fall|halt|pullback)/i,
+      [
+        /\b(mine|mining|newmont|barrick|first majestic|pan american|hecla|loulo)\b/i,
+        /\b(record output|production surge|ramps?[- ]?up|supply glut|oversupply|reopen|restart|lower(?:s|ed|ing)?\s+(?:\w+\s+){0,3}costs?|cut(?:s|ting)?\s+(?:\w+\s+){0,3}costs?)/i,
+      ],
+      /\b(silver|gold)\b.{0,120}\b(surplus|oversupply|weak industrial demand|thrifting|substitution|narrow)/i,
+      /\b(nvidia|google|microsoft|meta|amazon|tesla|openai|anthropic|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai capex)\b.{0,120}\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|bubble burst|slump|sales drop|sales fall|halt|pullback)/i,
     ],
   },
   {
     driver: 'central_banks',
     bullish: [
-      /\bcentral bank\b.*\b(buy|buying|accumulat|add|reserve|record|gold)\b/i,
-      /\b(china|pboc|india|rbi|poland|nbp|turkey|brics|imf|sovereign)\b.*\b(gold reserve|buys gold|adds gold|silver import|gold import|repatriat|gold[- ]backed|settlement)/i,
-      /\b(gold|silver) (etf|etp)\b.*\b(inflow|surge|buying|add|recover)/i,
-      /\b(paxg|xaut|tether gold|tokenized gold|basel iii)\b.*\b(surge|inflow|demand|tier 1|record|growth|adoption|vault)/i,
+      /\bcentral bank\b.{0,120}\b(buy|buying|accumulat|add|reserve|record|gold)\b/i,
+      /\b(china|pboc|india|rbi|poland|nbp|turkey|brics|imf|sovereign)\b.{0,120}\b(gold reserve|buys gold|adds gold|silver import|gold import|repatriat|gold[- ]backed|settlement)/i,
+      /\b(gold|silver) (etf|etp)\b.{0,120}\b(inflow|surge|buying|add|recover)/i,
+      /\b(paxg|xaut|tether gold|tokenized gold|basel iii)\b.{0,120}\b(surge|inflow|demand|tier 1|record|growth|adoption|vault)/i,
       /\bde-?dollariz/i,
     ],
     bearish: [
-      /\b(central bank|china|pboc|india|rbi|poland|turkey)\b.*\b(sell|selling|pause[sd]? buying|pause[sd]? gold|halt[sed]* gold|stop[ped]* buying|dump|zero gold|ends? buying)\b/i,
-      /\b(pboc|china|central bank)\b.*\b(gold buying|gold reserve).*\b(pause|halt|zero|stop|ended|slow)/i,
-      /\b(gold|silver) (etf|etp)\b.*\b(outflow|redemption|selling|trim)/i,
+      /\b(central bank|china|pboc|india|rbi|poland|turkey)\b.{0,120}\b(sell|selling|pause[sd]? buying|pause[sd]? gold|halt(?:s|ed|ing)? gold|stop(?:s|ped|ping)? buying|dump|zero gold|ends? buying)\b/i,
+      [
+        /\b(pboc|china|central bank)\b/i,
+        /\b(gold buying|gold reserve)/i,
+        /\b(pause|halt|zero|stop|ended|slow)/i,
+      ],
+      /\b(gold|silver) (etf|etp)\b.{0,120}\b(outflow|redemption|selling|trim)/i,
     ],
   },
   {
     driver: 'shanghai_sge',
     bullish: [
-      /\b(shanghai|sge|shfe)\b.*\b(premium|surge|high|squeeze|tight|demand|au99|ag\(t\+d\)|vault drain)/i,
-      /\bchina\b.*\b(silver|gold)\b.*\b(export control|export restriction|licensing|premium|rush|shortage)/i,
-      /\b(india|dubai|dmcc|turkey|mcx|swiss gold exports|diwali|akshaya tritiya)\b.*\b(surge|jump|record|boom|import|demand|premium|buying)/i,
+      /\b(shanghai|sge|shfe)\b.{0,120}\b(premium|surge|high|squeeze|tight|demand|au99|ag\(t\+d\)|vault drain)/i,
+      [
+        /\bchina\b/i,
+        /\b(silver|gold)\b/i,
+        /\b(export control|export restriction|licensing|premium|rush|shortage)/i,
+      ],
+      /\b(india|dubai|dmcc|turkey|mcx|swiss gold exports|diwali|akshaya tritiya)\b.{0,120}\b(surge|jump|record|boom|import|demand|premium|buying)/i,
     ],
     bearish: [
-      /\b(shanghai|sge|shfe|india|dubai|turkey)\b.*\b(discount|margin hike|margin rate|cooling|inventory build|slump|import drop|import fall)/i,
+      /\b(shanghai|sge|shfe|india|dubai|turkey)\b.{0,120}\b(discount|margin hike|margin rate|cooling|inventory build|slump|import drop|import fall)/i,
     ],
   },
   {
     driver: 'comex_paper',
     bullish: [
-      /\b(comex|lbma|london bullion)\b.*\b(registered|vault|stockpile|inventor|delivery)\b.*\b(drop|drain|fall|low|squeeze|drawdown|outflow|stand for delivery|tight)/i,
-      /\b(paper silver|paper gold|open interest|gold lease rate|silver lease rate|backwardation|efp spread)\b.*\b(surge|jump|squeeze|record|exceed|short covering|spike|soar|tight)/i,
+      [
+        /\b(comex|lbma|london bullion)\b/i,
+        /\b(registered|vault|stockpile|inventor|delivery)/i,
+        /\b(drop|drain|fall|low|squeeze|drawdown|outflow|stand for delivery|tight)/i,
+      ],
+      /\b(paper silver|paper gold|open interest|gold lease rate|silver lease rate|backwardation|efp spread)\b.{0,120}\b(surge|jump|squeeze|record|exceed|short covering|spike|soar|tight)/i,
     ],
     bearish: [
-      /\b(comex|lbma)\b.*\b(margin hike|registered build|inventory surge|liquidation|paper dump|paper slam|lease rate.*fall)/i,
+      [
+        /\b(comex|lbma)\b/i,
+        /\b(margin hike|registered build|inventory surge|liquidation|paper dump|paper slam|lease rate\s+(?:\w+\s+){0,3}fall)/i,
+      ],
     ],
   },
 ];
@@ -490,17 +518,18 @@ export function classifyHeadlineTopic(text = '', driver = '') {
 }
 
 export function classifyHeadline(headline) {
-  const text = `${headline.title || ''} ${headline.summary || ''}`.trim();
+  const text = `${headline?.title || ''} ${headline?.summary || ''}`.trim().slice(0, 600);
   let bestMatch = null;
+  const matchesRule = (rx) => (Array.isArray(rx) ? rx.every((r) => r.test(text)) : rx.test(text));
 
   for (const rule of DRIVER_RULES) {
     let bullHits = 0;
     let bearHits = 0;
     for (const rx of rule.bullish) {
-      if (rx.test(text)) bullHits++;
+      if (matchesRule(rx)) bullHits++;
     }
     for (const rx of rule.bearish) {
-      if (rx.test(text)) bearHits++;
+      if (matchesRule(rx)) bearHits++;
     }
     const total = bullHits + bearHits;
     if (total === 0) continue;
@@ -508,7 +537,7 @@ export function classifyHeadline(headline) {
     let polarity = bullHits === bearHits ? 0 : bullHits > bearHits ? 1 : -1;
     // Negation & reversal precision guards so "ceasefire eases war", "Fed rules out rate cut",
     // "PBOC pauses gold buying", or "NVIDIA delays data center" NEVER flip positive!
-    if (rule.driver === 'rates_usd' && bearHits > 0 && /\b(no|rules? out|push(?:es|ing)? back|delay(?:s|ed|ing)?|dash(?:es|ed)?|unlikely|postpone|off the table|fewer)\b.*\b(rate cut|cut rates|easing|pivot)|\b(rate cut|cut rates)\b.*\b(unlikely|delayed|postponed|fades?|fading|ruled out|pushed back|off the table)/i.test(text)) {
+    if (rule.driver === 'rates_usd' && bearHits > 0 && /\b(no|rules? out|push(?:es|ing)? back|delay(?:s|ed|ing)?|dash(?:es|ed)?|unlikely|postpone|off the table|fewer)\b.{0,120}\b(rate cut|cut rates|easing|pivot)|\b(rate cut|cut rates)\b.{0,120}\b(unlikely|delayed|postponed|fades?|fading|ruled out|pushed back|off the table)/i.test(text)) {
       polarity = -1;
     } else if (rule.driver === 'geopolitics' && bearHits > 0 && !/\b(collapse|breaks? down|fails?|shatter|violat)\b/i.test(text)) {
       polarity = -1;
@@ -2051,9 +2080,11 @@ export function parseNoaaSpaceWeather(noaaJson, nowIso = new Date().toISOString(
         : 'Minor solar breeze (G1) — routine space weather with negligible bullion impact.';
   }
 
+  const safeDate = typeof cur?.DateStamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cur.DateStamp.trim()) ? cur.DateStamp.trim() : '';
+  const safeTime = typeof cur?.TimeStamp === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(cur.TimeStamp.trim()) ? cur.TimeStamp.trim() : '';
   return {
     source: cur ? 'NOAA SWPC Live' : 'Baseline Quiet',
-    updatedAt: cur?.DateStamp ? `${cur.DateStamp} ${cur.TimeStamp || ''}`.trim() : nowIso,
+    updatedAt: safeDate ? `${safeDate}${safeTime ? ` ${safeTime}` : ''}` : nowIso,
     gScale,
     sScale,
     rScale,

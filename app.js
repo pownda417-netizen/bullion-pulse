@@ -19,11 +19,24 @@ const MAX_BACKUP_BYTES = 512 * 1024;
 function sanitizeHttpUrl(raw) {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
-  if (!trimmed || trimmed.length > 2048) return null;
+  if (!trimmed || trimmed.length > 2048 || /[\x00-\x1f\x7f]/.test(trimmed)) return null;
   try {
     const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-    return parsed.href;
+    if (parsed.protocol !== 'https:') return null;
+    if (parsed.username || parsed.password) return null;
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+    if (
+      !host ||
+      !host.includes('.') ||
+      host === 'localhost' ||
+      host.endsWith('.localhost') ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      /^(127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(1[6-9]|2\d|3[01])\.|::1$|::$|::ffff:|f[cd][0-9a-f]{0,2}:|fe[89ab])/i.test(host)
+    ) {
+      return null;
+    }
+    return parsed.href.length <= 2048 ? parsed.href : null;
   } catch {
     return null;
   }
@@ -35,7 +48,17 @@ function sanitizeNtfyTopic(raw) {
     .trim()
     .replace(/^https?:\/\/ntfy\.sh\//i, '')
     .replace(/^\/+|\/+$/g, '');
-  return /^[A-Za-z0-9._-]{1,64}$/.test(cleaned) ? cleaned : '';
+  if (
+    !/^[A-Za-z0-9._-]{1,64}$/.test(cleaned) ||
+    cleaned === '.' ||
+    cleaned === '..' ||
+    cleaned.includes('..') ||
+    cleaned.startsWith('.') ||
+    cleaned.endsWith('.')
+  ) {
+    return '';
+  }
+  return cleaned;
 }
 
 async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
@@ -62,11 +85,11 @@ async function fetchFreshRepoJson(fileName) {
     return res.json();
   };
   const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  const path = typeof window !== 'undefined' ? window.location.pathname : '';
   const canPollRaw =
     typeof window !== 'undefined' &&
-    (host === 'pownda417-netizen.github.io' ||
-      host.endsWith('.github.io') ||
-      window.location.search.includes('liveRaw=1'));
+    host === 'pownda417-netizen.github.io' &&
+    path.startsWith('/bullion-pulse/');
 
   if (!canPollRaw) return localFetch();
 
@@ -185,6 +208,8 @@ const state = {
     targets: { ...DEFAULT_SETTINGS.targets },
     smartAlerts: { ...DEFAULT_SETTINGS.smartAlerts },
     quietHours: { ...DEFAULT_SETTINGS.quietHours },
+    dealerQuotes: { ...DEFAULT_SETTINGS.dealerQuotes },
+    forecastJournal: [],
     subViews: { ...DEFAULT_SETTINGS.subViews },
   },
   fxRates: {
@@ -374,9 +399,12 @@ function sanitizeBoundedNum(v, fallback, lo, hi) {
 
 function sanitizeNumInputStr(v, lo = 0, hi = 1e9) {
   if (v === '' || v == null) return '';
-  const n = Number(v);
+  if (typeof v !== 'number' && typeof v !== 'string') return '';
+  const trimmed = typeof v === 'string' ? v.trim() : String(v);
+  if (!trimmed || !/^-?\d+(?:\.\d+)?$/.test(trimmed)) return '';
+  const n = Number(trimmed);
   if (!Number.isFinite(n) || n < lo || n > hi) return '';
-  return String(v).trim().slice(0, 24);
+  return String(n).slice(0, 24);
 }
 
 function sanitizeShortText(v, maxLen = 120) {
@@ -411,7 +439,7 @@ function sanitizeStackLots(rawLots) {
       cost: +cost.toFixed(4),
       form: sanitizeShortText(lot.form || 'Bullion', 60) || 'Bullion',
       note: sanitizeShortText(lot.note || '', 120),
-      date: sanitizeShortText(lot.date || '', 24),
+      date: sanitizeShortText(lot.date || (typeof lot.createdAt === 'string' ? lot.createdAt.slice(0, 10) : ''), 24),
     });
   }
   return out;
@@ -521,7 +549,10 @@ function sanitizePersistedSettings(raw) {
           : 'auto',
     },
     dealGrader: {
-      preset: sanitizeShortText(rawGrader.preset || DEFAULT_SETTINGS.dealGrader.preset, 40) || DEFAULT_SETTINGS.dealGrader.preset,
+      preset:
+        typeof rawGrader.preset === 'string' && Object.hasOwn(DEAL_PRESETS, rawGrader.preset)
+          ? rawGrader.preset
+          : DEFAULT_SETTINGS.dealGrader.preset,
       qty: sanitizeBoundedNum(rawGrader.qty, DEFAULT_SETTINGS.dealGrader.qty, 1, 10000),
       ask: sanitizeNumInputStr(rawGrader.ask, 0, 1e8),
     },
@@ -608,8 +639,9 @@ function sanitizeSessionAlerted(raw) {
   for (const mapKey of ['targets', 'regime']) {
     if (isPlainObject(raw[mapKey])) {
       for (const [k, v] of Object.entries(raw[mapKey]).slice(0, 32)) {
-        if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-        base[mapKey][sanitizeShortText(k, 32)] = sanitizeShortText(String(v || ''), 24);
+        const cleanKey = sanitizeShortText(k, 32);
+        if (!cleanKey || cleanKey === '__proto__' || cleanKey === 'constructor' || cleanKey === 'prototype') continue;
+        base[mapKey][cleanKey] = sanitizeShortText(String(v || ''), 24);
       }
     }
   }
@@ -619,9 +651,16 @@ function sanitizeSessionAlerted(raw) {
 function loadPersistedState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw || raw.length > MAX_BACKUP_BYTES) return;
+    if (!raw) return;
+    if (raw.length > MAX_BACKUP_BYTES) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
     const parsed = JSON.parse(raw);
-    if (!isPlainObject(parsed)) return;
+    if (!isPlainObject(parsed)) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
     if (isPlainObject(parsed.settings)) {
       state.settings = sanitizePersistedSettings(parsed.settings);
     }
@@ -636,24 +675,25 @@ function loadPersistedState() {
       state.sessionAlerted = sanitizeSessionAlerted(parsed.sessionAlerted);
     }
   } catch {
-    // Ignore malformed storage
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }
 }
 
 function savePersistedState() {
   try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        settings: state.settings,
-        alertLog: state.alertLog.slice(0, 25),
-        history: {
-          gold: state.history.gold.slice(-60),
-          silver: state.history.silver.slice(-60),
-        },
-        sessionAlerted: state.sessionAlerted,
-      })
-    );
+    const safePayload = {
+      settings: sanitizePersistedSettings(state.settings),
+      alertLog: state.alertLog.slice(0, 25),
+      history: {
+        gold: state.history.gold.slice(-60),
+        silver: state.history.silver.slice(-60),
+      },
+      sessionAlerted: sanitizeSessionAlerted(state.sessionAlerted),
+    };
+    const serialized = JSON.stringify(safePayload);
+    if (serialized.length <= MAX_BACKUP_BYTES) {
+      localStorage.setItem(STORAGE_KEY, serialized);
+    }
   } catch {
     // Ignore storage quota errors
   }
@@ -706,6 +746,9 @@ function isPrivacyOn() {
 
 function applyPrivacyMode() {
   const hidden = isPrivacyOn();
+  if (typeof document !== 'undefined' && document.body) {
+    document.body.classList.toggle('privacy-mode', hidden);
+  }
   const btn = document.getElementById('btn-privacy-toggle');
   const icon = document.getElementById('icon-privacy');
   if (btn) {
@@ -723,18 +766,21 @@ function applyPrivacyMode() {
 }
 
 function convertUnit(usdPerOz) {
-  if (usdPerOz == null || Number.isNaN(usdPerOz)) return null;
-  return state.settings.unit === 'g' ? usdPerOz / TROY_OZ_TO_GRAMS : usdPerOz;
+  const n = Number(usdPerOz);
+  if (usdPerOz == null || usdPerOz === '' || !Number.isFinite(n)) return null;
+  return state.settings.unit === 'g' ? n / TROY_OZ_TO_GRAMS : n;
 }
 
 function formatMoney(value, decimals = 2, opts = null) {
   const usdOnly = !!opts?.usdOnly;
   const code = usdOnly ? 'USD' : getCurrencyCode();
-  const meta = CURRENCY_META[code] || CURRENCY_META.USD;
+  const meta = Object.hasOwn(CURRENCY_META, code) ? CURRENCY_META[code] : CURRENCY_META.USD;
   const sym = meta.symbol;
-  if (value == null || Number.isNaN(value)) return `${sym}—`;
+  const num = Number(value);
+  if (value == null || value === '' || !Number.isFinite(num)) return `${sym}—`;
   const rate = usdOnly ? 1 : getFxRate();
-  const converted = Number(value) * rate;
+  const converted = num * rate;
+  if (!Number.isFinite(converted)) return `${sym}—`;
   const dec = meta.zeroDecimals ? 0 : decimals;
   const sign = converted < 0 ? '−' : '';
   const numStr = new Intl.NumberFormat('en-US', {
@@ -747,10 +793,12 @@ function formatMoney(value, decimals = 2, opts = null) {
 function formatCompactMoney(value, decimals = 2, opts = null) {
   const usdOnly = !!opts?.usdOnly;
   const code = usdOnly ? 'USD' : getCurrencyCode();
-  const meta = CURRENCY_META[code] || CURRENCY_META.USD;
-  if (value == null || Number.isNaN(value)) return `${meta.symbol}—`;
+  const meta = Object.hasOwn(CURRENCY_META, code) ? CURRENCY_META[code] : CURRENCY_META.USD;
+  const num = Number(value);
+  if (value == null || value === '' || !Number.isFinite(num)) return `${meta.symbol}—`;
   const rate = usdOnly ? 1 : getFxRate();
-  const converted = Number(value) * rate;
+  const converted = num * rate;
+  if (!Number.isFinite(converted)) return `${meta.symbol}—`;
   const abs = Math.abs(converted);
   const sign = converted < 0 ? '−' : '';
   if (abs >= 1_000_000_000) {
@@ -759,14 +807,15 @@ function formatCompactMoney(value, decimals = 2, opts = null) {
   if (abs >= 1_000_000) {
     return `${sign}${meta.symbol}${(abs / 1_000_000).toFixed(2)}M`;
   }
-  return formatMoney(value, decimals, opts);
+  return formatMoney(num, decimals, opts);
 }
 
 function formatSignedMoney(value, decimals = 2, opts = null) {
   const sym = opts?.usdOnly ? '$' : getCurrencySymbol();
-  if (value == null || Number.isNaN(value)) return `${sym}—`;
-  const sign = value > 0 ? '+' : value < 0 ? '−' : '';
-  return `${sign}${formatMoney(Math.abs(value), decimals, opts)}`;
+  const num = Number(value);
+  if (value == null || value === '' || !Number.isFinite(num)) return `${sym}—`;
+  const sign = num > 0 ? '+' : num < 0 ? '−' : '';
+  return `${sign}${formatMoney(Math.abs(num), decimals, opts)}`;
 }
 
 function privMoney(value, decimals = 2) {
@@ -791,9 +840,10 @@ function normalCdf(z) {
 }
 
 function formatSignedPct(pct) {
-  if (pct == null || Number.isNaN(pct)) return '0.00%';
-  const sign = pct > 0 ? '+' : pct < 0 ? '−' : '';
-  return `${sign}${Math.abs(pct).toFixed(2)}%`;
+  const n = Number(pct);
+  if (pct == null || pct === '' || !Number.isFinite(n)) return '0.00%';
+  const sign = n > 0 ? '+' : n < 0 ? '−' : '';
+  return `${sign}${Math.abs(n).toFixed(2)}%`;
 }
 
 function todayKey() {
@@ -1416,10 +1466,11 @@ function directionMatches(pct, ruleDir) {
 }
 
 function evaluateAlerts(metal, quote, isSimulated) {
-  const threshold =
-    metal === 'gold' ? state.settings.goldThreshold : state.settings.silverThreshold;
-  const absPct = Math.abs(quote.pct);
-  if (absPct < threshold) {
+  const threshold = Number(
+    metal === 'gold' ? state.settings.goldThreshold : state.settings.silverThreshold
+  );
+  const absPct = Math.abs(Number(quote?.pct));
+  if (!Number.isFinite(threshold) || threshold <= 0 || !Number.isFinite(absPct) || absPct < threshold) {
     state.pendingAlert[metal] = null;
     return false;
   }
@@ -1506,26 +1557,30 @@ async function publishToNtfy({ topic, title, message, priority = 'high', tags = 
     throw new Error('Enter a valid ntfy topic name (letters, numbers, dashes, dots, or underscores only).');
   }
 
-  const safePriority = ['min', 'low', 'default', 'high', 'urgent', 'max'].includes(String(priority))
-    ? String(priority)
-    : 'high';
-  const safeTags = String(tags || 'bell,coin').replace(/[^A-Za-z0-9_,-]/g, '').slice(0, 80) || 'bell';
+  const prioMap = { min: 1, low: 2, default: 3, high: 4, urgent: 5, max: 5 };
+  const safePriority = prioMap[String(priority)] || 4;
+  const safeTags = String(tags || 'bell,coin')
+    .replace(/[^A-Za-z0-9_,-]/g, '')
+    .slice(0, 80)
+    .split(',')
+    .filter(Boolean);
   const safeTitle = sanitizeShortText(String(title || 'Bullion Pulse Alert'), 180);
   const safeMessage = String(message || '').slice(0, 2000);
 
-  // Query parameters + text/plain avoids CORS preflight issues in mobile browsers
-  const params = new URLSearchParams({
-    title: safeTitle,
-    priority: safePriority,
-    tags: safeTags,
-  });
-
-  const url = `https://ntfy.sh/${encodeURIComponent(cleanTopic)}?${params.toString()}`;
+  // Send topic, title, and message inside JSON POST body to https://ntfy.sh/ (text/plain CORS-simple)
+  // so secret channel names and custom price targets never appear in URL paths or query strings
   const res = await fetchWithTimeout(
-    url,
+    'https://ntfy.sh/',
     {
       method: 'POST',
-      body: safeMessage,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      body: JSON.stringify({
+        topic: cleanTopic,
+        title: safeTitle,
+        message: safeMessage,
+        priority: safePriority,
+        tags: safeTags.length ? safeTags : ['bell'],
+      }),
     },
     10000
   );
@@ -2508,7 +2563,7 @@ function drawRsiPane(rsiData, candleAreaW, padLeft, stepX) {
 
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   canvas.width = Math.round(rect.width * dpr);
   canvas.height = Math.round(rect.height * dpr);
   const ctx = canvas.getContext('2d');
@@ -3248,7 +3303,7 @@ function renderChart() {
 
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   canvas.width = Math.round(rect.width * dpr);
   canvas.height = Math.round(rect.height * dpr);
   ctx.scale(dpr, dpr);
@@ -5003,7 +5058,10 @@ function renderSettingsControls() {
   document.getElementById('unit-g')?.classList.toggle('active', state.settings.unit === 'g');
 
   if (snippet) {
-    const t = state.settings.ntfyTopic.trim() || 'bullion-pulse-change-me';
+    const cleanTopic = sanitizeNtfyTopic(state.settings.ntfyTopic);
+    const t = cleanTopic
+      ? (isPrivacyOn() ? '<hidden-in-privacy-mode>' : cleanTopic)
+      : 'bullion-pulse-change-me';
     const extraTargets = [];
     if (state.settings.confirmMoves) extraTargets.push('CONFIRM_MOVES=true');
     if (targets.goldAbove) extraTargets.push(`GOLD_ABOVE_USD=${targets.goldAbove}`);
@@ -5063,10 +5121,10 @@ const CLIENT_NEWS_TOPICS = {
 };
 
 function classifyClientHeadlineTopic(h) {
-  if (h?.topic && CLIENT_NEWS_TOPICS[h.topic]) {
+  if (typeof h?.topic === 'string' && Object.hasOwn(CLIENT_NEWS_TOPICS, h.topic)) {
     return { topic: h.topic, topicLabel: h.topicLabel || CLIENT_NEWS_TOPICS[h.topic] };
   }
-  const text = `${h?.title || ''} ${h?.summary || ''} ${h?.source || ''}`;
+  const text = `${h?.title || ''} ${h?.summary || ''}`.slice(0, 600);
   if (/\b(solar flare|geomagnetic|space weather|noaa|satellite|aerospace|spacex|nasa|orbital|war|missile|airstrike|sanction|tariff|strait of hormuz|red sea|geopolit|conflict|ceasefire)\b/i.test(text)) {
     return { topic: 'geo_space', topicLabel: CLIENT_NEWS_TOPICS.geo_space };
   }
@@ -5245,9 +5303,11 @@ function parseClientNoaaSpaceWeather(noaaJson) {
         : 'Minor solar breeze (G1) — routine space weather with minimal bullion impact.';
   }
 
+  const safeDate = typeof cur?.DateStamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cur.DateStamp.trim()) ? cur.DateStamp.trim() : '';
+  const safeTime = typeof cur?.TimeStamp === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(cur.TimeStamp.trim()) ? cur.TimeStamp.trim() : '';
   return {
     source: cur ? 'NOAA SWPC Live' : 'Baseline Quiet',
-    updatedAt: cur?.DateStamp ? `${cur.DateStamp} ${cur.TimeStamp || ''}`.trim() : new Date().toISOString().slice(0, 16),
+    updatedAt: safeDate ? `${safeDate}${safeTime ? ` ${safeTime}` : ''}` : new Date().toISOString().slice(0, 16),
     gScale,
     sScale,
     rScale,
@@ -5265,9 +5325,7 @@ function parseClientNoaaSpaceWeather(noaaJson) {
 async function fetchLiveSpaceWeather() {
   if (Date.now() - spaceWeatherState.fetchedAt < 300000 && spaceWeatherState.data) return;
   try {
-    const res = await fetch('https://services.swpc.noaa.gov/products/noaa-scales.json', {
-      cache: 'no-store',
-    });
+    const res = await fetchWithTimeout('https://services.swpc.noaa.gov/products/noaa-scales.json', {}, 8000);
     if (!res.ok) return;
     const json = await res.json();
     spaceWeatherState.data = parseClientNoaaSpaceWeather(json);
@@ -5331,11 +5389,15 @@ function computeClientPhysicalPremiums({
 } = {}) {
   let retailShortageHits = 0;
   let retailCoolingHits = 0;
-  for (const h of base?.headlines || []) {
-    const txt = `${h?.title || ''} ${h?.summary || ''}`;
-    if (/\b(us mint|royal mint|perth mint|silver eagle|gold eagle|gold buffalo|costco gold|bullion coin|coin dealer|refiner)\b.*\b(shortage|sold out|sell out|ration|delay|backlog|surge|record|premium|spike|scramble|rush)/i.test(txt)) {
+  const rxMintEntity = /\b(us mint|royal mint|perth mint|silver eagle|gold eagle|gold buffalo|costco gold|bullion coin|coin dealer|refiner)\b/i;
+  const rxShortageWord = /\b(shortage|sold out|sell out|ration|delay|backlog|surge|record|premium|spike|scramble|rush)/i;
+  const rxPremEntity = /\b(coin premium|bullion premium|dealer premium)\b/i;
+  const rxCoolWord = /\b(fall|drop|cool|compress|ease|plunge|low)/i;
+  for (const h of (base?.headlines || []).slice(0, 150)) {
+    const txt = `${h?.title || ''} ${h?.summary || ''}`.slice(0, 600);
+    if (rxMintEntity.test(txt) && rxShortageWord.test(txt)) {
       retailShortageHits++;
-    } else if (/\b(coin premium|bullion premium|dealer premium)\b.*\b(fall|drop|cool|compress|ease|plunge|low)/i.test(txt)) {
+    } else if (rxPremEntity.test(txt) && rxCoolWord.test(txt)) {
       retailCoolingHits++;
     }
   }
@@ -5389,7 +5451,7 @@ function computeClientPhysicalPremiums({
       const meltVal = safeSpot * p.oz;
       let premPct;
       if (hasUserOverride && idx === 0) {
-        premPct = ((userStreet - safeSpot) / safeSpot) * 100;
+        premPct = clampNum(((userStreet - safeSpot) / safeSpot) * 100, -25, 200, p.basePremPct);
       } else {
         const dynamicAdd = isSilver ? rawStress * 12.5 * p.stressMult : rawStress * 3.1 * p.stressMult;
         premPct = clampNum(p.basePremPct + dynamicAdd, isSilver ? 2.5 : 0.7, isSilver ? 68 : 18);
@@ -5987,29 +6049,52 @@ function computeClientAiDatacenter({
   const worldAiBasket = hydrateBasket(CLIENT_WORLD_AI_TECH_META, srv?.worldAiBasket);
   const powerBasket = hydrateBasket(CLIENT_AI_POWER_META, srv?.powerBasket);
 
-  const bullRx = [
-    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries|raise.*capex|invest|order|deal)/i,
-    /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b.*\b(solid[- ]?state|megawatt|gigawatt|deliveries|sales surge|sales jump|record|expand|billion|boom|buildout|invest|ramp|factory|surge)/i,
-    /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b.*\b(hbm|switchgear|transformer|power grid|solid[- ]?state|gigawatt|megawatt|chip plant|wire bonding|billion|expand|buildout|surge|record|invest|order|deal)/i,
-    /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding|solid[- ]?state battery)\b.*\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
-    /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|samsung|toyota|ev demand)\b.*\b(surge|boom|jump|rise|demand|boost|tight|shortage|deficit)/i,
+  // Linear-time predicate pairs + 600-char cap (prevents ReDoS)
+  const bullPreds = [
+    [
+      /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b/i,
+      /\b(gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries|raise(?:s|d|ing)?\s+(?:\w+\s+){0,3}capex|invest|order|deal)/i,
+    ],
+    [
+      /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b/i,
+      /\b(solid[- ]?state|megawatt|gigawatt|deliveries|sales surge|sales jump|record|expand|billion|boom|buildout|invest|ramp|factory|surge)/i,
+    ],
+    [
+      /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b/i,
+      /\b(hbm|switchgear|transformer|power grid|solid[- ]?state|gigawatt|megawatt|chip plant|wire bonding|billion|expand|buildout|surge|record|invest|order|deal)/i,
+    ],
+    [
+      /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding|solid[- ]?state battery)\b/i,
+      /\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
+    ],
+    [
+      /\b(silver|gold)\b/i,
+      /\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|samsung|toyota|ev demand)\b/i,
+      /\b(surge|boom|jump|rise|demand|boost|tight|shortage|deficit)/i,
+    ],
   ];
-  const bearRx = [
-    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|sales fall|ev slump)/i,
-    /\b(ai data center|ai capex|ai chip|server demand|ev sales)\b.*\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble|slump)/i,
+  const bearPreds = [
+    [
+      /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai infrastructure)\b/i,
+      /\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|sales fall|ev slump)/i,
+    ],
+    [
+      /\b(ai data center|ai capex|ai chip|server demand|ev sales)\b/i,
+      /\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble|slump)/i,
+    ],
   ];
   let bullHits = 0;
   let bearHits = 0;
   const labMentions = {};
   for (const lab of CLIENT_PRIVATE_AI_LABS) labMentions[lab.id] = 0;
-  for (const h of headlines) {
-    const txt = `${h?.title || ''} ${h?.summary || ''}`.trim();
+  for (const h of (headlines || []).slice(0, 150)) {
+    const txt = `${h?.title || ''} ${h?.summary || ''}`.trim().slice(0, 600);
     if (!txt) continue;
     for (const lab of CLIENT_PRIVATE_AI_LABS) {
       if (lab.rx.test(txt)) labMentions[lab.id]++;
     }
-    const isBear = bearRx.some((rx) => rx.test(txt));
-    const isBull = bullRx.some((rx) => rx.test(txt));
+    const isBear = bearPreds.some((g) => g.every((rx) => rx.test(txt)));
+    const isBull = bullPreds.some((g) => g.every((rx) => rx.test(txt)));
     if (isBull && !isBear) bullHits++;
     else if (isBear) bearHits++;
   }
@@ -6503,9 +6588,82 @@ function renderComexPanel() {
   }
 }
 
+function sanitizeSpaceWeatherFallback(raw) {
+  if (!isPlainObject(raw)) return parseClientNoaaSpaceWeather(null);
+  const clampScale = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.min(5, Math.round(n)) : 0;
+  };
+  const gScale = clampScale(raw.gScale);
+  const sScale = clampScale(raw.sScale);
+  const rScale = clampScale(raw.rScale);
+  const gForecast = clampScale(raw.gForecast);
+  return {
+    ...parseClientNoaaSpaceWeather(null),
+    source: sanitizeShortText(raw.source || 'Snapshot', 48) || 'Snapshot',
+    updatedAt: sanitizeShortText(raw.updatedAt || '', 40),
+    gScale,
+    sScale,
+    rScale,
+    gForecast,
+    peakScale: Math.max(gScale, sScale, rScale, Math.floor(gForecast * 0.8)),
+    status: sanitizeShortText(raw.status || `Quiet (G${gScale})`, 64),
+    summary: sanitizeShortText(raw.summary || '', 240),
+    goldBoost: sanitizeBoundedNum(raw.goldBoost, 0, -0.25, 0.25),
+    silverBoost: sanitizeBoundedNum(raw.silverBoost, 0, -0.25, 0.25),
+    jumpBoost: sanitizeBoundedNum(raw.jumpBoost, 0, 0, 0.1),
+  };
+}
+
+function sanitizeTwinsFallback(raw) {
+  if (!isPlainObject(raw)) return null;
+  const matchPct = Number(raw.matchPct);
+  const avgReturnPct = Number(raw.avgReturnPct);
+  if (!Number.isFinite(matchPct) || !Number.isFinite(avgReturnPct)) return null;
+  return {
+    count: Math.round(sanitizeBoundedNum(raw.count, 1, 1, 50)),
+    matchPct: Math.round(clampNum(matchPct, 0, 100)),
+    avgReturnPct: +clampNum(avgReturnPct, -100, 100).toFixed(2),
+    upPct: Math.round(sanitizeBoundedNum(raw.upPct, 50, 0, 100)),
+    unitTilt: +sanitizeBoundedNum(raw.unitTilt, 0, -0.35, 0.35).toFixed(3),
+  };
+}
+
+function sanitizeOutlookPayload(raw) {
+  if (!isPlainObject(raw)) return FALLBACK_OUTLOOK;
+  const safe = { ...raw };
+  if (raw.spaceWeather) safe.spaceWeather = sanitizeSpaceWeatherFallback(raw.spaceWeather);
+  if (Array.isArray(raw.headlines)) {
+    safe.headlines = raw.headlines.slice(0, 120).map((h) => {
+      if (!isPlainObject(h)) return null;
+      return {
+        ...h,
+        title: sanitizeShortText(h.title || '', 240),
+        summary: sanitizeShortText(h.summary || '', 300),
+        source: sanitizeShortText(h.source || 'News', 80),
+        driverLabel: sanitizeShortText(h.driverLabel || 'Market', 48),
+        url: sanitizeHttpUrl(h.url) || '',
+      };
+    }).filter(Boolean);
+  }
+  for (const mKey of ['gold', 'silver']) {
+    if (isPlainObject(safe[mKey]?.horizon30d?.historicalTwins)) {
+      safe[mKey] = {
+        ...safe[mKey],
+        horizon30d: {
+          ...safe[mKey].horizon30d,
+          historicalTwins: sanitizeTwinsFallback(safe[mKey].horizon30d.historicalTwins),
+        },
+      };
+    }
+  }
+  return safe;
+}
+
 async function fetchOutlookData() {
   try {
-    outlookState.data = await fetchFreshRepoJson('outlook.json');
+    const raw = await fetchFreshRepoJson('outlook.json');
+    outlookState.data = sanitizeOutlookPayload(raw);
     if (!comexState.data && outlookState.data?.comex) {
       comexState.data = outlookState.data.comex;
     }
@@ -6530,8 +6688,9 @@ async function fetchOutlookData() {
   evaluateClientRegimeAlerts();
 }
 
-function clampNum(v, lo, hi) {
-  return Math.max(lo, Math.min(hi, v));
+function clampNum(v, lo, hi, fallback = lo) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
 }
 
 function signalFromScore(score) {
@@ -8125,7 +8284,7 @@ function renderAccuracyReplayChart(res) {
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
 
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   canvas.width = Math.round(rect.width * dpr);
   canvas.height = Math.round(rect.height * dpr);
   const ctx = canvas.getContext('2d');
@@ -8668,7 +8827,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=59', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=60', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -9718,7 +9877,7 @@ function render30DayForecastRoadmap(res) {
       const seas = r30.seasonality;
       const seasSign = seas.blendedPct > 0 ? '+' : seas.blendedPct < 0 ? '−' : '';
       const ll = r30.leadLag;
-      const tw = r30.historicalTwins;
+      const tw = sanitizeTwinsFallback(r30.historicalTwins);
       const twinTag = tw
         ? `<span class="fc30-alpha-tag">Past Twins (${tw.matchPct}% match): <strong>${tw.avgReturnPct >= 0 ? '+' : '−'}${Math.abs(tw.avgReturnPct).toFixed(1)}% avg</strong></span>`
         : '';
@@ -9852,7 +10011,7 @@ function renderWorldSpacePulse(res) {
   const wsp = res?.worldSpacePulse;
   if (!gridEl || !wsp) return;
 
-  const sw = wsp.spaceWeather || parseClientNoaaSpaceWeather(null);
+  const sw = sanitizeSpaceWeatherFallback(wsp.spaceWeather);
   if (badgeEl) {
     badgeEl.textContent = `${wsp.activityScore}/100 · ${wsp.regime}`;
     badgeEl.className = `signal-pill ${wsp.activityScore >= 68 ? 'bullish' : ''}`;
@@ -9874,7 +10033,7 @@ function renderWorldSpacePulse(res) {
     <article class="wsp-card ${swCls}">
       <span class="wsp-k">NOAA Space Weather</span>
       <strong class="wsp-v ${swValCls}">${escapeHtml(sw.status)}</strong>
-      <span class="wsp-sub">G${sw.gScale} Storm · R${sw.rScale} Radio · S${sw.sScale} Solar · 24h G${sw.gForecast}</span>
+      <span class="wsp-sub">G${Number(sw.gScale) || 0} Storm · R${Number(sw.rScale) || 0} Radio · S${Number(sw.sScale) || 0} Solar · 24h G${Number(sw.gForecast) || 0}</span>
     </article>
     <article class="wsp-card ${wsp.breakingCount > 0 ? 'active' : ''}">
       <span class="wsp-k">World News Velocity</span>
@@ -10958,7 +11117,7 @@ function renderInstitutionalPulse(outlookRes) {
       .map((ev) => {
         const dtLbl = new Date(`${ev.date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
         const eta = ev.daysUntil === 0 ? 'TODAY' : `${ev.daysUntil}d · ${dtLbl}`;
-        const catKey = ev.category || 'macro';
+        const catKey = typeof ev.category === 'string' && Object.hasOwn(catLabels, ev.category) ? ev.category : 'macro';
         const catLbl = catLabels[catKey] || 'Event';
         return `
           <div class="event-pill ${ev.daysUntil <= 3 ? 'imminent' : ''}">
@@ -11176,28 +11335,34 @@ function estimateClientJumpParams(metal, outlookRes, tradingDays = 21) {
 
 function runClientJumpDiffusion({ spot, horizonKey = '7d', paths = 1500, params, seed }) {
   const spec = MC_HORIZON_SPECS[horizonKey] || MC_HORIZON_SPECS['7d'];
-  const totalDays = spec.tradingDays;
-  const steps = spec.steps;
+  const safeSpot = Number.isFinite(Number(spot)) && Number(spot) > 0 ? Number(spot) : 100;
+  const safePaths = Math.round(clampNum(paths, 1, 5000, 1500));
+  const totalDays = clampNum(spec.tradingDays, 1, 4000, 5);
+  const steps = Math.round(clampNum(spec.steps, 1, 400, 10));
   const dt = totalDays / steps;
 
-  const rng = createMcRng(seed);
-  const { diffVol, dailyDrift, lambda, jumpMean, jumpSigma } = params;
+  const rng = createMcRng(Number.isFinite(Number(seed)) ? Number(seed) : 1);
+  const diffVol = clampNum(params?.diffVol, 0, 5, 0.01);
+  const dailyDrift = clampNum(params?.dailyDrift, -0.5, 0.5, 0);
+  const lambda = clampNum(params?.lambda, 0, 10, 0.05);
+  const jumpMean = clampNum(params?.jumpMean, -1, 1, 0);
+  const jumpSigma = clampNum(params?.jumpSigma, 0, 2, 0.02);
   const kappa = Math.exp(jumpMean + 0.5 * jumpSigma * jumpSigma) - 1;
   const driftStep = (dailyDrift - 0.5 * diffVol * diffVol - lambda * kappa) * dt;
   const stepDiffVol = diffVol * Math.sqrt(dt);
   const stepLambda = lambda * dt;
 
-  const terminalPrices = new Float64Array(paths);
-  const maxPrices = new Float64Array(paths);
-  const minPrices = new Float64Array(paths);
-  const stepBuckets = Array.from({ length: steps + 1 }, () => new Float64Array(paths));
+  const terminalPrices = new Float64Array(safePaths);
+  const maxPrices = new Float64Array(safePaths);
+  const minPrices = new Float64Array(safePaths);
+  const stepBuckets = Array.from({ length: steps + 1 }, () => new Float64Array(safePaths));
   const samplePaths = [];
   const sampleCount = 18;
 
-  for (let p = 0; p < paths; p++) {
-    let s = spot;
-    let hi = spot;
-    let lo = spot;
+  for (let p = 0; p < safePaths; p++) {
+    let s = safeSpot;
+    let hi = safeSpot;
+    let lo = safeSpot;
     stepBuckets[0][p] = s;
     const rec = p < sampleCount;
     const arr = rec ? [s] : null;
@@ -11207,10 +11372,11 @@ function runClientJumpDiffusion({ spot, horizonKey = '7d', paths = 1500, params,
       const nJumps = mcPoisson(stepLambda, rng);
       let jumpSum = 0;
       if (nJumps > 0) {
-        // Exact sum of nJumps i.i.d. Normal(jumpMean, jumpSigma^2) = Normal(n*jumpMean, n*jumpSigma^2)
+        // Exact sum of nJumps i.d.d. Normal(jumpMean, jumpSigma^2) = Normal(n*jumpMean, n*jumpSigma^2)
         jumpSum = nJumps * jumpMean + Math.sqrt(nJumps) * jumpSigma * mcNormal(rng);
       }
-      s = s * Math.exp(driftStep + stepDiffVol * z + jumpSum);
+      const logStep = clampNum(driftStep + stepDiffVol * z + jumpSum, -20, 20, 0);
+      s = Math.max(0.01, Math.min(1e9, s * Math.exp(logStep)));
       if (s > hi) hi = s;
       if (s < lo) lo = s;
       stepBuckets[st][p] = s;
@@ -11234,13 +11400,13 @@ function runClientJumpDiffusion({ spot, horizonKey = '7d', paths = 1500, params,
   }
 
   let higher = 0;
-  for (let p = 0; p < paths; p++) {
-    if (terminalPrices[p] > spot) higher++;
+  for (let p = 0; p < safePaths; p++) {
+    if (terminalPrices[p] > safeSpot) higher++;
   }
 
   return {
-    spot,
-    paths,
+    spot: safeSpot,
+    paths: safePaths,
     horizonKey,
     spec,
     steps,
@@ -11251,7 +11417,7 @@ function runClientJumpDiffusion({ spot, horizonKey = '7d', paths = 1500, params,
     p50: curves.p50[steps],
     p75: curves.p75[steps],
     p90: curves.p90[steps],
-    probFinishHigherPct: Math.round((higher / paths) * 100),
+    probFinishHigherPct: Math.round((higher / safePaths) * 100),
     curves,
     samplePaths,
     terminalPrices,
@@ -11302,7 +11468,7 @@ function drawMcPathsCanvas(sim, metal, targetOz) {
   if (!rect.width || !rect.height) return;
 
   const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   canvas.width = Math.round(rect.width * dpr);
   canvas.height = Math.round(rect.height * dpr);
   ctx.scale(dpr, dpr);
@@ -11515,7 +11681,7 @@ function getMcWorker() {
   if (mcWorkerBroken || typeof Worker === 'undefined') return null;
   if (mcWorker) return mcWorker;
   try {
-    mcWorker = new Worker('./mc_worker.js');
+    mcWorker = new Worker('./mc_worker.js?v=60');
     mcWorker.onerror = () => {
       mcWorkerBroken = true;
       mcWorker = null;
@@ -12030,7 +12196,7 @@ function renderStackGoalsAndWhatIf() {
       cls: '',
       pct,
       nums: hidden
-        ? `••• / ${gGoal.toFixed(2)} oz (${pct.toFixed(0)}%)`
+        ? `••• / ${gGoal.toFixed(2)} oz (••%)`
         : `${gOz.toFixed(2)} / ${gGoal.toFixed(2)} oz (${pct.toFixed(0)}%)${rem > 0 ? ` · ${rem.toFixed(2)} oz left` : ' · Reached! 🎉'}`,
     });
   }
@@ -12042,7 +12208,7 @@ function renderStackGoalsAndWhatIf() {
       cls: 'silver',
       pct,
       nums: hidden
-        ? `••• / ${sGoal.toFixed(0)} oz (${pct.toFixed(0)}%)`
+        ? `••• / ${sGoal.toFixed(0)} oz (••%)`
         : `${sOz.toFixed(1)} / ${sGoal.toFixed(0)} oz (${pct.toFixed(0)}%)${rem > 0 ? ` · ${rem.toFixed(1)} oz left` : ' · Reached! 🎉'}`,
     });
   }
@@ -12054,7 +12220,7 @@ function renderStackGoalsAndWhatIf() {
       cls: '',
       pct,
       nums: hidden
-        ? `${getCurrencySymbol()}••••• / ${formatMoney(targetValUsd, 0)} (${pct.toFixed(0)}%)`
+        ? `${getCurrencySymbol()}••••• / ${formatMoney(targetValUsd, 0)} (••%)`
         : `${formatMoney(totalValUsd, 0)} / ${formatMoney(targetValUsd, 0)} (${pct.toFixed(0)}%)${rem > 0 ? ` · ${formatMoney(rem, 0)} left` : ' · Reached! 🎉'}`,
     });
   }
@@ -12177,7 +12343,7 @@ function renderStackLots() {
       const cls = hidden ? '' : pnl > 0.01 ? 'up' : pnl < -0.01 ? 'down' : '';
       const badgeCls = isSilver ? 'silver' : 'gold';
       const sym = isSilver ? 'XAG' : 'XAU';
-      const notePart = lot.note ? ` · ${escapeHtml(lot.note)}` : '';
+      const notePart = lot.note && !hidden ? ` · ${escapeHtml(lot.note)}` : '';
       const ozLabel = hidden ? '••• oz' : `${oz.toFixed(isSilver ? 2 : 3)} oz`;
       const paidLine = hidden
         ? 'Cost hidden (Privacy Mode)'
@@ -12602,6 +12768,7 @@ function renderAll() {
 /* ---------- Navigation, Sub-Pages & Events ---------- */
 
 function applySubView(viewName, subName) {
+  if (typeof viewName !== 'string' || !Object.hasOwn(DEFAULT_SETTINGS.subViews, viewName)) return;
   const viewEl = document.getElementById(`view-${viewName}`);
   if (!viewEl) return;
   const fallback = DEFAULT_SETTINGS.subViews[viewName] || 'live';
@@ -12635,15 +12802,18 @@ function applyAllSubViews() {
 }
 
 function switchSubView(viewName, subName) {
+  if (typeof viewName !== 'string' || !Object.hasOwn(DEFAULT_SETTINGS.subViews, viewName)) return;
   applySubView(viewName, subName);
+  const safeSub = state.settings.subViews[viewName];
   savePersistedState();
 
   // If the user switched sub-pages from the floating bar while scrolled down, scroll cleanly to top
   if (typeof window !== 'undefined' && window.scrollY > 120) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+  const escSub = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(safeSub) : safeSub;
   const activeSubBtn = document.querySelector(
-    `#view-${viewName} .sub-nav .sub-tab-btn[data-sub-target="${subName}"]`
+    `#view-${viewName} .sub-nav .sub-tab-btn[data-sub-target="${escSub}"]`
   );
   activeSubBtn?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
 
@@ -12794,11 +12964,13 @@ function wireEvents() {
     });
   });
 
-  // Privacy Mode Toggle (hides header Melt value & Stack holdings across reloads)
+  // Privacy Mode Toggle (hides header Melt value, Stack holdings, chart avg-cost & ntfy snippet across reloads)
   document.getElementById('btn-privacy-toggle')?.addEventListener('click', () => {
     state.settings.privacyMode = !state.settings.privacyMode;
     applyPrivacyMode();
     renderStackTracker();
+    renderSettingsControls();
+    renderChart();
     savePersistedState();
   });
 
@@ -13166,12 +13338,17 @@ function wireEvents() {
     renderOutlook();
     savePersistedState();
   });
+  let newsSearchTimer = null;
   document.getElementById('news-search-input')?.addEventListener('input', (e) => {
-    state.newsSearchQuery = e.target.value || '';
+    state.newsSearchQuery = String(e.target.value || '').slice(0, 120);
     state.newsVisibleLimit = 25;
-    renderOutlook();
+    if (newsSearchTimer) clearTimeout(newsSearchTimer);
+    newsSearchTimer = setTimeout(() => {
+      renderOutlook();
+    }, 160);
   });
   document.getElementById('btn-news-search-clear')?.addEventListener('click', () => {
+    if (newsSearchTimer) clearTimeout(newsSearchTimer);
     state.newsSearchQuery = '';
     state.newsVisibleLimit = 25;
     const inp = document.getElementById('news-search-input');
@@ -13193,19 +13370,26 @@ function wireEvents() {
   document.getElementById('phys-grid')?.addEventListener('click', (e) => {
     const applyBtn = e.target.closest('[data-phys-apply]');
     const resetBtn = e.target.closest('[data-phys-reset]');
+    const ALLOWED_DEALER_KEYS = new Set(['goldStreetOz', 'silverStreetOz']);
     if (applyBtn) {
       const key = applyBtn.dataset.physApply;
+      if (!ALLOWED_DEALER_KEYS.has(key)) return;
       const inp = document.querySelector(`[data-phys-input="${key}"]`);
-      const val = Number(inp?.value);
+      const rawLocal = Number(inp?.value);
+      const fx = getFxRate() || 1;
+      const valUsd = rawLocal / fx;
+      const minUsd = key === 'silverStreetOz' ? 5 : 100;
+      const maxUsd = key === 'silverStreetOz' ? 1000 : 50000;
       if (!state.settings.dealerQuotes) state.settings.dealerQuotes = { goldStreetOz: null, silverStreetOz: null };
-      if (Number.isFinite(val) && val > 0) {
-        state.settings.dealerQuotes[key] = +val.toFixed(2);
+      if (Number.isFinite(valUsd) && valUsd >= minUsd && valUsd <= maxUsd) {
+        state.settings.dealerQuotes[key] = +valUsd.toFixed(2);
         savePersistedState();
         renderOutlook();
         renderChart();
       }
     } else if (resetBtn) {
       const key = resetBtn.dataset.physReset;
+      if (!ALLOWED_DEALER_KEYS.has(key)) return;
       if (!state.settings.dealerQuotes) state.settings.dealerQuotes = { goldStreetOz: null, silverStreetOz: null };
       state.settings.dealerQuotes[key] = null;
       savePersistedState();
@@ -13488,24 +13672,25 @@ function wireEvents() {
     if (banner) banner.hidden = true;
   });
 
-  // Threshold sliders & direction
+  // Threshold sliders & direction (strictly clamped against NaN / non-positive spam bypass)
   document.getElementById('input-gold-threshold')?.addEventListener('input', (e) => {
-    state.settings.goldThreshold = parseFloat(e.target.value);
+    state.settings.goldThreshold = sanitizeBoundedNum(e.target.value, DEFAULT_SETTINGS.goldThreshold, 0.25, 25);
     renderAll();
     savePersistedState();
   });
   document.getElementById('input-silver-threshold')?.addEventListener('input', (e) => {
-    state.settings.silverThreshold = parseFloat(e.target.value);
+    state.settings.silverThreshold = sanitizeBoundedNum(e.target.value, DEFAULT_SETTINGS.silverThreshold, 0.5, 40);
     renderAll();
     savePersistedState();
   });
   document.getElementById('input-sge-threshold')?.addEventListener('input', (e) => {
-    state.settings.shanghaiThreshold = parseFloat(e.target.value);
+    state.settings.shanghaiThreshold = sanitizeBoundedNum(e.target.value, DEFAULT_SETTINGS.shanghaiThreshold, 5, 500);
     renderSettingsControls();
     savePersistedState();
   });
   document.getElementById('select-direction')?.addEventListener('change', (e) => {
-    state.settings.direction = e.target.value;
+    const d = e.target.value;
+    state.settings.direction = d === 'up' || d === 'down' ? d : 'both';
     renderSettingsControls();
     savePersistedState();
   });
@@ -13518,42 +13703,79 @@ function wireEvents() {
     savePersistedState();
   });
 
-  // ntfy topic input
+  // ntfy topic input, visibility toggle & 128-bit cryptographically random topic generator
   document.getElementById('input-ntfy-topic')?.addEventListener('input', (e) => {
-    state.settings.ntfyTopic = e.target.value.trim();
+    const raw = e.target.value.trim();
+    state.settings.ntfyTopic = sanitizeNtfyTopic(raw) || (raw === '' ? '' : state.settings.ntfyTopic);
+    const fb = document.getElementById('ntfy-feedback');
+    if (fb) {
+      if (raw && !sanitizeNtfyTopic(raw)) {
+        fb.textContent = 'Invalid channel characters — use letters, numbers, dashes, or underscores only.';
+      } else if (raw && raw.length < 16) {
+        fb.textContent = 'Tip: Short public ntfy channels can be guessed — tap "Generate Private Channel" for a strong 128-bit name.';
+      } else {
+        fb.textContent = '';
+      }
+    }
+    renderSettingsControls();
+    savePersistedState();
+  });
+  document.getElementById('btn-toggle-ntfy-visibility')?.addEventListener('click', () => {
+    const inp = document.getElementById('input-ntfy-topic');
+    const btn = document.getElementById('btn-toggle-ntfy-visibility');
+    if (!inp || !btn) return;
+    const isHidden = inp.type === 'password';
+    inp.type = isHidden ? 'text' : 'password';
+    btn.textContent = isHidden ? 'Hide Channel' : 'Show Channel';
+  });
+  document.getElementById('btn-gen-ntfy-topic')?.addEventListener('click', () => {
+    const bytes = new Uint8Array(16);
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const topic = `bp-${hex.slice(0, 24)}`;
+    state.settings.ntfyTopic = topic;
+    const inp = document.getElementById('input-ntfy-topic');
+    if (inp) inp.value = topic;
+    const fb = document.getElementById('ntfy-feedback');
+    if (fb) fb.textContent = 'Generated strong private channel! Subscribe to this exact name in the ntfy app.';
     renderSettingsControls();
     savePersistedState();
   });
 
   // Private My Bullion Stack inputs (stored 100% locally)
   const stackInputs = [
-    ['input-stack-gold-oz', 'goldOz'],
-    ['input-stack-gold-cost', 'goldCost'],
-    ['input-stack-silver-oz', 'silverOz'],
-    ['input-stack-silver-cost', 'silverCost'],
-    ['input-stack-gold-spread', 'goldSpreadPct'],
-    ['input-stack-silver-spread', 'silverSpreadPct'],
+    ['input-stack-gold-oz', 'goldOz', 0, 1e6],
+    ['input-stack-gold-cost', 'goldCost', 0, 1e7],
+    ['input-stack-silver-oz', 'silverOz', 0, 1e7],
+    ['input-stack-silver-cost', 'silverCost', 0, 1e6],
+    ['input-stack-gold-spread', 'goldSpreadPct', -50, 50],
+    ['input-stack-silver-spread', 'silverSpreadPct', -50, 50],
   ];
-  stackInputs.forEach(([id, key]) => {
+  stackInputs.forEach(([id, key, lo, hi]) => {
     document.getElementById(id)?.addEventListener('input', (e) => {
       if (!state.settings.stack) state.settings.stack = { ...DEFAULT_SETTINGS.stack };
-      state.settings.stack[key] = e.target.value.trim();
+      const raw = e.target.value.trim();
+      state.settings.stack[key] = raw === '' ? '' : sanitizeNumInputStr(raw, lo, hi);
       renderStackTracker();
       savePersistedState();
     });
   });
 
-  // Purchase Lot Ledger: Add & Remove lots
+  // Purchase Lot Ledger: Add & Remove lots (bounded & dated for My Buys chart plotting)
   document.getElementById('form-add-lot')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const metal = document.getElementById('lot-metal')?.value === 'silver' ? 'silver' : 'gold';
-    const form = document.getElementById('lot-form')?.value || 'Coin / Eagle';
+    const form = sanitizeShortText(document.getElementById('lot-form')?.value || 'Coin / Eagle', 60) || 'Coin / Eagle';
     const ozEl = document.getElementById('lot-oz');
     const costEl = document.getElementById('lot-cost');
     const noteEl = document.getElementById('lot-note');
     const oz = parseFloat(ozEl?.value);
     const cost = parseFloat(costEl?.value);
-    if (!Number.isFinite(oz) || oz <= 0 || !Number.isFinite(cost) || cost <= 0) return;
+    if (!Number.isFinite(oz) || oz <= 0 || oz > 1e6 || !Number.isFinite(cost) || cost <= 0 || cost > 1e7) return;
     if (!Array.isArray(state.settings.stackLots)) state.settings.stackLots = [];
     state.settings.stackLots.unshift({
       id: `lot_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
@@ -13561,8 +13783,8 @@ function wireEvents() {
       form,
       oz: +oz.toFixed(4),
       cost: +cost.toFixed(2),
-      note: (noteEl?.value || '').trim().slice(0, 40),
-      createdAt: new Date().toISOString(),
+      note: sanitizeShortText(noteEl?.value || '', 40),
+      date: new Date().toISOString().slice(0, 10),
     });
     state.settings.stackLots = state.settings.stackLots.slice(0, 100);
     if (ozEl) ozEl.value = '';
@@ -13735,24 +13957,25 @@ function wireEvents() {
   });
   document.getElementById('select-quiet-start')?.addEventListener('change', (e) => {
     if (!state.settings.quietHours) state.settings.quietHours = { ...DEFAULT_SETTINGS.quietHours };
-    state.settings.quietHours.start = parseInt(e.target.value, 10);
+    state.settings.quietHours.start = Math.round(sanitizeBoundedNum(e.target.value, DEFAULT_SETTINGS.quietHours.start, 0, 23));
     renderSettingsControls();
     savePersistedState();
   });
   document.getElementById('select-quiet-end')?.addEventListener('change', (e) => {
     if (!state.settings.quietHours) state.settings.quietHours = { ...DEFAULT_SETTINGS.quietHours };
-    state.settings.quietHours.end = parseInt(e.target.value, 10);
+    state.settings.quietHours.end = Math.round(sanitizeBoundedNum(e.target.value, DEFAULT_SETTINGS.quietHours.end, 0, 23));
     renderSettingsControls();
     savePersistedState();
   });
 
-  // Export & Import JSON Backup (protects Stack, Lots & Custom Alerts from cache clears)
+  // Export & Import JSON Backup (excludes secret ntfyTopic by default so backup files never leak private alert channels)
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
+    const exportedSettings = { ...sanitizePersistedSettings(state.settings), ntfyTopic: '' };
     const payload = {
       app: 'Bullion Pulse',
-      version: 59,
+      version: 60,
       exportedAt: new Date().toISOString(),
-      settings: state.settings,
+      settings: exportedSettings,
       alertLog: state.alertLog.slice(0, 25),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -13779,9 +14002,11 @@ function wireEvents() {
       }
       const parsed = JSON.parse(await file.text());
       if (isPlainObject(parsed) && isPlainObject(parsed.settings)) {
+        const preservedTopic = state.settings.ntfyTopic || sanitizeNtfyTopic(parsed.settings.ntfyTopic || '');
         state.settings = sanitizePersistedSettings({
           ...state.settings,
           ...parsed.settings,
+          ntfyTopic: preservedTopic,
           subViews: state.settings.subViews,
         });
         if (Array.isArray(parsed.alertLog)) {
@@ -13996,11 +14221,15 @@ function wireEvents() {
     }
   });
 
-  // Resize & visibility battery optimization
+  // Debounced resize & visibility battery optimization
+  let appResizeTimer = null;
   window.addEventListener('resize', () => {
-    renderChart();
-    renderAccuracyReplayChart(computeInteractiveOutlook());
-    if (mcState.lastSim) renderMcTargetReadout();
+    if (appResizeTimer) clearTimeout(appResizeTimer);
+    appResizeTimer = setTimeout(() => {
+      renderChart();
+      renderAccuracyReplayChart(computeInteractiveOutlook());
+      if (mcState.lastSim) renderMcTargetReadout();
+    }, 120);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -14069,8 +14298,10 @@ function registerServiceWorker() {
 
 /* ---------- Boot ---------- */
 
-/* ---------- Modular Intelligence Bridge for intel.js ---------- */
-window.__BP_BRIDGE = {
+/* ---------- Modular Intelligence Bridge for intel.js (Frozen Facade) ---------- */
+Object.freeze(CURRENCY_META);
+Object.freeze(FALLBACK_OUTLOOK);
+window.__BP_BRIDGE = Object.freeze({
   state,
   outlookState,
   FALLBACK_OUTLOOK,
@@ -14102,7 +14333,34 @@ window.__BP_BRIDGE = {
   renderBuyLadder,
   renderDealGrader,
   renderStackTracker,
-};
+});
+
+// Defensive clickjacking / framing protection for static GitHub Pages hosting
+(function guardAgainstCrossOriginFraming() {
+  try {
+    if (typeof window !== 'undefined' && window.self !== window.top) {
+      const shell = document.querySelector('.app-shell');
+      if (shell) {
+        shell.hidden = true;
+        const notice = document.createElement('div');
+        notice.style.cssText = 'padding:32px;text-align:center;font-family:Inter,sans-serif;color:#f3f4f6;';
+        const p = document.createElement('p');
+        p.textContent = 'Bullion Pulse cannot run inside an embedded frame for your security.';
+        const btn = document.createElement('a');
+        btn.href = window.location.href;
+        btn.target = '_top';
+        btn.rel = 'noopener noreferrer';
+        btn.textContent = 'Open Bullion Pulse directly';
+        btn.style.cssText = 'display:inline-block;margin-top:12px;padding:10px 18px;border-radius:10px;background:#d4a843;color:#0d0e11;font-weight:700;text-decoration:none;';
+        notice.appendChild(p);
+        notice.appendChild(btn);
+        document.body.appendChild(notice);
+      }
+    }
+  } catch {
+    // Cross-origin frame access error confirms embedded frame
+  }
+})();
 
 function initFloatingSubNav() {
   const topBar = document.querySelector('.top-bar');

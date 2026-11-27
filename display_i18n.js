@@ -84,12 +84,17 @@
     { code: 'hi', short: 'हिन्दी', native: 'हिन्दी', label: 'हिन्दी · Hindi' },
   ];
 
-  // WeakMaps track original English & last rendered string on EVERY text node and placeholder
-  // so chained switches (th -> lo -> es -> zh -> ja -> hi -> en) are 100% lossless
+  // WeakMaps track original English, last rendered string, and rendered language on EVERY text node
+  // so chained switches (th -> lo -> es -> zh -> ja -> hi -> en) are 100% lossless & O(1) on unchanged nodes
   const origTextMap = new WeakMap();
   const renderedTextMap = new WeakMap();
+  const renderedLangMap = new WeakMap();
   const origPhMap = new WeakMap();
   const renderedPhMap = new WeakMap();
+  const renderedPhLangMap = new WeakMap();
+  const i18nCache = new Map();
+  const MAX_I18N_CACHE = 1000;
+  const MAX_I18N_PATTERN_LEN = 320;
 
   /* ---------- State & Helpers ---------- */
 
@@ -183,7 +188,7 @@
   function syncThemeUi() {
     const b = B();
     const cur = b?.state?.settings?.theme || 'dark';
-    const metaTheme = THEME_MAP[cur] || THEME_MAP.dark;
+    const metaTheme = Object.hasOwn(THEME_MAP, cur) ? THEME_MAP[cur] : THEME_MAP.dark;
     const metaEl = document.getElementById('meta-theme-color');
     if (metaEl) metaEl.setAttribute('content', metaTheme.metaColor);
 
@@ -202,7 +207,7 @@
 
   function selectTheme(themeId, announce = false) {
     const b = B();
-    if (!b || !THEME_MAP[themeId]) return;
+    if (!b || !Object.hasOwn(THEME_MAP, themeId)) return;
     b.applyTheme(themeId);
     b.savePersistedState();
     syncThemeUi();
@@ -230,25 +235,46 @@
     const packs = window.__BP_I18N_PACKS;
     if (!packs) return raw;
 
-    const leadMatch = raw.match(/^\s*/);
-    const trailMatch = raw.match(/\s*$/);
-    const lead = leadMatch ? leadMatch[0] : '';
-    const trail = trailMatch ? trailMatch[0] : '';
-    const norm = raw.replace(/\s+/g, ' ').trim();
+    // Linear O(N) leading/trailing whitespace extraction (avoids unanchored /\s*$/ backtracking)
+    const trimmedStart = raw.trimStart();
+    if (!trimmedStart) return raw;
+    const lead = raw.slice(0, raw.length - trimmedStart.length);
+    const trimmed = trimmedStart.trimEnd();
+    const trail = trimmedStart.slice(trimmed.length);
+    const norm = trimmed.replace(/\s+/g, ' ');
     if (!norm || PURE_NUM_RE.test(norm)) return raw;
 
-    const exact = packs.EXACT?.[norm]?.[lang];
-    if (exact) return `${lead}${exact}${trail}`;
+    const cacheKey = `${lang}\u0000${norm}`;
+    if (i18nCache.has(cacheKey)) {
+      const hit = i18nCache.get(cacheKey);
+      return hit === null ? raw : `${lead}${hit}${trail}`;
+    }
 
-    const patterns = packs.PATTERNS || [];
-    for (let i = 0; i < patterns.length; i++) {
-      const [re, fn] = patterns[i];
-      const m = norm.match(re);
-      if (m) {
-        const out = fn(m, lang);
-        if (out) return `${lead}${out}${trail}`;
+    const exact = Object.hasOwn(packs.EXACT || {}, norm) ? packs.EXACT[norm]?.[lang] : null;
+    if (exact) {
+      if (i18nCache.size >= MAX_I18N_CACHE) i18nCache.delete(i18nCache.keys().next().value);
+      i18nCache.set(cacheKey, exact);
+      return `${lead}${exact}${trail}`;
+    }
+
+    // Bound pattern scanning length to prevent client-side ReDoS on long external text
+    if (norm.length <= MAX_I18N_PATTERN_LEN) {
+      const patterns = packs.PATTERNS || [];
+      for (let i = 0; i < patterns.length; i++) {
+        const [re, fn] = patterns[i];
+        const m = norm.match(re);
+        if (m) {
+          const out = fn(m, lang);
+          if (out) {
+            if (i18nCache.size >= MAX_I18N_CACHE) i18nCache.delete(i18nCache.keys().next().value);
+            i18nCache.set(cacheKey, out);
+            return `${lead}${out}${trail}`;
+          }
+        }
       }
     }
+    if (i18nCache.size >= MAX_I18N_CACHE) i18nCache.delete(i18nCache.keys().next().value);
+    i18nCache.set(cacheKey, null);
     return raw;
   }
 
@@ -270,7 +296,7 @@
       const root = document.querySelector('.app-shell') || document.body;
       if (!root) return;
 
-      // 1. Walk EVERY visible text node in the entire app
+      // 1. Walk visible text nodes (O(1) fast-path skip for unchanged already-translated nodes)
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walker.nextNode())) {
@@ -281,8 +307,11 @@
         if (!origTextMap.has(node)) {
           origTextMap.set(node, currentText);
           renderedTextMap.set(node, currentText);
+          renderedLangMap.set(node, 'en');
         } else {
           const prevRendered = renderedTextMap.get(node);
+          const prevLang = renderedLangMap.get(node);
+          if (currentText === prevRendered && prevLang === lang) continue;
           const prevOrig = origTextMap.get(node);
           if (currentText !== prevRendered && currentText !== prevOrig) {
             origTextMap.set(node, currentText);
@@ -291,29 +320,38 @@
         const orig = origTextMap.get(node);
         const nextText = lang === 'en' ? orig : translateString(orig, lang);
         renderedTextMap.set(node, nextText);
+        renderedLangMap.set(node, lang);
         if (nextText !== currentText) {
           node.nodeValue = nextText;
         }
       }
 
-      // 2. Also translate input placeholders across all forms
+      // 2. Translate input placeholders across all forms
       root.querySelectorAll('input[placeholder], textarea[placeholder]').forEach((el) => {
         const curPh = el.getAttribute('placeholder') || '';
         if (!curPh.trim()) return;
         if (!origPhMap.has(el)) {
           origPhMap.set(el, curPh);
           renderedPhMap.set(el, curPh);
+          renderedPhLangMap.set(el, 'en');
         } else {
           const prevR = renderedPhMap.get(el);
+          const prevL = renderedPhLangMap.get(el);
+          if (curPh === prevR && prevL === lang) return;
           const prevO = origPhMap.get(el);
           if (curPh !== prevR && curPh !== prevO) origPhMap.set(el, curPh);
         }
         const orig = origPhMap.get(el);
         const nextPh = lang === 'en' ? orig : translateString(orig, lang);
         renderedPhMap.set(el, nextPh);
+        renderedPhLangMap.set(el, lang);
         if (nextPh !== curPh) el.setAttribute('placeholder', nextPh);
       });
     } finally {
+      // Flush self-inflicted mutation records BEFORE clearing guard to prevent double-sweep loops
+      if (ui.observer && typeof ui.observer.takeRecords === 'function') {
+        ui.observer.takeRecords();
+      }
       ui.isApplyingI18n = false;
     }
   }

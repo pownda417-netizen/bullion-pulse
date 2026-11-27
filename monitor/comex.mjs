@@ -12,6 +12,13 @@
  * OI-vs-price flow signal, and Jump-Diffusion squeeze/tail-risk boost.
  */
 
+import {
+  readResponseBufferWithLimit,
+  readResponseJsonWithLimit,
+  readResponseTextWithLimit,
+  safeFetch,
+} from './net_security.mjs';
+
 const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) BullionPulseComex/1.0';
 
@@ -152,13 +159,21 @@ export function parseVaultHtml(html, metal) {
   let registered30dPct = null;
   if (pctMatch) {
     const mag = parseFloat(pctMatch[1]);
-    const isDrop = /declined|fell|dropped/i.test(pctMatch[0]);
-    registered30dPct = isDrop ? -mag : mag;
+    if (Number.isFinite(mag) && mag <= 100) {
+      const isDrop = /declined|fell|dropped/i.test(pctMatch[0]);
+      registered30dPct = isDrop ? -mag : mag;
+    }
   }
+
+  const maxElig = metal === 'silver' ? 1_000_000_000 : 200_000_000;
+  const safeEligible =
+    eligibleOz && eligibleOz > 0 && eligibleOz <= maxElig
+      ? eligibleOz
+      : Math.round(registeredOz * (metal === 'silver' ? 2.2 : 0.65));
 
   return {
     registeredOz,
-    eligibleOz: eligibleOz || Math.round(registeredOz * (metal === 'silver' ? 2.2 : 0.65)),
+    eligibleOz: safeEligible,
     registered30dPct,
     vaultSource: 'Public COMEX Mirror',
   };
@@ -339,12 +354,13 @@ async function fetchCftcMetalOi(metal) {
   const url =
     `https://publicreporting.cftc.gov/resource/72hh-3qpy.json` +
     `?cftc_contract_market_code=${code}&$order=report_date_as_yyyy_mm_dd%20DESC&$limit=52`;
-  const res = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
-    signal: AbortSignal.timeout(12000),
-  });
+  const res = await safeFetch(
+    url,
+    { headers: { 'User-Agent': USER_AGENT } },
+    { timeoutMs: 12000, maxRedirects: 0, allowedHosts: ['publicreporting.cftc.gov'] }
+  );
   if (!res.ok) throw new Error(`CFTC OI ${metal} HTTP ${res.status}`);
-  return parseCftcOpenInterest(await res.json(), metal);
+  return parseCftcOpenInterest(await readResponseJsonWithLimit(res, 1024 * 1024), metal);
 }
 
 async function fetchVaultMirror(metal) {
@@ -353,12 +369,13 @@ async function fetchVaultMirror(metal) {
       ? 'https://www.cmegroup.com/delivery_reports/Gold_Stocks.xls'
       : 'https://www.cmegroup.com/delivery_reports/Silver_stocks.xls';
   try {
-    const res = await fetch(cmeUrl, {
-      headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.ms-excel,*/*' },
-      signal: AbortSignal.timeout(15000),
-    });
+    const res = await safeFetch(
+      cmeUrl,
+      { headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.ms-excel,*/*' } },
+      { timeoutMs: 15000, maxRedirects: 2, allowedHosts: ['www.cmegroup.com', 'cmegroup.com'] }
+    );
     if (res.ok) {
-      const parsed = parseCmeStocksBuffer(await res.arrayBuffer(), metal);
+      const parsed = parseCmeStocksBuffer(await readResponseBufferWithLimit(res, 5 * 1024 * 1024), metal);
       if (parsed) return parsed;
     }
   } catch {
@@ -372,12 +389,14 @@ async function fetchVaultMirror(metal) {
 
   for (const url of urls) {
     try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': USER_AGENT },
-        signal: AbortSignal.timeout(12000),
-      });
+      const host = new URL(url).hostname;
+      const res = await safeFetch(
+        url,
+        { headers: { 'User-Agent': USER_AGENT } },
+        { timeoutMs: 12000, maxRedirects: 2, allowedHosts: [host, `www.${host}`] }
+      );
       if (!res.ok) continue;
-      const parsed = parseVaultHtml(await res.text(), metal);
+      const parsed = parseVaultHtml(await readResponseTextWithLimit(res, 2 * 1024 * 1024), metal);
       if (parsed) return parsed;
     } catch {
       // Try next mirror

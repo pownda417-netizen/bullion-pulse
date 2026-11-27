@@ -1,11 +1,11 @@
 {
+  "id": "./",
   "name": "Bullion Pulse — Gold & Silver Tracker",
   "short_name": "Bullion Pulse",
   "description": "Live spot Gold (XAU) and Silver (XAG) tracker with big daily move alerts via ntfy.sh.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#0D0E11",
   "theme_color": "#0D0E11",
   "categories": ["finance", "utilities"],
@@ -14,13 +14,25 @@
       "src": "./icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "./icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

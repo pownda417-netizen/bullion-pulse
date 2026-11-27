@@ -850,17 +850,23 @@ export function buildSeededLearnedState() {
 export function parseGoldApiCloses(xauJson, xagJson) {
   const gold = Number(xauJson?.price);
   const silver = Number(xagJson?.price);
-  if (!Number.isFinite(gold) || gold <= 0 || !Number.isFinite(silver) || silver <= 0) {
+  if (!Number.isFinite(gold) || gold < 500 || gold > 50000 || !Number.isFinite(silver) || silver < 5 || silver > 2000) {
     throw new Error('Invalid gold-api.com close payload');
   }
   return { gold: +gold.toFixed(2), silver: +silver.toFixed(2), source: 'gold-api.com' };
 }
 
 export async function fetchSettledCloses(fetchImpl = fetch) {
+  const reqOpts = (headers) => ({
+    headers,
+    redirect: 'error',
+    signal: AbortSignal.timeout(12000),
+  });
   try {
-    const res = await fetchImpl('https://data-asg.goldprice.org/dbXRates/USD', {
-      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-    });
+    const res = await fetchImpl('https://data-asg.goldprice.org/dbXRates/USD', reqOpts({
+      'User-Agent': USER_AGENT,
+      Accept: 'application/json',
+    }));
     if (res.ok) {
       const parsed = parseGoldPriceOrg(await res.json());
       if (parsed.gold?.price && parsed.silver?.price) {
@@ -872,12 +878,14 @@ export async function fetchSettledCloses(fetchImpl = fetch) {
   }
   try {
     const [xauRes, xagRes] = await Promise.all([
-      fetchImpl('https://api.gold-api.com/price/XAU', {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-      }),
-      fetchImpl('https://api.gold-api.com/price/XAG', {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-      }),
+      fetchImpl('https://api.gold-api.com/price/XAU', reqOpts({
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      })),
+      fetchImpl('https://api.gold-api.com/price/XAG', reqOpts({
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      })),
     ]);
     if (xauRes.ok && xagRes.ok) {
       const [xauJson, xagJson] = await Promise.all([xauRes.json(), xagRes.json()]);
@@ -886,18 +894,18 @@ export async function fetchSettledCloses(fetchImpl = fetch) {
   } catch {
     // Fall back to Yahoo Futures settled close
   }
-  const fetchLast = async (sym) => {
+  const fetchLast = async (sym, minP, maxP) => {
     const res = await fetchImpl(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=5d&interval=1d`,
-      { headers: { 'User-Agent': USER_AGENT } }
+      reqOpts({ 'User-Agent': USER_AGENT })
     );
     if (!res.ok) throw new Error(`Yahoo ${sym} HTTP ${res.status}`);
     const closes = (await res.json())?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
-    const valid = closes.filter((v) => typeof v === 'number' && Number.isFinite(v));
-    if (!valid.length) throw new Error(`No closes for ${sym}`);
+    const valid = closes.filter((v) => typeof v === 'number' && Number.isFinite(v) && v >= minP && v <= maxP);
+    if (!valid.length) throw new Error(`No valid closes for ${sym}`);
     return valid[valid.length - 1];
   };
-  const [gold, silver] = await Promise.all([fetchLast('GC=F'), fetchLast('SI=F')]);
+  const [gold, silver] = await Promise.all([fetchLast('GC=F', 500, 50000), fetchLast('SI=F', 5, 2000)]);
   return { gold, silver, source: 'yahoo-futures' };
 }
 

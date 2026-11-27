@@ -80,17 +80,40 @@ export const PRIVATE_AI_SPACE_LABS = [
   { id: 'mistral', name: 'Mistral EU', rx: /\b(mistral)\b/i },
 ];
 
-const BULL_AI_CAPEX_PATTERNS = [
-  /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries|raise.*capex|invest|order|deal)/i,
-  /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b.*\b(solid[- ]?state|megawatt|gigawatt|deliveries|sales surge|sales jump|record|expand|billion|boom|buildout|invest|ramp|factory|surge)/i,
-  /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b.*\b(hbm|switchgear|transformer|power grid|solid[- ]?state|gigawatt|megawatt|chip plant|wire bonding|billion|expand|buildout|surge|record|invest|order|deal)/i,
-  /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding|solid[- ]?state battery)\b.*\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
-  /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|samsung|toyota|ev demand)\b.*\b(surge|boom|jump|rise|demand|boost|tight|shortage|deficit)/i,
+// Linear-time predicate pairs (avoids multi-.* polynomial/cubic ReDoS backtracking)
+const BULL_AI_CAPEX_PREDICATES = [
+  [
+    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b/i,
+    /\b(gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries|raise(?:s|d|ing)?\s+(?:\w+\s+){0,3}capex|invest|order|deal)/i,
+  ],
+  [
+    /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b/i,
+    /\b(solid[- ]?state|megawatt|gigawatt|deliveries|sales surge|sales jump|record|expand|billion|boom|buildout|invest|ramp|factory|surge)/i,
+  ],
+  [
+    /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b/i,
+    /\b(hbm|switchgear|transformer|power grid|solid[- ]?state|gigawatt|megawatt|chip plant|wire bonding|billion|expand|buildout|surge|record|invest|order|deal)/i,
+  ],
+  [
+    /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding|solid[- ]?state battery)\b/i,
+    /\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
+  ],
+  [
+    /\b(silver|gold)\b/i,
+    /\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|samsung|toyota|ev demand)\b/i,
+    /\b(surge|boom|jump|rise|demand|boost|tight|shortage|deficit)/i,
+  ],
 ];
 
-const BEAR_AI_CAPEX_PATTERNS = [
-  /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|sales fall|ev slump)/i,
-  /\b(ai data center|ai capex|ai chip|server demand|ev sales)\b.*\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble|slump)/i,
+const BEAR_AI_CAPEX_PREDICATES = [
+  [
+    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai infrastructure)\b/i,
+    /\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|sales fall|ev slump)/i,
+  ],
+  [
+    /\b(ai data center|ai capex|ai chip|server demand|ev sales)\b/i,
+    /\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble|slump)/i,
+  ],
 ];
 
 function pctChange(arr, lookback) {
@@ -117,9 +140,9 @@ function summarizeBasket(metaList, series = {}, fallbackSnapshot = null) {
 
     if (p5 == null && fallbackSnapshot?.[m.key]) {
       const fb = fallbackSnapshot[m.key];
-      if (Number.isFinite(Number(fb.pct5d))) p5 = Number(fb.pct5d);
-      if (Number.isFinite(Number(fb.pct20d))) p20 = Number(fb.pct20d);
-      if (Number.isFinite(Number(fb.price))) price = Number(fb.price);
+      if (fb.pct5d != null && fb.pct5d !== '' && Number.isFinite(Number(fb.pct5d))) p5 = Number(fb.pct5d);
+      if (fb.pct20d != null && fb.pct20d !== '' && Number.isFinite(Number(fb.pct20d))) p20 = Number(fb.pct20d);
+      if (fb.price != null && fb.price !== '' && Number.isFinite(Number(fb.price))) price = Number(fb.price);
     }
 
     if (p5 != null) {
@@ -161,14 +184,14 @@ export function scoreAiDatacenterHeadlines(headlines = []) {
   const labMentions = {};
   for (const lab of PRIVATE_AI_SPACE_LABS) labMentions[lab.id] = 0;
 
-  for (const h of headlines || []) {
-    const text = `${h?.title || ''} ${h?.summary || ''}`.trim();
+  for (const h of (headlines || []).slice(0, 150)) {
+    const text = `${h?.title || ''} ${h?.summary || ''}`.trim().slice(0, 600);
     if (!text) continue;
     for (const lab of PRIVATE_AI_SPACE_LABS) {
       if (lab.rx.test(text)) labMentions[lab.id]++;
     }
-    const isBear = BEAR_AI_CAPEX_PATTERNS.some((rx) => rx.test(text));
-    const isBull = BULL_AI_CAPEX_PATTERNS.some((rx) => rx.test(text));
+    const isBear = BEAR_AI_CAPEX_PREDICATES.some((group) => group.every((rx) => rx.test(text)));
+    const isBull = BULL_AI_CAPEX_PREDICATES.some((group) => group.every((rx) => rx.test(text)));
     if (isBull && !isBear) {
       bullHits++;
       if (matchedTitles.length < 4 && h?.title) matchedTitles.push(h.title);
@@ -206,7 +229,7 @@ export function computeAiDatacenterSignal({
   const news = scoreAiDatacenterHeadlines(headlines);
 
   const cu5 =
-    Number.isFinite(Number(copper5dPct))
+    copper5dPct != null && copper5dPct !== '' && Number.isFinite(Number(copper5dPct))
       ? Number(copper5dPct)
       : (pctChange(series?.copper, 5) ?? 0);
 

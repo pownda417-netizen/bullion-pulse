@@ -6,21 +6,27 @@ on:
     - cron: '0 13 * * 1-5'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: bullion-pulse-morning-digest
+  cancel-in-progress: false
 
 jobs:
   morning-digest:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.MORNING_DIGEST == 'true' }}
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
@@ -33,10 +39,6 @@ jobs:
           APP_URL: ${{ vars.APP_URL }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "$EVENT_NAME" != "workflow_dispatch" ] && [ "$MORNING_DIGEST" != "true" ]; then
-            echo "MORNING_DIGEST variable is not set to 'true' — skipping scheduled morning brief."
-            exit 0
-          fi
           if [ -z "$NTFY_TOPIC" ]; then
             echo "NTFY_TOPIC secret is not configured yet — running dry-run morning brief."
             node monitor/check_metals.mjs --digest --dry-run

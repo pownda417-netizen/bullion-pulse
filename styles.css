@@ -7851,3 +7851,9 @@ body.pixel-shift-on .bottom-nav > * {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* Privacy Mode input veiling — keeps holdings/goals private until actively focused */
+body.privacy-mode #view-stack input[type="number"]:not(:focus) {
+  filter: blur(6px);
+  transition: filter 0.15s ease;
+}

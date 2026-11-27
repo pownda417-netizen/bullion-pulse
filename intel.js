@@ -23,8 +23,9 @@
     return window.__BP_BRIDGE || null;
   }
 
-  function clamp(v, lo, hi) {
-    return Math.max(lo, Math.min(hi, v));
+  function clamp(v, lo, hi, fallback = lo) {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
   }
 
   function isLight() {
@@ -720,9 +721,9 @@
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    canvas.width = Math.min(4096, Math.max(1, Math.round(rect.width * dpr)));
+    canvas.height = Math.min(4096, Math.max(1, Math.round(rect.height * dpr)));
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
     const w = rect.width;
@@ -856,6 +857,11 @@
   /* ---------- #50 100-Year Gold-to-Dow & Gold-to-Housing Cycle Gauges ---------- */
 
   function buildSemiGaugeSvg(pct, valLabel, subLabel, color) {
+    const b = B();
+    const esc = (s) => (b?.escapeHtml ? b.escapeHtml(s) : String(s ?? '').replace(/[&<>"']/g, ''));
+    const safeVal = esc(valLabel);
+    const safeSub = esc(subLabel);
+    const safeCol = /^#[0-9a-fA-F]{3,8}$/.test(String(color || '')) ? color : '#D4A843';
     const p = clamp(pct, 0, 100);
     const rad = Math.PI * (1 - p / 100);
     const nx = 90 + Math.cos(rad) * 58;
@@ -864,15 +870,15 @@
     const txtCol = isLight() ? '#14161B' : '#F3F4F6';
     const subCol = isLight() ? '#5A6270' : '#9AA3B2';
     return `
-      <svg viewBox="0 0 180 105" class="semi-gauge-svg" role="img" aria-label="${valLabel}">
+      <svg viewBox="0 0 180 105" class="semi-gauge-svg" role="img" aria-label="${safeVal}">
         <path d="M 22 88 A 68 68 0 0 1 158 88" fill="none" stroke="${trackCol}" stroke-width="11" stroke-linecap="round" />
         <path d="M 22 88 A 68 68 0 0 1 62 28" fill="none" stroke="rgba(34,197,94,0.55)" stroke-width="11" stroke-linecap="round" />
         <path d="M 62 28 A 68 68 0 0 1 118 28" fill="none" stroke="rgba(212,168,67,0.55)" stroke-width="11" />
         <path d="M 118 28 A 68 68 0 0 1 158 88" fill="none" stroke="rgba(239,68,68,0.55)" stroke-width="11" stroke-linecap="round" />
-        <line x1="90" y1="88" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${color}" stroke-width="2.6" stroke-linecap="round" />
-        <circle cx="90" cy="88" r="4.5" fill="${color}" />
-        <text x="90" y="72" text-anchor="middle" fill="${txtCol}" font-size="16" font-weight="700" font-family="JetBrains Mono, monospace">${valLabel}</text>
-        <text x="90" y="102" text-anchor="middle" fill="${subCol}" font-size="9.5" font-weight="600" font-family="Inter, sans-serif">${subLabel}</text>
+        <line x1="90" y1="88" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${safeCol}" stroke-width="2.6" stroke-linecap="round" />
+        <circle cx="90" cy="88" r="4.5" fill="${safeCol}" />
+        <text x="90" y="72" text-anchor="middle" fill="${txtCol}" font-size="16" font-weight="700" font-family="JetBrains Mono, monospace">${safeVal}</text>
+        <text x="90" y="102" text-anchor="middle" fill="${subCol}" font-size="9.5" font-weight="600" font-family="Inter, sans-serif">${safeSub}</text>
       </svg>`;
   }
 
@@ -898,12 +904,12 @@
     gridEl.innerHTML = `
       <div class="cycle-card">
         <div class="cycle-title">Dow Jones / Gold Ratio (100-Yr)</div>
-        ${buildSemiGaugeSvg(dowPct, `${dowGold.toFixed(1)}×`, b.escapeHtml(dowZone), '#D4A843')}
+        ${buildSemiGaugeSvg(dowPct, `${dowGold.toFixed(1)}×`, dowZone, '#D4A843')}
         <div class="cycle-legend"><span>1980: 1.2× (Gold Peak)</span><span>Today: ${dowGold.toFixed(1)}×</span><span>2000: 42×</span></div>
       </div>
       <div class="cycle-card">
         <div class="cycle-title">US Median Home in Gold Ounces</div>
-        ${buildSemiGaugeSvg(homePct, `${Math.round(homeOz)} oz`, b.escapeHtml(homeZone), '#22C55E')}
+        ${buildSemiGaugeSvg(homePct, `${Math.round(homeOz)} oz`, homeZone, '#22C55E')}
         <div class="cycle-legend"><span>1980: 110 oz</span><span>Today: ${Math.round(homeOz)} oz</span><span>2000: 580 oz</span></div>
       </div>`;
   }
@@ -1280,7 +1286,7 @@
     else if (fgScore >= 76) { label = 'Extreme Greed'; col = '#EF4444'; }
     else if (fgScore >= 58) { label = 'Greed'; col = '#F59E0B'; }
 
-    wrapEl.innerHTML = buildSemiGaugeSvg(fgScore, `${fgScore}`, b.escapeHtml(label), col);
+    wrapEl.innerHTML = buildSemiGaugeSvg(fgScore, `${fgScore}`, label, col);
     if (subEl) {
       subEl.innerHTML = `
         <span>Trader Crowding: ${Math.round(cotPct)}%</span>
@@ -1423,10 +1429,10 @@
     const s7dPct = g7dPct * 1.75;
 
     const spot = b.getCanonicalSpotPrices();
-    const g1h = spot.gold * (1 + g1hPct / 100);
-    const s1h = spot.silver * (1 + s1hPct / 100);
-    const g7d = spot.gold * (1 + g7dPct / 100);
-    const s7d = spot.silver * (1 + s7dPct / 100);
+    const g1h = Math.max(0.01, spot.gold * (1 + g1hPct / 100));
+    const s1h = Math.max(0.01, spot.silver * (1 + s1hPct / 100));
+    const g7d = Math.max(0.01, spot.gold * (1 + g7dPct / 100));
+    const s7d = Math.max(0.01, spot.silver * (1 + s7dPct / 100));
 
     const card = (title, price, pct) => {
       const cls = pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : '';
@@ -1710,16 +1716,19 @@
     const aiScore = Number(res[metal]?.score ?? 0);
     const aiDir = aiScore >= 8 ? 'up' : aiScore <= -8 ? 'down' : 'neutral';
 
+    const entrySpot = metal === 'silver' ? spot.silver : spot.gold;
+    if (!Number.isFinite(entrySpot) || entrySpot <= 0) return;
+
     if (!Array.isArray(b.state.settings.forecastJournal)) {
       b.state.settings.forecastJournal = [];
     }
     b.state.settings.forecastJournal.unshift({
-      id: `fj_${Date.now()}`,
+      id: `fj_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
       date: new Date().toISOString().slice(0, 10),
       metal,
       userDir: dir === 'down' ? 'down' : 'up',
       aiDir,
-      entryPrice: +(metal === 'silver' ? spot.silver : spot.gold).toFixed(2),
+      entryPrice: +entrySpot.toFixed(2),
       settledPrice: null,
       settledAt: '',
     });
@@ -1834,13 +1843,13 @@
       renderMarketRadar();
     });
 
-    // Whisper sliders
+    // Whisper sliders (bounded)
     document.getElementById('input-whisper-cpi')?.addEventListener('input', (e) => {
-      ui.whisperCpi = parseFloat(e.target.value) || 0;
+      ui.whisperCpi = clamp(parseFloat(e.target.value), -2, 2, 0);
       renderWhisperSlider();
     });
     document.getElementById('input-whisper-fed')?.addEventListener('input', (e) => {
-      ui.whisperFed = parseInt(e.target.value, 10) || 0;
+      ui.whisperFed = Math.round(clamp(parseInt(e.target.value, 10), -200, 200, 0));
       renderWhisperSlider();
     });
     document.getElementById('btn-reset-whisper')?.addEventListener('click', () => {
@@ -1874,7 +1883,9 @@
         const entry = (b.state.settings.forecastJournal || []).find((x) => x.id === id);
         if (entry) {
           const spot = b.getCanonicalSpotPrices();
-          entry.settledPrice = +(entry.metal === 'silver' ? spot.silver : spot.gold).toFixed(2);
+          const settled = entry.metal === 'silver' ? spot.silver : spot.gold;
+          if (!Number.isFinite(settled) || settled <= 0) return;
+          entry.settledPrice = +settled.toFixed(2);
           entry.settledAt = new Date().toISOString().slice(0, 10);
           b.savePersistedState();
           renderForecastJournal();
@@ -1890,14 +1901,18 @@
       }
     });
 
-    // Re-render canvases crisply on window resize
+    // Re-render canvases crisply on debounced window resize
+    let intelResizeTimer = null;
     window.addEventListener('resize', () => {
-      const st = B()?.state;
-      if (st?.activeView === 'markets' && st?.settings?.subViews?.markets === 'charts') {
-        renderRealAssets();
-      } else if (st?.activeView === 'stack' && (st?.settings?.subViews?.stack || 'overview') === 'overview') {
-        renderStackTimeMachine();
-      }
+      if (intelResizeTimer) clearTimeout(intelResizeTimer);
+      intelResizeTimer = setTimeout(() => {
+        const st = B()?.state;
+        if (st?.activeView === 'markets' && st?.settings?.subViews?.markets === 'charts') {
+          renderRealAssets();
+        } else if (st?.activeView === 'stack' && (st?.settings?.subViews?.stack || 'overview') === 'overview') {
+          renderStackTimeMachine();
+        }
+      }, 120);
     });
     setInterval(() => {
       const mapPanel = document.getElementById('panel-global-vault-map');

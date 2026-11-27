@@ -55,14 +55,18 @@ export function computePhysicalPremiumSignals({
   headlines = [],
   userOverrides = null, // { goldStreetOz?: number, silverStreetOz?: number }
 } = {}) {
-  // Count live Mint / Dealer / Coin Shortage / Retail Rush headlines
+  // Count live Mint / Dealer / Coin Shortage / Retail Rush headlines (linear predicate pairs + 600-char cap)
   let retailShortageHits = 0;
   let retailCoolingHits = 0;
-  for (const h of headlines || []) {
-    const txt = `${h?.title || ''} ${h?.summary || ''}`;
-    if (/\b(us mint|royal mint|perth mint|silver eagle|gold eagle|gold buffalo|costco gold|bullion coin|coin dealer|refiner)\b.*\b(shortage|sold out|sell out|ration|delay|backlog|surge|record|premium|spike|scramble|rush)/i.test(txt)) {
+  const rxMintEntity = /\b(us mint|royal mint|perth mint|silver eagle|gold eagle|gold buffalo|costco gold|bullion coin|coin dealer|refiner)\b/i;
+  const rxShortageWord = /\b(shortage|sold out|sell out|ration|delay|backlog|surge|record|premium|spike|scramble|rush)\b/i;
+  const rxPremEntity = /\b(coin premium|bullion premium|dealer premium)\b/i;
+  const rxCoolWord = /\b(fall|drop|cool|compress|ease|plunge|low)\b/i;
+  for (const h of (headlines || []).slice(0, 150)) {
+    const txt = `${h?.title || ''} ${h?.summary || ''}`.slice(0, 600);
+    if (rxMintEntity.test(txt) && rxShortageWord.test(txt)) {
       retailShortageHits++;
-    } else if (/\b(coin premium|bullion premium|dealer premium)\b.*\b(fall|drop|cool|compress|ease|plunge|low)/i.test(txt)) {
+    } else if (rxPremEntity.test(txt) && rxCoolWord.test(txt)) {
       retailCoolingHits++;
     }
   }
