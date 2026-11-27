@@ -1,20 +1,33 @@
 {
-  "updatedAt": "2026-11-27T01:59:31.024Z",
+  "updatedAt": "2026-11-27T03:00:33.428Z",
   "scorecard": {
     "live7d": {
       "count": 0,
       "dirHitPct": null,
       "inConePct": null,
-      "avgErrPct": null
+      "avgErrPct": null,
+      "rmsePct": null,
+      "conformalRadiusPct": null,
+      "signedBiasPct": null
     },
     "live30d": {
       "count": 0,
       "dirHitPct": null,
       "inConePct": null,
-      "avgErrPct": null
+      "avgErrPct": null,
+      "rmsePct": null,
+      "conformalRadiusPct": null,
+      "signedBiasPct": null
     },
     "coneMultiplier": 1,
-    "recentGrades": []
+    "pendingStatus": {
+      "pending7dCount": 16,
+      "pending30dCount": 16,
+      "next7dInDays": 1,
+      "next30dInDays": 24
+    },
+    "recentGrades": [],
+    "recentGrades30d": []
   },
   "predictions": [
     {
