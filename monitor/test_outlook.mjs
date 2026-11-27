@@ -20,6 +20,15 @@ import {
   computePrecisionForecastLine,
 } from './precision_forecast.mjs';
 import { computePhysicalPremiumSignals } from './physical_premiums.mjs';
+import {
+  computeSessionFlowDivergence,
+  computeCurrencyBreakoutBreadth,
+  computeSpringCoilingIndex,
+  computeCrossAssetLiquidityCompass,
+  computeContrarianCrowdingBrake,
+  computeOpexDeliveryMagnet,
+  computeHiddenAlphaSuite,
+} from './hidden_alpha.mjs';
 import { parseRssItems, sanitizeHttpUrl } from './analyze_outlook.mjs';
 import {
   cnyPerGramToUsdPerOz,
@@ -1213,4 +1222,132 @@ const outSqueezePrem = buildOutlook({
 });
 assert.ok(outSqueezePrem.physicalPremiums?.silver?.predictionBoost > 0, 'buildOutlook must attach live physicalPremiums signal');
 
-console.log('All 29 Bullion Pulse suites (v50 Physical Premiums vs. Spot & Melt, 16-Feed Multi-Subject News & Global Events Calendar, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');
+// 30. v51 6 Exclusive Hidden-Alpha Bullion Prediction Engines (Session Flow, 21-FX Stealth Breadth,
+//     Spring Coiling, Cross-Asset Liquidity Compass, Crowd Contrarian Brake, COMEX OpEx Strike Magnet)
+// 30a. East-vs-West Session Footprint
+const dayBase = Date.UTC(2026, 10, 26, 0, 0, 0); // UTC midnight = 19:00 NY (Asia session!)
+const eastBuyWestDipBars = [];
+let pBar = 3600;
+for (let h = 0; h < 24; h++) {
+  const t = dayBase + h * 3600000;
+  // UTC 0..12 = NY 19..07 (Asia + London): steady accumulation (+0.14%/hr)
+  // UTC 13..21 = NY 08..16 (NY paper session): dip (-0.16%/hr)
+  if (h <= 12) pBar *= 1.0014;
+  else if (h <= 21) pBar *= 0.9984;
+  eastBuyWestDipBars.push({ t, o: pBar, h: pBar * 1.001, l: pBar * 0.999, c: pBar });
+}
+const sfBull = computeSessionFlowDivergence({ bars: eastBuyWestDipBars, metal: 'gold' });
+assert.ok(sfBull.regime.includes('East Accumulating'), `Expected East Accumulating divergence, got ${sfBull.regime}`);
+assert.ok(sfBull.signal > 0.15, `East buying / West dip must yield bullish signal (got ${sfBull.signal})`);
+
+const nyChaseAsiaSellBars = [];
+let pBar2 = 3600;
+for (let h = 0; h < 24; h++) {
+  const t = dayBase + h * 3600000;
+  if (h <= 12) pBar2 *= 0.9986;
+  else if (h <= 21) pBar2 *= 1.0018;
+  nyChaseAsiaSellBars.push({ t, o: pBar2, h: pBar2 * 1.001, l: pBar2 * 0.999, c: pBar2 });
+}
+const sfBear = computeSessionFlowDivergence({ bars: nyChaseAsiaSellBars, metal: 'gold' });
+assert.ok(sfBear.regime.includes('NY Paper Chase'), `Expected NY Paper Chase fade, got ${sfBear.regime}`);
+assert.ok(sfBear.signal < -0.1, `NY chase / Asia sell must yield bearish fade signal (got ${sfBear.signal})`);
+
+// 30b. 21-Currency Stealth Global Breakout Breadth (USD lagging while foreign FX break out)
+const fxStealth = computeCurrencyBreakoutBreadth({
+  spotGold: 3640, // 97.1% of USD 3750 benchmark (< 98.5%)
+  spotSilver: 42.5,
+  fxRates: {
+    USD: 1, EUR: 0.96, GBP: 0.82, JPY: 162, CNY: 7.55, INR: 90, AUD: 1.62, CAD: 1.46,
+    CHF: 0.92, THB: 36.5, TRY: 40, ZAR: 19.5, MXN: 21.5, KRW: 1470, SGD: 1.41, HKD: 8.1,
+  },
+  metal: 'gold',
+});
+assert.equal(fxStealth.stealthBull, true, 'Weak foreign FX pushing local Gold to highs while USD lags must flag stealthBull');
+assert.ok(fxStealth.breadthPct >= 75 && fxStealth.signal > 0.25, 'Stealth global breakout must produce bullish breadth signal');
+
+// 30c. Bullion Spring Coiling Detector (tight trailing 5-bar vol vs noisy 30-bar baseline + backwardation)
+const coiledCloses = [];
+let pc = 3500;
+for (let i = 0; i < 30; i++) {
+  pc *= 1 + (i % 2 === 0 ? 0.018 : -0.017);
+  coiledCloses.push(pc);
+}
+for (let i = 0; i < 6; i++) {
+  pc *= 1 + (i % 2 === 0 ? 0.0012 : -0.0011);
+  coiledCloses.push(pc);
+}
+const springHot = computeSpringCoilingIndex({
+  closes: coiledCloses,
+  comexRatio: 5.5,
+  isBackwardation: true,
+  metal: 'gold',
+});
+assert.ok(springHot.coilingScore >= 72, `Tight vol compression + backwardation must score >= 72 (got ${springHot.coilingScore})`);
+assert.ok(springHot.breakoutEnergyMult > 1.2, `Coiled spring must amplify breakoutEnergyMult (got ${springHot.breakoutEnergyMult})`);
+
+// 30d. Cross-Asset Liquidity Compass (Gold + BTC debasement wave & Gold/Oil miner margin)
+const goldSeriesUp = Array.from({ length: 15 }, (_, i) => 3500 + i * 12);
+const btcSeriesUp = Array.from({ length: 15 }, (_, i) => 85000 + i * 900);
+const liqDebase = computeCrossAssetLiquidityCompass({
+  macroSnapshot: { oil: 65, cu5dPct: 2.8, platinum5dPct: 2.2 },
+  series: { gold: goldSeriesUp, btc: btcSeriesUp, spx: Array(15).fill(5900) },
+  metal: 'gold',
+});
+assert.equal(liqDebase.regime, 'Global Fiat Debasement Wave ↑');
+assert.ok(liqDebase.goldOilRatio > 50 && liqDebase.signal > 0.35, 'Gold+BTC rally with strong Gold/Oil margin must be bullish');
+
+// 30e. Narrative Consensus Crowding & Capitulation Contrarian Brake
+const allBullNews = Array.from({ length: 8 }, () => ({ sentiment: 'bullish' }));
+const crowdedTop = computeContrarianCrowdingBrake({ headlines: allBullNews, rsi14: 80, cotPercentile52w: 92 });
+assert.ok(crowdedTop.crowdingScore >= 80 && crowdedTop.contrarianNudge < -0.04, 'Euphoric crowding must engage negative pullback brake');
+
+const allBearNews = Array.from({ length: 8 }, () => ({ sentiment: 'bearish' }));
+const panicBottom = computeContrarianCrowdingBrake({ headlines: allBearNews, rsi14: 22, cotPercentile52w: 10 });
+assert.ok(panicBottom.crowdingScore <= 22 && panicBottom.contrarianNudge > 0.04, 'Bearish washout panic must engage positive reversal lift');
+
+// 30f. COMEX OpEx Round-Strike Gravity & Post-OpEx Snapback
+// Nov 2026: last biz day = Nov 30 (Mon), 4th from end = Nov 25 (Wed) -> Nov 24 is 1d pre-OpEx, Nov 27 is 2d post-OpEx
+const opexPre = computeOpexDeliveryMagnet({ spot: 3618, metal: 'gold', nowDate: new Date('2026-11-24T12:00:00Z'), trendSign: 1 });
+assert.equal(opexPre.magnetStrike, 3600, '$3,618 spot must snap to $3,600 round-strike magnet');
+assert.ok(opexPre.pinStrength > 0 && opexPre.signal < 0, 'Pre-OpEx spot above $3,600 strike must exert mild pull toward $3,600');
+
+const opexPost = computeOpexDeliveryMagnet({ spot: 3618, metal: 'gold', nowDate: new Date('2026-11-27T12:00:00Z'), trendSign: 1 });
+assert.equal(opexPost.pinStrength, 0, 'Post-OpEx release must clear pinStrength');
+assert.ok(opexPost.phase.includes('Post-OpEx') && opexPost.signal > 0.15, 'Post-OpEx release with bullish trend must lift signal');
+
+// 30g. Precision Forecast Line with OpEx magnet & coiled spring energy + Master Orchestrator + buildOutlook integration
+const fcBars = Array.from({ length: 30 }, (_, i) => ({
+  t: dayBase + i * 300000,
+  o: 3618,
+  h: 3622,
+  l: 3614,
+  c: 3618 + Math.sin(i * 0.5) * 2,
+}));
+const fcNoPin = computePrecisionForecastLine({ bars: fcBars, liveSpot: 3618, tf: '1d', metal: 'gold', opexMagnetPrice: 3600, opexPinStrength: 0, breakoutEnergyMult: 1.0 });
+const fcPinned = computePrecisionForecastLine({ bars: fcBars, liveSpot: 3618, tf: '1d', metal: 'gold', opexMagnetPrice: 3600, opexPinStrength: 0.55, breakoutEnergyMult: 1.25 });
+assert.ok(fcPinned.endPrice < fcNoPin.endPrice, 'Pre-OpEx strike magnet below spot must pull Precision Forecast Line gently toward $3,600');
+
+const suiteOut = computeHiddenAlphaSuite({
+  spotGold: 3640,
+  spotSilver: 42.8,
+  goldIntradayBars: eastBuyWestDipBars,
+  goldDailyCloses: coiledCloses,
+  fxRates: { EUR: 0.96, GBP: 0.82, JPY: 162, CNY: 7.55, INR: 90, AUD: 1.62, CAD: 1.46, THB: 36.5, TRY: 40, ZAR: 19.5 },
+  comex: { gold: { paperToRegisteredRatio: 5.2 }, silver: { paperToRegisteredRatio: 7.8 } },
+  basis: { gold: { isBackwardation: true, basisUsd: -12 }, silver: { isBackwardation: true, basisUsd: -0.6 } },
+  macroSnapshot: { oil: 65, cu5dPct: 2.5, platinum5dPct: 2.0 },
+  series: { gold: goldSeriesUp, btc: btcSeriesUp, spx: Array(15).fill(5900) },
+  goldTrendSign: 1,
+  nowDate: new Date('2026-11-27T12:00:00Z'),
+});
+assert.ok(suiteOut.gold.netBoost > 0.04, `Bullish hidden-alpha alignment must lift gold.netBoost (got ${suiteOut.gold.netBoost})`);
+
+const outHidden = buildOutlook({
+  spotGold: 3640,
+  spotSilver: 42.8,
+  goldGapBars: eastBuyWestDipBars,
+  rawHeadlines: [{ title: 'Central bank gold buying accelerates worldwide', source: 'Reuters', publishedAt: new Date().toISOString() }],
+});
+assert.ok(outHidden.hiddenAlpha?.gold?.sessionFlow && outHidden.hiddenAlpha?.silver?.opexMagnet, 'buildOutlook must attach complete hiddenAlpha suite');
+
+console.log('All 30 Bullion Pulse suites (v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt + 16-Feed Multi-Subject News & Global Events Calendar, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');

@@ -270,6 +270,7 @@ const state = {
   accuracyChartHorizon: 'daily',
   accuracyHoverIdx: null,
   accuracyGeom: null,
+  hiddenAlphaMetal: 'gold',
   swapCalc: {
     dir: 'g2s',
     oz: 1,
@@ -2850,11 +2851,14 @@ function projectPrecisionTrajectory({
   leadLagAlpha = 0,
   seasonalityTilt = 0,
   gapPrimary = null,
+  opexMagnetPrice = null,
+  opexPinStrength = 0,
+  breakoutEnergyMult = 1.0,
   stepsOverride = null,
 }) {
   const steps = stepsOverride || spec.steps;
   const stepVol = feats.barVol * Math.sqrt(spec.horizonBars / Math.max(1, spec.steps));
-  const maxCumPct = spec.maxCapSigma * feats.barVol * Math.sqrt(spec.horizonBars);
+  const maxCumPct = spec.maxCapSigma * clampNum(breakoutEnergyMult, 0.85, 1.30) * feats.barVol * Math.sqrt(spec.horizonBars);
 
   const hurstTrendGain = clampNum(1 + (feats.hurst - 0.50) * 1.45, 0.55, 1.50);
   const hurstRevGain = clampNum(1 - (feats.hurst - 0.50) * 1.45, 0.55, 1.50);
@@ -2892,7 +2896,12 @@ function projectPrecisionTrajectory({
 
     const macroComposite = clampNum(macroUnit + leadLagAlpha * 0.35 + seasonalityTilt * 0.42, -1, 1);
     const fMacro = macroComposite * 0.26 * specialist.macroW * spec.wMacro;
-    let unitStep = fTrend + fOu + fRsi + fGap + fMacro;
+    let fOpex = 0;
+    if (opexPinStrength > 0 && Number.isFinite(opexMagnetPrice) && opexMagnetPrice > 0 && spec.wTech >= 0.40) {
+      const magDist = (opexMagnetPrice - cur) / Math.max(cur * stepVol, 1e-6);
+      fOpex = clampNum(magDist * 0.14 * opexPinStrength, -0.25, 0.25);
+    }
+    let unitStep = (fTrend + fOu + fRsi + fGap + fMacro + fOpex) * clampNum(breakoutEnergyMult, 0.88, 1.25);
 
     const distToCeil = (feats.swingHigh - cur) / Math.max(cur * feats.barVol, 1e-6);
     const distToFloor = (cur - feats.swingLow) / Math.max(cur * feats.barVol, 1e-6);
@@ -2922,6 +2931,9 @@ function computeClientPrecisionForecast({
   leadLagAlpha = 0,
   seasonalityTilt = 0,
   gapPrimary = null,
+  opexMagnetPrice = null,
+  opexPinStrength = 0,
+  breakoutEnergyMult = 1.0,
 } = {}) {
   const spec = PRECISION_FC_SPECS[tf] || PRECISION_FC_SPECS['1d'];
   if (!Array.isArray(bars) || bars.length < 4) return null;
@@ -3040,6 +3052,9 @@ function computeClientPrecisionForecast({
       leadLagAlpha,
       seasonalityTilt: tf === '1m' || tf === '6m' ? seasonalityTilt : 0,
       gapPrimary,
+      opexMagnetPrice,
+      opexPinStrength,
+      breakoutEnergyMult,
     })
   );
 
@@ -3373,6 +3388,9 @@ function renderChart() {
       ? outlookRes[sel].unit30d
       : (outlookRes[sel]?.unit ?? 0);
   const fcLeadLag = Number.isFinite(outlookRes[sel]?.leadLagAlpha) ? outlookRes[sel].leadLagAlpha : 0;
+  const haChart = !isRatio ? outlookRes.hiddenAlpha?.[sel] : null;
+  const opexMagnetConverted =
+    haChart?.opexMagnet?.magnetStrike > 0 ? convertUnit(haChart.opexMagnet.magnetStrike) : null;
   const precisionFc = showFc
     ? computeClientPrecisionForecast({
         bars: allConverted,
@@ -3383,6 +3401,9 @@ function renderChart() {
         leadLagAlpha: fcLeadLag,
         seasonalityTilt: fcSeasonality.unitTilt,
         gapPrimary: chartGapAnalysis?.primary || null,
+        opexMagnetPrice: opexMagnetConverted,
+        opexPinStrength: haChart?.opexMagnet?.pinStrength || 0,
+        breakoutEnergyMult: haChart?.springCoiling?.breakoutEnergyMult || 1.0,
       })
     : null;
   const hasFcLine = Boolean(showFc && precisionFc && precisionFc.points?.length > 1);
@@ -5266,6 +5287,7 @@ const DRIVER_FRIENDLY_LABELS = {
   comex_paper: 'Paper Contracts vs. Vaults',
   market_gaps: 'Chart Gaps & Fill Targets',
   physical_premiums: 'Physical Coin & Bar Premiums',
+  hidden_alpha: 'Hidden Market Edges (6 Signals)',
 };
 
 const CLIENT_PHYS_BENCHMARKS = {
@@ -5479,6 +5501,375 @@ function computeClientPhysicalPremiums({
             : 'Normal Dealer Spreads';
 
   return { overallStatus, gold, silver };
+}
+
+/* ---------- 6 Exclusive Hidden-Alpha Bullion Prediction Engines (Client Mirror) ---------- */
+const CLIENT_FX_BREAKOUT_BENCHMARKS = {
+  gold: {
+    USD: 3750, EUR: 3420, GBP: 2920, JPY: 565000, CNY: 26800, INR: 318000,
+    AUD: 5750, CAD: 5180, CHF: 3280, THB: 128000, TRY: 132000, ZAR: 68500,
+    MXN: 74500, KRW: 5180000, SGD: 4980, HKD: 29100,
+  },
+  silver: {
+    USD: 46.0, EUR: 42.0, GBP: 35.8, JPY: 6950, CNY: 330, INR: 3920,
+    AUD: 70.5, CAD: 63.5, CHF: 40.2, THB: 1580, TRY: 1620, ZAR: 840,
+    MXN: 915, KRW: 63500, SGD: 61.0, HKD: 358,
+  },
+};
+
+function nyHourClient(ms) {
+  try {
+    const h = Number(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: '2-digit',
+        hour12: false,
+      }).format(new Date(ms))
+    );
+    return Number.isFinite(h) ? h % 24 : new Date(ms).getUTCHours();
+  } catch {
+    return (new Date(ms).getUTCHours() + 19) % 24;
+  }
+}
+
+function nthBizDayFromEndClient(year, monthIndex, nBack) {
+  const d = new Date(Date.UTC(year, monthIndex + 1, 0));
+  let seen = 0;
+  while (seen < nBack) {
+    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) {
+      seen++;
+      if (seen === nBack) break;
+    }
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return d;
+}
+
+function computeClientHiddenAlpha({
+  spotGold,
+  spotSilver,
+  base = null,
+  futures = null,
+  liveComex = null,
+  gTrendSign = 0,
+  sTrendSign = 0,
+} = {}) {
+  const macro = base?.macroSnapshot || {};
+  const headlines = base?.headlines || [];
+  const cot = base?.proSignals?.cot || {};
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const activePreMonths = new Set([0, 2, 4, 6, 8, 10]);
+
+  const buildFor = (metal, spot, trendSign) => {
+    const isSilver = metal === 'silver';
+
+    // 1. East-vs-West Session Footprint
+    const intraBars = state.candles?.[metal] || [];
+    let asiaPct = 0;
+    let londonPct = 0;
+    let nyPct = 0;
+    let sessionFlow;
+    if (intraBars.length >= 6) {
+      for (let i = 1; i < intraBars.length; i++) {
+        const prev = intraBars[i - 1];
+        const curr = intraBars[i];
+        if (!(prev?.c > 0) || !(curr?.c > 0) || !curr?.t) continue;
+        const retPct = ((curr.c - prev.c) / prev.c) * 100;
+        if (Math.abs(retPct) > 8) continue;
+        const hr = nyHourClient(curr.t);
+        if (hr >= 18 || hr < 3) asiaPct += retPct;
+        else if (hr >= 3 && hr < 8) londonPct += retPct;
+        else nyPct += retPct;
+      }
+      const eastPct = asiaPct + londonPct;
+      const eastMinusWestPct = eastPct - nyPct;
+      const scale = isSilver ? 2.6 : 1.35;
+      let regime = 'Balanced Global Flow';
+      let signal = 0;
+      let note = `Asia ${asiaPct >= 0 ? '+' : '−'}${Math.abs(asiaPct).toFixed(2)}% · London ${londonPct >= 0 ? '+' : '−'}${Math.abs(londonPct).toFixed(2)}% · NY ${nyPct >= 0 ? '+' : '−'}${Math.abs(nyPct).toFixed(2)}%`;
+      if (eastPct > (isSilver ? 0.25 : 0.12) && nyPct < -(isSilver ? 0.25 : 0.12)) {
+        regime = 'East Accumulating / West Paper Dip ↑';
+        signal = clampNum(eastMinusWestPct / scale, 0.18, 0.82);
+        note = `Asia+London physical desks bought (${eastPct >= 0 ? '+' : ''}${eastPct.toFixed(2)}%) while NY paper sold (${nyPct.toFixed(2)}%) — classic snap-back bullish divergence.`;
+      } else if (nyPct > (isSilver ? 0.35 : 0.18) && eastPct < -(isSilver ? 0.25 : 0.12)) {
+        regime = 'NY Paper Chase / Asia Selling ↓';
+        signal = clampNum(eastMinusWestPct / scale, -0.70, -0.15);
+        note = `NY futures chased higher (+${nyPct.toFixed(2)}%) while Asia/London sold into strength (${eastPct.toFixed(2)}%) — rally prone to fade.`;
+      } else if (eastPct > 0.15 && nyPct > 0.15) {
+        regime = 'Synchronized Global Buying ↑';
+        signal = clampNum((eastPct + nyPct) / (scale * 1.4), 0.12, 0.65);
+        note = 'Asia, London & NY are all bidding higher together — clean global trend confirmation.';
+      } else if (eastPct < -0.15 && nyPct < -0.15) {
+        regime = 'Broad Global Distribution ↓';
+        signal = clampNum((eastPct + nyPct) / (scale * 1.4), -0.65, -0.12);
+        note = 'Selling pressure across both Eastern physical and Western futures sessions.';
+      } else {
+        signal = clampNum(eastMinusWestPct / (scale * 2.2), -0.25, 0.25);
+      }
+      sessionFlow = {
+        asiaPct: +asiaPct.toFixed(2),
+        londonPct: +londonPct.toFixed(2),
+        nyPct: +nyPct.toFixed(2),
+        eastMinusWestPct: +eastMinusWestPct.toFixed(2),
+        regime,
+        signal: +signal.toFixed(3),
+        note,
+      };
+    } else if (base?.hiddenAlpha?.[metal]?.sessionFlow) {
+      sessionFlow = base.hiddenAlpha[metal].sessionFlow;
+    } else {
+      sessionFlow = {
+        asiaPct: 0, londonPct: 0, nyPct: 0, eastMinusWestPct: 0,
+        regime: 'Balanced Global Flow', signal: 0,
+        note: 'Waiting for full 24h intraday bars across Asia, London & NY.',
+      };
+    }
+
+    // 2. 21-Currency Stealth Global Breakout Breadth
+    const benches = CLIENT_FX_BREAKOUT_BENCHMARKS[metal];
+    let nearHighCount = 0;
+    let totalCcy = 0;
+    let usdRatio = 0.95;
+    for (const [ccy, bench] of Object.entries(benches)) {
+      const r = Number(state.fxRates?.[ccy]);
+      if (!(r > 0) || !(bench > 0) || !(spot > 0)) continue;
+      const ratio = (spot * r) / bench;
+      if (ccy === 'USD') usdRatio = ratio;
+      if (ratio >= 0.96) nearHighCount++;
+      totalCcy++;
+    }
+    const breadthPct = totalCcy > 0 ? Math.round((nearHighCount / totalCcy) * 100) : 50;
+    const usdPctOfHigh = +(usdRatio * 100).toFixed(1);
+    const stealthBull = breadthPct >= 62 && usdRatio < 0.985;
+    let fxRegime = 'Balanced FX Breadth';
+    let fxSig = 0;
+    if (stealthBull) {
+      fxRegime = 'Stealth Global Breakout ↑';
+      fxSig = clampNum(0.28 + ((breadthPct - 60) / 40) * 0.48, 0.25, 0.75);
+    } else if (breadthPct >= 75) {
+      fxRegime = 'Universal Global Highs ↑';
+      fxSig = clampNum(0.32 + ((breadthPct - 75) / 25) * 0.35, 0.30, 0.68);
+    } else if (breadthPct <= 20) {
+      fxRegime = 'Broad FX Pullback ↓';
+      fxSig = -0.25;
+    } else {
+      fxSig = clampNum(((breadthPct - 45) / 55) * 0.25, -0.18, 0.22);
+    }
+    const currencyBreadth = {
+      nearHighCount,
+      totalCurrencies: totalCcy,
+      breadthPct,
+      usdPctOfHigh,
+      stealthBull,
+      regime: fxRegime,
+      signal: +fxSig.toFixed(3),
+    };
+
+    // 3. Bullion Spring Coiling Detector
+    const dailyBars = state.timeframes?.['6m']?.[metal]?.length >= 22
+      ? state.timeframes['6m'][metal]
+      : (state.timeframes?.['1m']?.[metal] || []);
+    const closes = dailyBars.map((b) => Number(b?.c)).filter((v) => Number.isFinite(v) && v > 0);
+    let springCoiling;
+    if (closes.length >= 22) {
+      const rets = [];
+      for (let i = 1; i < closes.length; i++) rets.push((closes[i] - closes[i - 1]) / closes[i - 1]);
+      const rms = (arr) => (arr.length ? Math.sqrt(arr.reduce((s, r) => s + r * r, 0) / arr.length) : 0.01);
+      const shortVol = rms(rets.slice(-5));
+      const baseVol = Math.max(0.003, rms(rets.slice(-30)));
+      const volRatio = +(shortVol / baseVol).toFixed(2);
+      const comexRatio = liveComex?.[metal]?.paperToRegisteredRatio ?? null;
+      const isBackw = Boolean(futures?.[metal]?.isBackwardation || (futures?.[metal]?.basisUsd ?? 1) < 0);
+      const compressionPts = clampNum((1.15 - volRatio) / 0.65, 0, 1) * 68;
+      const vaultFuel =
+        (isBackw ? 18 : 0) +
+        (Number.isFinite(comexRatio) ? clampNum((comexRatio - (isSilver ? 4.5 : 2.5)) * 4.5, 0, 16) : 0);
+      const coilingScore = Math.round(clampNum(compressionPts + vaultFuel, 5, 98));
+      let scRegime = 'Normal Range Energy';
+      let breakoutEnergyMult = 1.0;
+      let scNote = `Short-term swings are ${volRatio.toFixed(2)}× normal — balanced energy.`;
+      if (coilingScore >= 72) {
+        scRegime = 'Coiled Spring · Breakout Imminent ⚡';
+        breakoutEnergyMult = 1.28;
+        scNote = `Volatility compressed to ${volRatio.toFixed(2)}× baseline while physical tension builds — sharp directional breakout typically follows.`;
+      } else if (coilingScore >= 54) {
+        scRegime = 'Tightening Coil · Watch Breakout';
+        breakoutEnergyMult = 1.12;
+        scNote = `Price range is narrowing (${volRatio.toFixed(2)}× baseline) — energy storing up for next leg.`;
+      } else if (volRatio >= 1.45) {
+        scRegime = 'Expanded / Post-Breakout';
+        breakoutEnergyMult = 0.88;
+        scNote = `Volatility already expanded (${volRatio.toFixed(2)}× baseline) — expect digestion/consolidation.`;
+      }
+      springCoiling = { coilingScore, volRatio, breakoutEnergyMult, regime: scRegime, note: scNote };
+    } else if (base?.hiddenAlpha?.[metal]?.springCoiling) {
+      springCoiling = base.hiddenAlpha[metal].springCoiling;
+    } else {
+      springCoiling = {
+        coilingScore: 42, volRatio: 1.0, breakoutEnergyMult: 1.0,
+        regime: 'Normal Range Energy', note: 'Volatility sits near its 30-day average.',
+      };
+    }
+
+    // 4. Cross-Asset Liquidity Compass (Gold/Oil miner margin + Copper/Platinum + Gold/BTC flow)
+    const oilPrice = Number(macro.oil) > 10 ? Number(macro.oil) : null;
+    const goldOilRatio = oilPrice && spotGold > 500 ? +(spotGold / oilPrice).toFixed(1) : (base?.hiddenAlpha?.[metal]?.liquidityCompass?.goldOilRatio ?? null);
+    const cu5d = Number(macro.cu5dPct ?? 0);
+    const pt5d = Number(macro.platinum5dPct ?? 0);
+    const minerMarginSig = goldOilRatio != null ? clampNum((goldOilRatio - 38) / 22, -0.35, 0.55) : 0;
+    const indConfirmSig = clampNum((cu5d * 0.6 + pt5d * 0.4) / 5.5, -0.65, 0.65);
+    const spx5d = Number(macro.spx5dPct ?? 0);
+    const btc5d = Number(macro.btc5dPct ?? 0);
+    const g5d = Number(macro.gold5dPct ?? 0);
+    let liqRegime = base?.hiddenAlpha?.[metal]?.liquidityCompass?.regime || 'Balanced Cross-Asset Flow';
+    let liquiditySig = 0;
+    if (g5d > 0.5 && btc5d > 1.8) {
+      liqRegime = 'Global Fiat Debasement Wave ↑';
+      liquiditySig = 0.48;
+    } else if (g5d > 0.5 && btc5d < -1.8 && spx5d < -0.4) {
+      liqRegime = 'Pure Safe-Haven Flight ↑';
+      liquiditySig = isSilver ? 0.16 : 0.45;
+    } else if (g5d < -0.9 && btc5d < -2.5) {
+      liqRegime = 'Broad Liquidity Tightening ↓';
+      liquiditySig = -0.38;
+    } else if (goldOilRatio != null && goldOilRatio >= 46) {
+      liqRegime = 'Strong Miner Margin Tailwind ↑';
+      liquiditySig = 0.24;
+    }
+    const liqSignal = isSilver
+      ? clampNum(liquiditySig * 0.45 + indConfirmSig * 0.40 + minerMarginSig * 0.15, -0.75, 0.75)
+      : clampNum(liquiditySig * 0.55 + minerMarginSig * 0.30 + indConfirmSig * 0.15, -0.75, 0.75);
+    const liquidityCompass = {
+      regime: liqRegime,
+      goldOilRatio,
+      cu5d: +cu5d.toFixed(2),
+      pt5d: +pt5d.toFixed(2),
+      signal: +liqSignal.toFixed(3),
+      note: goldOilRatio != null
+        ? `Gold/Oil ${goldOilRatio}:1 (miner energy margin) · Copper ${cu5d >= 0 ? '+' : ''}${cu5d.toFixed(1)}% · Platinum ${pt5d >= 0 ? '+' : ''}${pt5d.toFixed(1)}%`
+        : `Copper ${cu5d >= 0 ? '+' : ''}${cu5d.toFixed(1)}% · Platinum ${pt5d >= 0 ? '+' : ''}${pt5d.toFixed(1)}%`,
+    };
+
+    // 5. Narrative Consensus Crowding & Capitulation Contrarian Brake
+    const scoredNews = headlines.filter((h) => h?.sentiment === 'bullish' || h?.sentiment === 'bearish');
+    const bullN = scoredNews.filter((h) => h.sentiment === 'bullish').length;
+    const bearN = scoredNews.filter((h) => h.sentiment === 'bearish').length;
+    const newsBullPct = scoredNews.length >= 3 ? (bullN / scoredNews.length) * 100 : 50;
+    const rsiVal = Number.isFinite(Number(isSilver ? macro.silverRsi14 : macro.goldRsi14))
+      ? Number(isSilver ? macro.silverRsi14 : macro.goldRsi14)
+      : 50;
+    const cotPct = Number.isFinite(Number(isSilver ? cot.silverPercentile52w : cot.goldPercentile52w))
+      ? Number(isSilver ? cot.silverPercentile52w : cot.goldPercentile52w)
+      : 50;
+    const crowdingScore = Math.round(clampNum(newsBullPct * 0.34 + rsiVal * 0.38 + cotPct * 0.28, 4, 96));
+    let crowdRegime = 'Healthy Positioning';
+    let contrarianNudge = 0;
+    let crowdNote = `Crowd score ${crowdingScore}/100 — room for trend continuation without extreme crowding.`;
+    if (crowdingScore >= 78 && rsiVal >= 68) {
+      crowdRegime = 'Crowded Euphoria · Pullback Risk ↓';
+      contrarianNudge = -clampNum(((crowdingScore - 74) / 22) * 0.14, 0.04, 0.14);
+      crowdNote = `Extreme one-sided bullishness (${crowdingScore}/100, RSI ${rsiVal.toFixed(0)}) — anti-FOMO contrarian brake warns of shakeout risk.`;
+    } else if (crowdingScore <= 24 && rsiVal <= 34) {
+      crowdRegime = 'Panic Capitulation · Reversal Zone ↑';
+      contrarianNudge = clampNum(((28 - crowdingScore) / 22) * 0.14, 0.04, 0.14);
+      crowdNote = `Washout bearish panic (${crowdingScore}/100, RSI ${rsiVal.toFixed(0)}) — smart-money contrarian bounce lift active.`;
+    }
+    const crowdingBrake = {
+      crowdingScore,
+      newsBullPct: Math.round(newsBullPct),
+      bullHeadlines: bullN,
+      bearHeadlines: bearN,
+      regime: crowdRegime,
+      contrarianNudge: +contrarianNudge.toFixed(4),
+      note: crowdNote,
+    };
+
+    // 6. COMEX OpEx Round-Strike Gravity & Post-OpEx Snapback
+    const safeSpot = Number.isFinite(Number(spot)) && Number(spot) > 0 ? Number(spot) : (isSilver ? 42.5 : 3600);
+    const strikeStep = isSilver ? 1.0 : 50.0;
+    const magnetStrike = Math.round(safeSpot / strikeStep) * strikeStep;
+    const distPct = ((magnetStrike - safeSpot) / safeSpot) * 100;
+    let nearestDeltaDays = 999;
+    for (let off = -1; off <= 2; off++) {
+      const dt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + off, 1));
+      if (!activePreMonths.has(dt.getUTCMonth())) continue;
+      const opex = nthBizDayFromEndClient(dt.getUTCFullYear(), dt.getUTCMonth(), 4);
+      const diffDays = Math.round((opex.getTime() - todayUtc) / 86400000);
+      if (Math.abs(diffDays) < Math.abs(nearestDeltaDays)) nearestDeltaDays = diffDays;
+    }
+    let opexPhase = 'Open Trend Window';
+    let pinStrength = 0;
+    let opexSig = 0;
+    let opexNote = `Nearest major round strike: $${magnetStrike.toLocaleString('en-US')} (${nearestDeltaDays > 0 ? `${nearestDeltaDays}d to OpEx` : `${Math.abs(nearestDeltaDays)}d post-OpEx`}).`;
+    if (nearestDeltaDays >= 0 && nearestDeltaDays <= 3) {
+      opexPhase = nearestDeltaDays === 0 ? 'OpEx Pin Day (Magnet Active)' : `Pre-OpEx Strike Pin (${nearestDeltaDays}d)`;
+      pinStrength = nearestDeltaDays === 0 ? 0.55 : 0.35;
+      opexSig = clampNum((distPct / (isSilver ? 2.4 : 1.4)) * 0.25, -0.22, 0.22);
+      opexNote = `Options expiration in ${nearestDeltaDays}d — dealers typically pin spot near the $${magnetStrike.toLocaleString('en-US')} round strike before releasing.`;
+    } else if (nearestDeltaDays < 0 && nearestDeltaDays >= -5) {
+      opexPhase = `Post-OpEx Release (+${Math.abs(nearestDeltaDays)}d) ⚡`;
+      pinStrength = 0;
+      opexSig = clampNum((trendSign >= 0 ? 1 : -1) * 0.22, -0.25, 0.25);
+      opexNote = `Options hedges just rolled off ${Math.abs(nearestDeltaDays)}d ago — suppressed directional trend often accelerates cleanly now.`;
+    }
+    const opexMagnet = {
+      magnetStrike: +magnetStrike.toFixed(2),
+      distToMagnetPct: +distPct.toFixed(2),
+      daysToOpex: nearestDeltaDays,
+      phase: opexPhase,
+      pinStrength,
+      signal: +opexSig.toFixed(3),
+      note: opexNote,
+    };
+
+    const rawEdge =
+      sessionFlow.signal * 0.26 +
+      currencyBreadth.signal * 0.24 +
+      liquidityCompass.signal * 0.24 +
+      opexMagnet.signal * 0.14;
+    const netBoost = clampNum(
+      rawEdge * 0.18 * springCoiling.breakoutEnergyMult + crowdingBrake.contrarianNudge,
+      -0.14,
+      0.15
+    );
+
+    return {
+      metal,
+      sessionFlow,
+      currencyBreadth,
+      springCoiling,
+      liquidityCompass,
+      crowdingBrake,
+      opexMagnet,
+      netBoost: +netBoost.toFixed(4),
+      netPts: Math.round(netBoost * 100),
+    };
+  };
+
+  const gold = buildFor('gold', spotGold, gTrendSign);
+  const silver = buildFor('silver', spotSilver, sTrendSign);
+  const standout = [];
+  if (gold.sessionFlow.regime.includes('East Accumulating') || silver.sessionFlow.regime.includes('East Accumulating')) {
+    standout.push('East Physical Buying / West Paper Dip divergence');
+  }
+  if (gold.currencyBreadth.stealthBull || silver.currencyBreadth.stealthBull) {
+    standout.push(`Stealth Global Currency Breakout (${Math.max(gold.currencyBreadth.breadthPct, silver.currencyBreadth.breadthPct)}% of world FX near highs)`);
+  }
+  if (gold.springCoiling.coilingScore >= 72 || silver.springCoiling.coilingScore >= 72) {
+    standout.push('Coiled Spring volatility compression');
+  }
+  if (gold.crowdingBrake.contrarianNudge !== 0) standout.push(gold.crowdingBrake.regime);
+  if (gold.opexMagnet.pinStrength > 0 || gold.opexMagnet.phase.includes('Post-OpEx')) {
+    standout.push(gold.opexMagnet.phase);
+  }
+  return {
+    gold,
+    silver,
+    summaryLine: standout.length
+      ? standout.slice(0, 2).join(' · ')
+      : '6 exclusive market-edge detectors active and synced into live forecasts',
+  };
 }
 
 const DRIVER_WEIGHTS = {
@@ -6534,13 +6925,37 @@ function computeInteractiveOutlook() {
     });
   }
 
+  // 6 Exclusive Hidden-Alpha Bullion Prediction Engines (Session Flow, 21-FX Stealth Breadth,
+  // Spring Coiling, Cross-Asset Liquidity Compass, Crowd Contrarian Brake, COMEX OpEx Magnet)
+  const hiddenAlpha = computeClientHiddenAlpha({
+    spotGold,
+    spotSilver,
+    base,
+    futures,
+    liveComex,
+    gTrendSign: gComp + driftG,
+    sTrendSign: sComp + driftS,
+  });
+  const hiddenBoostGold = hiddenAlpha.gold?.netBoost || 0;
+  const hiddenBoostSilver = hiddenAlpha.silver?.netBoost || 0;
+  if (!drivers.some((d) => d.id === 'hidden_alpha')) {
+    drivers.push({
+      id: 'hidden_alpha',
+      label: 'Hidden Market Edges (6 Signals)',
+      shortLabel: 'Hidden Edges',
+      gold: +clampNum(hiddenBoostGold * 4.5, -0.9, 0.9).toFixed(3),
+      silver: +clampNum(hiddenBoostSilver * 4.5, -0.9, 0.9).toFixed(3),
+      headlineCount: 0,
+    });
+  }
+
   const gUnit = clampNum(
-    gComp * 1.45 + driftG + backwBoostGold + gapBoostGold + physBoostGold * 0.75 + goldDynamicPulse * 0.72,
+    gComp * 1.45 + driftG + backwBoostGold + gapBoostGold + physBoostGold * 0.75 + hiddenBoostGold * 0.80 + goldDynamicPulse * 0.72,
     -1,
     1
   );
   const sUnit = clampNum(
-    sComp * 1.45 + driftS + backwBoostSilver + gapBoostSilver + physBoostSilver * 0.75 + silverDynamicPulse * 0.72,
+    sComp * 1.45 + driftS + backwBoostSilver + gapBoostSilver + physBoostSilver * 0.75 + hiddenBoostSilver * 0.80 + silverDynamicPulse * 0.72,
     -1,
     1
   );
@@ -6791,7 +7206,8 @@ function computeInteractiveOutlook() {
       0.08
     );
     const rawUnit30d = modelVotes.reduce((s, m) => s + m.unit * m.weight, 0);
-    const unit30d = clampNum(rawUnit30d * agreeDamp + gapDecay30d + learned30dBias, -1, 1);
+    const hidden30d = (hiddenAlpha?.[metal]?.netBoost || 0) * 0.55;
+    const unit30d = clampNum(rawUnit30d * agreeDamp + gapDecay30d + hidden30d + learned30dBias, -1, 1);
 
     // Asymmetric Up/Down Semi-Vol from trailing 45 daily bars
     let upSq = 0;
@@ -6997,6 +7413,9 @@ function computeInteractiveOutlook() {
       `Physical retail dealer premiums are elevated on ${hotPhys.join(' and ')}, adding a bullish physical-demand lead to forecasts.`
     );
   }
+  if (hiddenAlpha?.summaryLine && !hiddenAlpha.summaryLine.startsWith('6 exclusive')) {
+    plainParts.push(`Exclusive market-edge alert: ${hiddenAlpha.summaryLine}.`);
+  }
   if (ratioAnalytics.tone !== 'neutral') {
     plainParts.push(
       `At ${liveRatio.toFixed(1)} oz of silver per oz of gold, ${ratioAnalytics.regime.toLowerCase()} (higher than ${ratioAnalytics.percentile5y}% of the past 5 years).`
@@ -7050,6 +7469,7 @@ function computeInteractiveOutlook() {
     marketRegime,
     marketGaps,
     physicalPremiums,
+    hiddenAlpha,
     worldSpacePulse,
     ratioAnalytics,
     setupQuality,
@@ -7975,7 +8395,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=50', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=51', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -9204,6 +9624,121 @@ function renderWorldSpacePulse(res) {
   }
 }
 
+function renderHiddenAlpha(res) {
+  const gridEl = document.getElementById('ha-grid');
+  const badgeEl = document.getElementById('ha-net-badge');
+  const noteEl = document.getElementById('ha-note');
+  const ha = res?.hiddenAlpha;
+  if (!gridEl || !ha) return;
+
+  const metal = state.hiddenAlphaMetal === 'silver' ? 'silver' : 'gold';
+  document.getElementById('ha-btn-gold')?.classList.toggle('active', metal === 'gold');
+  document.getElementById('ha-btn-silver')?.classList.toggle('active', metal === 'silver');
+
+  const m = ha[metal];
+  if (!m) return;
+
+  const netPts = m.netPts || 0;
+  if (badgeEl) {
+    badgeEl.textContent = `Net Edge ${netPts >= 0 ? '+' : '−'}${Math.abs(netPts)} pts`;
+    badgeEl.className = `signal-pill ${netPts >= 2 ? 'bullish' : netPts <= -2 ? 'bearish' : ''}`;
+  }
+
+  const sf = m.sessionFlow;
+  const fx = m.currencyBreadth;
+  const sc = m.springCoiling;
+  const lc = m.liquidityCompass;
+  const cb = m.crowdingBrake;
+  const ox = m.opexMagnet;
+
+  const toneFor = (v, posThresh = 0.12, negThresh = -0.12) =>
+    v >= posThresh ? 'bullish' : v <= negThresh ? 'bearish' : '';
+  const badgeFor = (v, posThresh = 0.12, negThresh = -0.12) =>
+    v >= posThresh ? 'up' : v <= negThresh ? 'down' : '';
+  const fmtSig = (v) => `${v >= 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`;
+
+  const strikeDisplay = formatMoney(convertUnit(ox.magnetStrike), metal === 'silver' ? 2 : 0);
+  const strikeDiffStr = `${ox.distToMagnetPct >= 0 ? '+' : '−'}${Math.abs(ox.distToMagnetPct).toFixed(2)}%`;
+
+  const cards = [
+    {
+      k: 'East vs. West Flow',
+      badge: `${sf.eastMinusWestPct >= 0 ? '+' : '−'}${Math.abs(sf.eastMinusWestPct).toFixed(2)}%`,
+      badgeCls: badgeFor(sf.signal),
+      cardCls: toneFor(sf.signal),
+      v: sf.regime,
+      metric: `Asia ${sf.asiaPct >= 0 ? '+' : '−'}${Math.abs(sf.asiaPct).toFixed(2)}% · London ${sf.londonPct >= 0 ? '+' : '−'}${Math.abs(sf.londonPct).toFixed(2)}% · NY ${sf.nyPct >= 0 ? '+' : '−'}${Math.abs(sf.nyPct).toFixed(2)}%`,
+      sub: sf.note,
+    },
+    {
+      k: '21-FX Stealth Breadth',
+      badge: `${fx.breadthPct}% Highs`,
+      badgeCls: fx.stealthBull ? 'gold' : badgeFor(fx.signal),
+      cardCls: fx.stealthBull ? 'watch' : toneFor(fx.signal),
+      v: fx.regime,
+      metric: `${fx.nearHighCount}/${fx.totalCurrencies} global currencies near highs · USD ${fx.usdPctOfHigh}%`,
+      sub: fx.stealthBull
+        ? 'World currencies are breaking out ahead of USD — classic hidden global demand signal.'
+        : 'Compares local metal highs across major world currencies to spot stealth rallies.',
+    },
+    {
+      k: 'Spring Coiling',
+      badge: `${sc.coilingScore}/100`,
+      badgeCls: sc.coilingScore >= 72 ? 'gold' : sc.coilingScore >= 54 ? 'up' : '',
+      cardCls: sc.coilingScore >= 72 ? 'watch' : '',
+      v: sc.regime,
+      metric: `5d/30d Vol ${sc.volRatio.toFixed(2)}× · Energy ${sc.breakoutEnergyMult.toFixed(2)}×`,
+      sub: sc.note,
+    },
+    {
+      k: 'Liquidity Compass',
+      badge: fmtSig(lc.signal),
+      badgeCls: badgeFor(lc.signal),
+      cardCls: toneFor(lc.signal),
+      v: lc.regime,
+      metric: lc.goldOilRatio != null ? `Gold/Oil ${lc.goldOilRatio}:1 · Cu ${lc.cu5d >= 0 ? '+' : '−'}${Math.abs(lc.cu5d).toFixed(1)}% · Pt ${lc.pt5d >= 0 ? '+' : '−'}${Math.abs(lc.pt5d).toFixed(1)}%` : lc.note,
+      sub: 'Tracks Gold vs. Bitcoin debasement, Gold/Oil miner profit margins & Copper/Platinum confirmation.',
+    },
+    {
+      k: 'Crowding Brake',
+      badge: `${cb.crowdingScore}/100`,
+      badgeCls: cb.contrarianNudge < 0 ? 'down' : cb.contrarianNudge > 0 ? 'up' : '',
+      cardCls: cb.contrarianNudge < 0 ? 'bearish' : cb.contrarianNudge > 0 ? 'bullish' : '',
+      v: cb.regime,
+      metric: `News ${cb.newsBullPct}% bull (${cb.bullHeadlines}↑ / ${cb.bearHeadlines}↓) · Brake ${cb.contrarianNudge === 0 ? 'Off' : fmtSig(cb.contrarianNudge)}`,
+      sub: cb.note,
+    },
+    {
+      k: 'COMEX OpEx Magnet',
+      badge: ox.pinStrength > 0 ? 'Pin Active' : ox.phase.includes('Post-OpEx') ? 'Release ⚡' : `${ox.daysToOpex > 0 ? `${ox.daysToOpex}d` : 'Open'}`,
+      badgeCls: ox.pinStrength > 0 ? 'gold' : ox.phase.includes('Post-OpEx') ? 'up' : '',
+      cardCls: ox.pinStrength > 0 ? 'watch' : ox.phase.includes('Post-OpEx') ? 'bullish' : '',
+      v: ox.phase,
+      metric: `Strike Magnet ${strikeDisplay} (${strikeDiffStr})`,
+      sub: ox.note,
+    },
+  ];
+
+  gridEl.innerHTML = cards
+    .map(
+      (c) => `
+      <article class="ha-card ${c.cardCls}">
+        <div class="ha-top">
+          <span class="ha-k">${escapeHtml(c.k)}</span>
+          <span class="ha-badge ${c.badgeCls}">${escapeHtml(c.badge)}</span>
+        </div>
+        <strong class="ha-v">${escapeHtml(c.v)}</strong>
+        <span class="ha-metric">${escapeHtml(c.metric)}</span>
+        <span class="ha-sub">${escapeHtml(c.sub)}</span>
+      </article>`
+    )
+    .join('');
+
+  if (noteEl) {
+    noteEl.textContent = `${metal === 'gold' ? 'Gold' : 'Silver'} net hidden-edge forecast boost: ${netPts >= 0 ? '+' : '−'}${Math.abs(netPts)} pts · ${ha.summaryLine}`;
+  }
+}
+
 function renderOutlook() {
   const view = document.getElementById('view-outlook');
   if (!view) return;
@@ -9251,6 +9786,7 @@ function renderOutlook() {
   render30DayForecastRoadmap(res);
   renderWorldSpacePulse(res);
   renderPhysicalPremiums(res);
+  renderHiddenAlpha(res);
   renderSetupQuality(res);
   renderGapAnalyzer(res);
   renderRatioAnalytics(res);
@@ -12622,6 +13158,14 @@ function wireEvents() {
   });
 
   // Self-Learning Visual Accuracy Chart Metal & Horizon (Daily / 7D / 30D) Toggles + Interactive Hover
+  document.getElementById('ha-btn-gold')?.addEventListener('click', () => {
+    state.hiddenAlphaMetal = 'gold';
+    renderHiddenAlpha(computeInteractiveOutlook());
+  });
+  document.getElementById('ha-btn-silver')?.addEventListener('click', () => {
+    state.hiddenAlphaMetal = 'silver';
+    renderHiddenAlpha(computeInteractiveOutlook());
+  });
   document.getElementById('acc-chart-gold')?.addEventListener('click', () => {
     state.accuracyChartMetal = 'gold';
     state.accuracyHoverIdx = null;
@@ -12712,7 +13256,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 50,
+      version: 51,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),

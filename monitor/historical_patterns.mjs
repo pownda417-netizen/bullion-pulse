@@ -9,6 +9,7 @@
 import { estimateJumpParams, runJumpDiffusion } from './jump_diffusion.mjs';
 import { computeHurstExponent } from './precision_forecast.mjs';
 import { computePhysicalPremiumSignals } from './physical_premiums.mjs';
+import { computeHiddenAlphaSuite } from './hidden_alpha.mjs';
 
 export const DRIVER_META = {
   inflation: {
@@ -2258,7 +2259,32 @@ export function buildOutlook({
   const physBoostGold = physicalPremiums.gold.predictionBoost || 0;
   const physBoostSilver = physicalPremiums.silver.predictionBoost || 0;
 
-  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap + physical premiums + world/space pulse
+  // 6 Exclusive Hidden-Alpha Bullion Engines (East/West Session Flow, 21-FX Stealth Breadth,
+  // Spring Coiling, Cross-Asset Liquidity Compass, Consensus Crowding Contrarian Brake, COMEX OpEx Magnet)
+  const hiddenAlpha = computeHiddenAlphaSuite({
+    spotGold,
+    spotSilver,
+    goldIntradayBars: goldGapBars,
+    silverIntradayBars: silverGapBars,
+    goldDailyCloses: goldClosesArr,
+    silverDailyCloses: silverClosesArr,
+    comex,
+    basis,
+    macroSnapshot: quant.macroSnapshot,
+    series,
+    headlines: scoredHeadlines,
+    goldRsi14: quant.goldRsi14,
+    silverRsi14: quant.silverRsi14,
+    cotGoldPct: proSignals?.cot?.gold?.percentile52w ?? 50,
+    cotSilverPct: proSignals?.cot?.silver?.percentile52w ?? 50,
+    goldTrendSign: quant.goldTrend,
+    silverTrendSign: quant.silverTrend,
+    nowDate: new Date(nowMs),
+  });
+  const hiddenBoostGold = hiddenAlpha.gold.netBoost || 0;
+  const hiddenBoostSilver = hiddenAlpha.silver.netBoost || 0;
+
+  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap + physical premiums + hidden alpha + world/space pulse
   const goldUnit = clamp(
     goldDriverComposite * 1.48 * 0.78 +
       quant.goldTrend * 0.22 +
@@ -2266,6 +2292,7 @@ export function buildOutlook({
       backwBoostGold +
       gapBoostGold +
       physBoostGold * 0.75 +
+      hiddenBoostGold * 0.80 +
       worldSpacePulse.goldDynamicBoost * 0.65,
     -1,
     1
@@ -2278,6 +2305,7 @@ export function buildOutlook({
       backwBoostSilver +
       gapBoostSilver +
       physBoostSilver * 0.75 +
+      hiddenBoostSilver * 0.80 +
       worldSpacePulse.silverDynamicBoost * 0.65,
     -1,
     1
@@ -2633,6 +2661,7 @@ export function buildOutlook({
     marketRegime,
     marketGaps,
     physicalPremiums,
+    hiddenAlpha,
     spaceWeather: parsedSpace,
     worldSpacePulse,
     setupQuality,

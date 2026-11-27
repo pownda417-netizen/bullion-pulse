@@ -238,11 +238,14 @@ function projectSpecialistTrajectory({
   leadLagAlpha = 0,
   seasonalityTilt = 0,
   gapPrimary = null,
+  opexMagnetPrice = null,
+  opexPinStrength = 0,
+  breakoutEnergyMult = 1.0,
   stepsOverride = null,
 }) {
   const steps = stepsOverride || spec.steps;
   const stepVol = feats.barVol * Math.sqrt(spec.horizonBars / Math.max(1, spec.steps));
-  const maxCumPct = spec.maxCapSigma * feats.barVol * Math.sqrt(spec.horizonBars);
+  const maxCumPct = spec.maxCapSigma * clamp(breakoutEnergyMult, 0.85, 1.30) * feats.barVol * Math.sqrt(spec.horizonBars);
 
   // Hurst regime adapts momentum vs mean reversion continuously
   const hurstTrendGain = clamp(1 + (feats.hurst - 0.50) * 1.45, 0.55, 1.50);
@@ -292,7 +295,14 @@ function projectSpecialistTrajectory({
     );
     const fMacro = macroComposite * 0.26 * specialist.macroW * spec.wMacro;
 
-    let unitStep = fTrend + fOu + fRsi + fGap + fMacro;
+    // 4b. Pre-OpEx Round-Strike Gravity Pin ($50 Gold / $1 Silver) on short horizons
+    let fOpex = 0;
+    if (opexPinStrength > 0 && Number.isFinite(opexMagnetPrice) && opexMagnetPrice > 0 && spec.wTech >= 0.40) {
+      const magDist = (opexMagnetPrice - cur) / Math.max(cur * stepVol, 1e-6);
+      fOpex = clamp(magDist * 0.14 * opexPinStrength, -0.25, 0.25);
+    }
+
+    let unitStep = (fTrend + fOu + fRsi + fGap + fMacro + fOpex) * clamp(breakoutEnergyMult, 0.88, 1.25);
 
     // 5. Soft Support / Resistance barrier damping (relaxed when Hurst shows strong breakout)
     const distToCeil = (feats.swingHigh - cur) / Math.max(cur * feats.barVol, 1e-6);
@@ -334,6 +344,9 @@ export function computePrecisionForecastLine({
   leadLagAlpha = 0,
   seasonalityTilt = 0,
   gapPrimary = null,
+  opexMagnetPrice = null,
+  opexPinStrength = 0,
+  breakoutEnergyMult = 1.0,
 } = {}) {
   const spec = FORECAST_HORIZON_SPECS[tf] || FORECAST_HORIZON_SPECS['1d'];
   if (!Array.isArray(bars) || bars.length < 4) return null;
@@ -464,6 +477,9 @@ export function computePrecisionForecastLine({
       leadLagAlpha,
       seasonalityTilt: tf === '1m' || tf === '6m' ? seasonalityTilt : 0,
       gapPrimary,
+      opexMagnetPrice,
+      opexPinStrength,
+      breakoutEnergyMult,
     })
   );
 
