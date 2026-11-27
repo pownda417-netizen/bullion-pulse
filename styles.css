@@ -7196,17 +7196,88 @@ body.pixel-shift-on .bottom-nav > * {
   }
 
   body[data-desk-active="split"] .split-desk-left {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     position: sticky;
-    top: 84px;
-    max-height: calc(100dvh - 108px);
+    top: calc(var(--topbar-h, 70px) + 8px);
+    max-height: calc(100dvh - var(--topbar-h, 70px) - 24px);
     overflow-y: auto;
-    padding-right: 2px;
+    padding-right: 4px;
     min-width: 0;
+  }
+
+  body[data-desk-active="split"] .split-desk-chart-slot {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  body[data-desk-active="split"] .split-spot-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    min-width: 0;
+  }
+
+  body[data-desk-active="split"] .split-spot-pair .metal-card {
+    padding: 13px 14px;
+    border-radius: 16px;
+    min-width: 0;
+  }
+
+  body[data-desk-active="split"] .split-spot-pair .metal-price {
+    font-size: 22px;
+  }
+
+  body[data-desk-active="split"] .split-spot-pair .metal-delta-usd {
+    font-size: 12px;
+  }
+
+  body[data-desk-active="split"] .split-spot-pair .metal-futures-strip {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  body[data-desk-active="split"] .split-spot-pair .metal-futures-row {
+    flex-wrap: wrap;
+    gap: 4px 8px;
   }
 
   body[data-desk-active="split"] .split-desk-left #panel-chart {
     margin: 0;
+    padding: 16px 18px;
+  }
+
+  body[data-desk-active="split"] .split-desk-left .stats-grid {
+    gap: 8px;
+  }
+
+  body[data-desk-active="split"] .split-pinned-placeholder {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px 18px;
+    border: 1px dashed color-mix(in srgb, var(--gold) 38%, var(--border-strong));
+    background: color-mix(in srgb, var(--gold-soft) 18%, var(--surface));
+  }
+
+  body[data-desk-active="split"] .split-pinned-placeholder[hidden] {
+    display: none;
+  }
+
+  body[data-desk-active="split"] .split-pinned-placeholder strong {
+    font-size: 14px;
+    color: var(--gold-bright);
+  }
+
+  body[data-desk-active="split"] .split-pinned-placeholder p {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    line-height: 1.45;
   }
 
   body[data-desk-active="split"] .desk-views-wrap {

@@ -382,26 +382,63 @@
   }
 
   function dockChartToSplit(shouldDock) {
+    const goldCard = document.getElementById('card-gold');
+    const silverCard = document.getElementById('card-silver');
     const chartPanel = document.getElementById('panel-chart');
+    const statsStrip = document.getElementById('market-stats-strip');
     const splitSlot = document.getElementById('split-desk-chart-slot');
+    const spotPair = document.getElementById('split-desk-spot-pair');
     const splitAside = document.getElementById('split-desk-left');
-    const anchor = document.getElementById('panel-chart-anchor');
-    if (!chartPanel || !splitSlot || !splitAside || !anchor) return;
+    const goldAnchor = document.getElementById('card-gold-anchor');
+    const silverAnchor = document.getElementById('card-silver-anchor');
+    const chartAnchor = document.getElementById('panel-chart-anchor');
+    const statsAnchor = document.getElementById('market-stats-anchor');
+    const placeholder = document.getElementById('split-live-placeholder');
+    if (!chartPanel || !splitSlot || !splitAside || !chartAnchor) return;
+
+    const liveItems = [goldCard, silverCard, chartPanel, statsStrip].filter(Boolean);
 
     if (shouldDock && !ui.chartDocked) {
+      if (spotPair) {
+        if (goldCard) spotPair.appendChild(goldCard);
+        if (silverCard) spotPair.appendChild(silverCard);
+      } else {
+        if (goldCard) splitSlot.appendChild(goldCard);
+        if (silverCard) splitSlot.appendChild(silverCard);
+      }
       splitSlot.appendChild(chartPanel);
-      chartPanel.classList.remove('sub-hidden');
+      if (statsStrip) splitSlot.appendChild(statsStrip);
+      liveItems.forEach((el) => el.classList.remove('sub-hidden'));
       splitAside.hidden = false;
+      if (placeholder) placeholder.hidden = false;
       ui.chartDocked = true;
+
+      // If user is on Markets -> Live & Chart when entering Split, show Global & Maps on the right so neither pane is empty
+      const b = B();
+      if (b?.state?.activeView === 'markets' && (b?.state?.settings?.subViews?.markets || 'live') === 'live') {
+        document.querySelector('#view-markets .sub-nav .sub-tab-btn[data-sub-target="global"]')?.click();
+      }
     } else if (!shouldDock && ui.chartDocked) {
-      anchor.parentNode.insertBefore(chartPanel, anchor.nextSibling);
+      if (goldCard && goldAnchor?.parentNode) {
+        goldAnchor.parentNode.insertBefore(goldCard, goldAnchor.nextSibling);
+      }
+      if (silverCard && silverAnchor?.parentNode) {
+        silverAnchor.parentNode.insertBefore(silverCard, silverAnchor.nextSibling);
+      }
+      chartAnchor.parentNode.insertBefore(chartPanel, chartAnchor.nextSibling);
+      if (statsStrip && statsAnchor?.parentNode) {
+        statsAnchor.parentNode.insertBefore(statsStrip, statsAnchor.nextSibling);
+      }
+      if (placeholder) placeholder.hidden = true;
       splitAside.hidden = true;
       ui.chartDocked = false;
       B()?.applyAllSubViews?.();
     } else if (shouldDock) {
-      chartPanel.classList.remove('sub-hidden');
+      liveItems.forEach((el) => el.classList.remove('sub-hidden'));
+      if (placeholder) placeholder.hidden = false;
       splitAside.hidden = false;
     } else {
+      if (placeholder) placeholder.hidden = true;
       splitAside.hidden = true;
     }
   }
@@ -442,7 +479,7 @@
         effective === 'ultrawide'
           ? '3-Column Ultrawide Active'
           : effective === 'split'
-            ? 'Split-Desk Active (Live Chart Pinned Left)'
+            ? 'Split-Desk Active (Live & Chart Pinned Left)'
             : 'Single View Active';
       const tip =
         w < 1440

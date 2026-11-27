@@ -2355,5 +2355,7 @@
     'Simulate +GW Surge': ['จำลองเร่งสร้าง +GW', 'ຈຳລອງເລັ່ງສ້າງ +GW', 'Simular Auge +GW', '模拟+GW暴增', '+GW急増を試算', '+GW उछाल सिमुलेट'],
     'Simulate CapEx Pause': ['จำลองชะลอลงทุน', 'ຈຳລອງຊະລໍລົງທຶນ', 'Simular Pausa CapEx', '模拟投资放缓', '投資減速を試算', 'CapEx विराम सिमुलेट'],
     '18 global feeds across Big Tech AI data centers, central banks, vaults, solar/EV silver, retail demand, geopolitics & space': ['18 แหล่งข่าวทั่วโลก: ศูนย์ข้อมูล AI บิ๊กเทค ธนาคารกลาง คลังโลหะ โซลาร์/EV รายย่อย ภูมิรัฐศาสตร์ และอวกาศ', '18 ແຫຼ່ງຂ່າວທົ່ວໂລກ: ສູນຂໍ້ມູນ AI ທະນາຄານກາງ ຄັງໂລຫະ ໂຊລາ/EV ລາຍຍ່ອຍ ພູມລັດຖະສາດ ແລະ ອະວະກາດ', '18 fuentes globales: centros de datos IA, bancos centrales, bóvedas, plata solar/EV, minoristas, geopolítica y espacio', '汇总18路全球情报源：科技巨头AI数据中心、央行、金库、光伏/EV用银、零售需求、地缘与太空', 'ビッグテックAIデータセンター・中央銀行・在庫・太陽光/EV銀・小売・地政学・宇宙の18国際フィード', 'बिग टेक AI डेटा सेंटर, केंद्रीय बैंक, वॉल्ट, सोलर/EV चांदी, खुदरा, भू-राजनीति व अंतरिक्ष पर 18 वैश्विक फ़ीड'],
+    'Pinned Live & Chart · Split-Desk': ['ตรึงราคาสดและกราฟ · หน้าจอแยก', 'ຕຶງລາຄາສົດ ແລະ ກຣາຟ · ໜ້າຈໍແຍກ', 'Precios y Gráfico Fijos · Pantalla Dividida', '固定实时价格与图表 · 分屏模式', 'ライブ価格・チャート固定 · 分割表示', 'पिन लाइव व चार्ट · स्प्लिट-डेस्क'],
+    'Live & Chart is pinned on the left pane': ['ราคาสดและกราฟถูกตรึงไว้ที่ฝั่งซ้าย', 'ລາຄາສົດ ແລະ ກຣາຟຖືກຕຶງໄວ້ຝັ່ງຊ້າຍ', 'Precios y Gráfico están fijos en el panel izquierdo', '实时价格与图表已固定在左侧栏', 'ライブ価格とチャートは左ペインに固定中です', 'लाइव और चार्ट बाएँ पैन पर पिन हैं'],
   });
 })();
