@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-27T05:22:52.112Z",
+  "updatedAt": "2026-11-27T06:37:37.263Z",
   "liveFetched": true,
   "oiLive": true,
   "vaultLive": true,
@@ -48,7 +48,7 @@
     "registered30dPct": -1.9,
     "paperToRegisteredRatio": 6.28,
     "paperToTotalRatio": 6.14,
-    "signal": 0.006,
+    "signal": 0.556,
     "jumpBoost": 0.119,
     "regime": "Elevated Paper Claims",
     "date": "2026-11-17",
