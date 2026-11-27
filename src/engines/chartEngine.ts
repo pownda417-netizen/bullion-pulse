@@ -473,9 +473,9 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
   const candleAreaW = showFc ? Math.round(plotW * 0.67) : plotW;
   const forecastAreaW = showFc ? Math.max(48, plotW - candleAreaW) : 0;
 
-  // Smart OHLC aggregation when not manually zoomed in so candles NEVER collapse into tiny 1px slivers
+  // Smart OHLC aggregation so candles stay bold & smoothly increase in detail as you zoom in
   const maxReadableBars = Math.max(28, Math.floor(candleAreaW / 7.5));
-  const visBars = zoomCount == null ? resampleBarsForDisplay(rawVisBars, maxReadableBars) : rawVisBars;
+  const visBars = resampleBarsForDisplay(rawVisBars, maxReadableBars);
 
   // Compute dynamic Fair Value (Price Discovery) & Short Squeeze curves cleanly on displayed OHLC bars
   const discoverySeries =

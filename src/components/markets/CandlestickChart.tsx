@@ -196,15 +196,35 @@ export const CandlestickChart: React.FC = () => {
     }
   };
 
-  const handleWheelZoom = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    if (barsToDraw.length <= MIN_ZOOM_BARS) return;
-    const curCount = zoomCount ?? barsToDraw.length;
-    const delta = e.deltaY > 0 ? Math.ceil(curCount * 0.15) : -Math.ceil(curCount * 0.15);
-    const nextCount = Math.max(MIN_ZOOM_BARS, Math.min(barsToDraw.length, curCount + delta));
-    const nextStart = Math.max(0, barsToDraw.length - nextCount);
-    setZoomCount(nextCount);
-    setZoomStart(nextStart);
-  };
+  const barsLenRef = useRef(barsToDraw.length);
+  barsLenRef.current = barsToDraw.length;
+  const zoomCountRef = useRef(zoomCount);
+  zoomCountRef.current = zoomCount;
+
+  // Native non-passive wheel listener so zooming on the chart NEVER scrolls the page or right split pane
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const totalLen = barsLenRef.current;
+      if (totalLen <= MIN_ZOOM_BARS) return;
+      const curCount = zoomCountRef.current ?? totalLen;
+      const step = Math.max(2, Math.ceil(curCount * 0.16));
+      const delta = e.deltaY > 0 ? step : -step;
+      const nextCount = Math.max(MIN_ZOOM_BARS, Math.min(totalLen, curCount + delta));
+      if (nextCount >= totalLen) {
+        setZoomCount(null);
+        setZoomStart(null);
+      } else {
+        setZoomCount(nextCount);
+        setZoomStart(Math.max(0, totalLen - nextCount));
+      }
+    };
+    canvas.addEventListener('wheel', onNativeWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onNativeWheel);
+  }, []);
 
   const inspectedBar = useMemo(() => {
     const g = geomRef.current;
@@ -334,15 +354,14 @@ export const CandlestickChart: React.FC = () => {
         </div>
       </div>
 
-      <div className="chart-canvas-wrap">
+      <div className="chart-canvas-wrap" style={{ overscrollBehavior: 'contain' }}>
         <canvas
           ref={canvasRef}
           id="price-chart"
           className="price-chart-canvas"
-          style={{ width: '100%', height: 290, display: 'block', touchAction: 'pan-y' }}
+          style={{ width: '100%', height: 290, display: 'block', touchAction: 'pan-y', overscrollBehavior: 'contain' }}
           onPointerMove={handlePointerMove}
           onPointerLeave={() => setHoverIdx(null)}
-          onWheel={handleWheelZoom}
         />
       </div>
 
