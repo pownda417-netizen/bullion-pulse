@@ -74,9 +74,51 @@ function isoDate(d) {
   return d.toISOString().slice(0, 10);
 }
 
+// Published ECB & Bank of Japan (BoJ) Monetary Policy Announcement Dates (2026–2027)
+const ECB_DATES = [
+  '2026-02-05', '2026-03-19', '2026-04-30', '2026-06-11',
+  '2026-07-23', '2026-09-10', '2026-10-29', '2026-12-17',
+  '2027-02-04', '2027-03-18', '2027-04-29', '2027-06-10',
+  '2027-07-22', '2027-09-09', '2027-10-28', '2027-12-16',
+];
+const BOJ_DATES = [
+  '2026-01-23', '2026-03-19', '2026-04-28', '2026-06-16',
+  '2026-07-31', '2026-09-18', '2026-10-30', '2026-12-18',
+  '2027-01-22', '2027-03-19', '2027-04-28', '2027-06-18',
+  '2027-07-30', '2027-09-17', '2027-10-29', '2027-12-17',
+];
+
+function lastFridayOfMonth(year, monthIndex) {
+  const d = new Date(Date.UTC(year, monthIndex + 1, 0));
+  while (d.getUTCDay() !== 5) d.setUTCDate(d.getUTCDate() - 1);
+  return d;
+}
+
+function nthBusinessDayFromEnd(year, monthIndex, nBack) {
+  const d = new Date(Date.UTC(year, monthIndex + 1, 0));
+  let seen = 0;
+  while (seen < nBack) {
+    const wd = d.getUTCDay();
+    if (wd !== 0 && wd !== 6) {
+      seen++;
+      if (seen === nBack) break;
+    }
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return d;
+}
+
+function nextFridayFrom(startUtcMs) {
+  const d = new Date(startUtcMs);
+  const offset = (5 - d.getUTCDay() + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d;
+}
+
 /**
- * Generates upcoming FOMC, US CPI, US NFP, and COMEX Silver First Notice Days
- * relative to `nowDate` and calculates a Jump-Diffusion event-risk boost.
+ * Generates upcoming Tier-1 macro/COMEX events (FOMC, US CPI, US NFP, COMEX Silver FND)
+ * PLUS an expanded multi-subject Gold & Silver calendar (Core PCE, ECB, BoJ, COMEX Gold FND,
+ * COMEX Options Expiry, CFTC COT, WGC Demand Report, Asia Buying Festivals, and Equinox Solar Peaks).
  */
 export function getUpcomingEventRisk(nowDate = new Date()) {
   const now = nowDate instanceof Date ? nowDate : new Date(nowDate);
@@ -84,19 +126,44 @@ export function getUpcomingEventRisk(nowDate = new Date()) {
   const dayMs = 86400000;
 
   const events = [];
+  const extraEvents = [];
 
   for (const ds of FOMC_DATES) {
     events.push({
       type: 'fomc',
+      category: 'macro',
       title: 'FOMC Rate Decision',
       date: ds,
       ts: Date.parse(`${ds}T18:00:00Z`),
       impact: 'high',
     });
   }
+  for (const ds of ECB_DATES) {
+    extraEvents.push({
+      type: 'ecb',
+      category: 'central_banks',
+      title: 'ECB Rate Decision',
+      date: ds,
+      ts: Date.parse(`${ds}T12:15:00Z`),
+      impact: 'medium',
+    });
+  }
+  for (const ds of BOJ_DATES) {
+    extraEvents.push({
+      type: 'boj',
+      category: 'central_banks',
+      title: 'Bank of Japan (BoJ) Policy',
+      date: ds,
+      ts: Date.parse(`${ds}T03:00:00Z`),
+      impact: 'medium',
+    });
+  }
 
-  // Generate rolling 6-month window of NFP, CPI, and COMEX Silver FND (Feb/Apr/Jun/Aug/Nov)
-  const fndMonths = new Set([1, 3, 5, 7, 10]); // 0-indexed: Feb, Apr, Jun, Aug, Nov
+  // Generate rolling 6-month window of NFP, CPI, PCE, COMEX Silver/Gold FND, COMEX OpEx & WGC Quarterly
+  const fndMonths = new Set([1, 3, 5, 7, 10]); // 0-indexed: Feb, Apr, Jun, Aug, Nov -> Silver active deliveries
+  const goldFndMonths = new Set([0, 2, 4, 6, 8, 10]); // Jan, Mar, May, Jul, Sep, Nov -> Gold active deliveries (Feb/Apr/Jun/Aug/Oct/Dec)
+  const wgcMonths = new Set([0, 3, 6, 9]); // Jan, Apr, Jul, Oct quarterly World Gold Council Demand Trends
+
   for (let mOffset = 0; mOffset <= 5; mOffset++) {
     const dt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + mOffset, 1));
     const y = dt.getUTCFullYear();
@@ -105,6 +172,7 @@ export function getUpcomingEventRisk(nowDate = new Date()) {
     const nfp = firstFridayOfMonth(y, m);
     events.push({
       type: 'nfp',
+      category: 'macro',
       title: 'US Jobs Report (NFP)',
       date: isoDate(nfp),
       ts: nfp.getTime() + 13.5 * 3600000,
@@ -114,9 +182,20 @@ export function getUpcomingEventRisk(nowDate = new Date()) {
     const cpi = approxCpiReleaseDate(y, m);
     events.push({
       type: 'cpi',
+      category: 'macro',
       title: 'US CPI Inflation Print',
       date: isoDate(cpi),
       ts: cpi.getTime() + 13.5 * 3600000,
+      impact: 'high',
+    });
+
+    const pce = lastFridayOfMonth(y, m);
+    extraEvents.push({
+      type: 'pce',
+      category: 'macro',
+      title: 'US Core PCE Inflation',
+      date: isoDate(pce),
+      ts: pce.getTime() + 13.5 * 3600000,
       impact: 'high',
     });
 
@@ -124,25 +203,98 @@ export function getUpcomingEventRisk(nowDate = new Date()) {
       const fnd = lastBusinessDayOfMonth(y, m);
       events.push({
         type: 'comex_fnd',
+        category: 'vaults',
         title: 'COMEX Silver First Notice Day',
         date: isoDate(fnd),
         ts: fnd.getTime() + 14 * 3600000,
         impact: 'high',
       });
     }
+
+    if (goldFndMonths.has(m)) {
+      const gfnd = lastBusinessDayOfMonth(y, m);
+      extraEvents.push({
+        type: 'comex_gold_fnd',
+        category: 'vaults',
+        title: 'COMEX Gold Delivery Notice Day',
+        date: isoDate(gfnd),
+        ts: gfnd.getTime() + 14 * 3600000,
+        impact: 'high',
+      });
+      const opex = nthBusinessDayFromEnd(y, m, 4);
+      extraEvents.push({
+        type: 'comex_opex',
+        category: 'vaults',
+        title: 'COMEX Gold/Silver Options Expiry',
+        date: isoDate(opex),
+        ts: opex.getTime() + 17.5 * 3600000,
+        impact: 'medium',
+      });
+    }
+
+    if (wgcMonths.has(m)) {
+      const wgc = lastBusinessDayOfMonth(y, m);
+      extraEvents.push({
+        type: 'wgc_report',
+        category: 'central_banks',
+        title: 'World Gold Council Demand Report',
+        date: isoDate(wgc),
+        ts: wgc.getTime() + 7 * 3600000,
+        impact: 'medium',
+      });
+    }
   }
 
-  const upcoming = events
-    .map((e) => ({
-      ...e,
-      daysUntil: Math.ceil((Date.UTC(
-        Number(e.date.slice(0, 4)),
-        Number(e.date.slice(5, 7)) - 1,
-        Number(e.date.slice(8, 10))
-      ) - startUtc) / dayMs),
-    }))
-    .filter((e) => e.daysUntil >= 0 && e.daysUntil <= 45)
-    .sort((a, b) => a.daysUntil - b.daysUntil);
+  // Next weekly CFTC Commitments of Traders (COT) Friday report
+  const cotFri = nextFridayFrom(startUtc);
+  extraEvents.push({
+    type: 'cftc_cot',
+    category: 'positioning',
+    title: 'CFTC COT Positioning Report',
+    date: isoDate(cotFri),
+    ts: cotFri.getTime() + 20.5 * 3600000,
+    impact: 'medium',
+  });
+
+  // Annual Major Physical Buying Windows & Russell-McPherron Solar Equinox Peaks
+  for (const yr of [now.getUTCFullYear(), now.getUTCFullYear() + 1]) {
+    const seasonalMarkers = [
+      { type: 'festival_cny', category: 'physical', title: 'Chinese New Year Gold Restock', date: `${yr}-01-20`, impact: 'medium' },
+      { type: 'solar_equinox', category: 'space', title: 'Spring Equinox Solar Storm Peak', date: `${yr}-03-20`, impact: 'medium' },
+      { type: 'festival_akshaya', category: 'physical', title: 'India Akshaya Tritiya Buying', date: `${yr}-04-20`, impact: 'medium' },
+      { type: 'solar_equinox', category: 'space', title: 'Autumn Equinox Solar Storm Peak', date: `${yr}-09-22`, impact: 'medium' },
+      { type: 'festival_diwali', category: 'physical', title: 'India Dhanteras & Diwali Peak', date: `${yr}-10-28`, impact: 'medium' },
+      { type: 'yearend_vault', category: 'vaults', title: 'Year-End Bullion Vault Positioning', date: `${yr}-12-15`, impact: 'medium' },
+    ];
+    for (const sm of seasonalMarkers) {
+      extraEvents.push({ ...sm, ts: Date.parse(`${sm.date}T12:00:00Z`) });
+    }
+  }
+
+  const withDays = (list) =>
+    list
+      .map((e) => ({
+        ...e,
+        daysUntil: Math.ceil((Date.UTC(
+          Number(e.date.slice(0, 4)),
+          Number(e.date.slice(5, 7)) - 1,
+          Number(e.date.slice(8, 10))
+        ) - startUtc) / dayMs),
+      }))
+      .filter((e) => e.daysUntil >= 0 && e.daysUntil <= 45)
+      .sort((a, b) => a.daysUntil - b.daysUntil);
+
+  const upcoming = withDays(events);
+  const allCombined = withDays([...events, ...extraEvents]);
+  const seenKey = new Set();
+  const expandedEvents = [];
+  for (const ev of allCombined) {
+    const k = `${ev.date}|${ev.type}`;
+    if (seenKey.has(k)) continue;
+    seenKey.add(k);
+    expandedEvents.push(ev);
+    if (expandedEvents.length >= 10) break;
+  }
 
   const nextEvent = upcoming[0] || null;
   let jumpBoost = 0;
@@ -164,6 +316,8 @@ export function getUpcomingEventRisk(nowDate = new Date()) {
   return {
     nextEvent,
     upcoming: upcoming.slice(0, 3),
+    expandedEvents,
+    totalTrackedUpcoming: allCombined.length,
     jumpBoost,
     regime,
   };

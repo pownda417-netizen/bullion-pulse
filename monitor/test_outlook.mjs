@@ -19,6 +19,7 @@ import {
   computeHurstExponent,
   computePrecisionForecastLine,
 } from './precision_forecast.mjs';
+import { computePhysicalPremiumSignals } from './physical_premiums.mjs';
 import { parseRssItems, sanitizeHttpUrl } from './analyze_outlook.mjs';
 import {
   cnyPerGramToUsdPerOz,
@@ -1112,4 +1113,104 @@ const accPending = updateAccuracyLog({
 assert.equal(accPending.scorecard.pendingStatus.next7dInDays, 7);
 assert.equal(accPending.scorecard.pendingStatus.next30dInDays, 30);
 
-console.log('All 27 Bullion Pulse suites (v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all 26 core suites) passed!');
+// 28. v50 Expanded Multi-Subject News Classification (16 feeds, 7 topics, up to 28 stories) & Global Events Calendar
+const hTech = classifyHeadline({ title: 'AI data center and solid-state battery silver paste demand surges to record high', source: 'Reuters' });
+assert.ok(hTech && hTech.driver === 'mining_supply' && hTech.topic === 'tech_solar_ai' && hTech.silverImpact > 0, 'AI/solid-state silver story must map to tech_solar_ai & bullish Silver');
+
+const hBrics = classifyHeadline({ title: 'BRICS sovereign gold reserve repatriation and PAXG tokenized gold inflows surge', source: 'Bloomberg' });
+assert.ok(hBrics && hBrics.driver === 'central_banks' && hBrics.topic === 'central_banks' && hBrics.goldImpact > 0, 'BRICS/PAXG story must map to central_banks & bullish Gold');
+
+const hLbma = classifyHeadline({ title: 'LBMA London bullion vault drawdown pushes silver lease rate spike into backwardation', source: 'Financial Times' });
+assert.ok(hLbma && hLbma.driver === 'comex_paper' && hLbma.topic === 'vaults_physical' && hLbma.silverImpact > 0, 'LBMA lease rate spike must map to vaults_physical & bullish');
+
+const hIndia = classifyHeadline({ title: 'India gold and silver imports surge ahead of Diwali as Dubai bullion premiums climb', source: 'Kitco' });
+assert.ok(hIndia && hIndia.topic === 'asia_retail' && hIndia.goldImpact > 0, 'India/Dubai bullion rush must map to asia_retail & bullish');
+
+const hHormuz = classifyHeadline({ title: 'Strait of Hormuz shipping disruption fears spark safe-haven gold rally', source: 'WSJ' });
+assert.ok(hHormuz && hHormuz.driver === 'geopolitics' && hHormuz.topic === 'geo_space' && hHormuz.goldImpact > 0, 'Chokepoint shipping crisis must map to geo_space & bullish Gold');
+
+const manyRaw = [
+  'Fed cuts rates as Treasury yield plunges sharply',
+  'PBOC and Poland central bank gold reserve buying hits record',
+  'Solar TOPCon silver paste demand jumps on photovoltaic boom',
+  'LBMA silver lease rate spikes amid London vault drain',
+  'India silver imports surge as MCX and Diwali demand climb',
+  'US national debt crisis deepens as Treasury auction tails',
+  'NOAA warns G4 geomagnetic solar flare risk for power grids',
+  'Strait of Hormuz shipping crisis sends crude oil spiking',
+  'Costco gold bars and US Mint silver eagle coins sold out',
+  'PAXG tokenized gold and Basel III Tier 1 demand surges',
+  'Newmont and Barrick report mine strike labor disruption',
+  'Shanghai SGE Ag(T+D) physical premium surges over London',
+  'COMEX silver registered vault inventory drops to record low',
+  'Bank stress and stock market selloff spark safe-haven buying',
+  'Space economy satellite constellation launches lift aerospace silver',
+  'OPEC crude oil shock fuels sticky inflation and stagflation fears',
+].map((title, idx) => ({ title, source: 'Reuters', publishedAt: new Date(Date.now() - idx * 3600000).toISOString() }));
+const outMany = buildOutlook({ spotGold: 3610, spotSilver: 42.8, rawHeadlines: manyRaw });
+assert.ok(outMany.headlines.length >= 14, `Expanded outlook should retain >12 stories (got ${outMany.headlines.length})`);
+assert.ok(Object.keys(outMany.topicCoverage || {}).length >= 5, 'topicCoverage must span at least 5 Gold & Silver subject domains');
+
+const evExpanded = getUpcomingEventRisk(new Date('2026-11-26T12:00:00Z'));
+assert.ok(Array.isArray(evExpanded.expandedEvents) && evExpanded.expandedEvents.length >= 6, 'Expanded global calendar must return >= 6 multi-category events');
+const expCats = new Set(evExpanded.expandedEvents.map((e) => e.category));
+assert.ok(expCats.size >= 3, `Expanded calendar must cover multiple categories (got ${[...expCats].join(', ')})`);
+
+// 29. v50 Physical Bullion Premiums vs. Spot & Melt (Squeeze, Paper-Physical Disconnect, Above-Spot Buyback & Forecast Lift)
+const calmPhys = computePhysicalPremiumSignals({
+  spotGold: 3600,
+  spotSilver: 42.5,
+  spotGoldDailyPct: 0.2,
+  spotSilverDailyPct: 0.3,
+  vix: 15,
+});
+assert.equal(calmPhys.gold.products.length, 3);
+assert.equal(calmPhys.silver.products.length, 3);
+assert.ok(calmPhys.gold.compositePremPct >= 2 && calmPhys.gold.compositePremPct <= 5.5, 'Calm Gold retail markup should sit near 2-5%');
+assert.ok(calmPhys.silver.compositePremPct >= 8 && calmPhys.silver.compositePremPct <= 16, 'Calm Silver retail markup should sit near 8-16%');
+
+const squeezePhys = computePhysicalPremiumSignals({
+  spotGold: 3600,
+  spotSilver: 42.5,
+  spotGoldDailyPct: -1.8,
+  spotSilverDailyPct: -2.4,
+  basis: {
+    gold: { isBackwardation: true, basisUsd: -18, basisPct: -0.5 },
+    silver: { isBackwardation: true, basisUsd: -0.9, basisPct: -2.1 },
+  },
+  comex: {
+    gold: { paperToRegisteredRatio: 5.5 },
+    silver: { paperToRegisteredRatio: 8.5 },
+  },
+  vix: 30,
+  gvz: 28,
+  headlines: [
+    { title: 'US Mint Silver Eagle coin shortage triggers record dealer premium surge and delivery delays' },
+    { title: 'Costco gold bars sold out as bullion dealer premiums spike amid banking panic' },
+  ],
+});
+assert.equal(squeezePhys.silver.tone, 'bullish', 'Spiking Silver premiums must produce bullish physical squeeze signal');
+assert.equal(squeezePhys.silver.paperPhysicalDisconnect, true, 'Falling spot + surging premiums must flag Paper-Physical Disconnect');
+assert.ok(squeezePhys.silver.buybackAboveSpot, 'Acute Silver Eagle squeeze must lift estimated dealer buyback above spot');
+assert.ok(squeezePhys.silver.predictionBoost > 0.08, 'Acute physical squeeze must strongly boost forecast');
+assert.ok(squeezePhys.silver.barSavingsPct > 5, 'Coin squeeze must compute significant rotation savings into bars/rounds');
+
+const userOverridePhys = computePhysicalPremiumSignals({
+  spotGold: 3600,
+  spotSilver: 42.5,
+  userOverrides: { goldStreetOz: 3924, silverStreetOz: 57.5 },
+});
+assert.equal(userOverridePhys.gold.hasUserOverride, true);
+assert.equal(userOverridePhys.silver.hasUserOverride, true);
+assert.ok(userOverridePhys.silver.products[0].premiumPct > 34, 'User dealer quote $57.50 on $42.50 spot must compute ~35% markup');
+assert.ok(userOverridePhys.silver.predictionBoost > calmPhys.silver.predictionBoost, 'High user dealer premium must lift live prediction');
+
+const outSqueezePrem = buildOutlook({
+  spotGold: 3600,
+  spotSilver: 42.5,
+  rawHeadlines: [{ title: 'US Mint Silver Eagle shortage drives record coin dealer premium surge', source: 'Reuters', publishedAt: new Date().toISOString() }],
+  institutionalSignals: { basis: { gold: { isBackwardation: true, basisUsd: -15, basisPct: -0.4 }, silver: { isBackwardation: true, basisUsd: -0.8, basisPct: -1.9 } } },
+});
+assert.ok(outSqueezePrem.physicalPremiums?.silver?.predictionBoost > 0, 'buildOutlook must attach live physicalPremiums signal');
+
+console.log('All 29 Bullion Pulse suites (v50 Physical Premiums vs. Spot & Melt, 16-Feed Multi-Subject News & Global Events Calendar, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');

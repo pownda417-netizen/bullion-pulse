@@ -8,6 +8,7 @@
 
 import { estimateJumpParams, runJumpDiffusion } from './jump_diffusion.mjs';
 import { computeHurstExponent } from './precision_forecast.mjs';
+import { computePhysicalPremiumSignals } from './physical_premiums.mjs';
 
 export const DRIVER_META = {
   inflation: {
@@ -304,6 +305,30 @@ export const SCENARIO_PRESETS = [
     silverDelta: 0.78,
     summary: 'Accelerating satellite constellations, orbital solar arrays, and aerospace electronics expand physical Silver consumption.',
   },
+  {
+    id: 'ai_battery_silver',
+    label: 'AI & Solid-State Silver Boom',
+    driver: 'mining_supply',
+    goldDelta: 0.22,
+    silverDelta: 0.85,
+    summary: 'Exploding AI data-center power hardware, TOPCon/HJT solar paste, and silver-carbon solid-state EV batteries accelerate structural Silver deficits.',
+  },
+  {
+    id: 'sovereign_debt_brics',
+    label: 'BRICS / Sovereign Debt Crisis',
+    driver: 'central_banks',
+    goldDelta: 0.82,
+    silverDelta: 0.55,
+    summary: 'Accelerating sovereign debt stress, BRICS gold trade settlement, and national reserve repatriation drive structural multi-month Gold inflows.',
+  },
+  {
+    id: 'physical_squeeze',
+    label: 'Retail Physical Squeeze (+25% Premiums)',
+    driver: 'comex_paper',
+    goldDelta: 0.58,
+    silverDelta: 0.88,
+    summary: 'Dealer coin & bar premiums surge well above spot/melt with mint bottlenecks and above-spot buybacks — leading bullish catch-up signal.',
+  },
 ];
 
 /* ---------- Keyword-Based News Classifier ---------- */
@@ -315,8 +340,8 @@ const DRIVER_RULES = [
       /\binflation\b.*\b(surge|jump|rise|hot|acceler|sticky|high|above|exceed)/i,
       /\b(hot|higher|sticky|persistent)\b.*\b(cpi|pce|inflation)/i,
       /\bstagflation\b/i,
-      /\b(deficit|national debt|debt ceiling|debasement)\b/i,
-      /\boil\b.*\b(surge|spike|jump)/i,
+      /\b(deficit|national debt|debt ceiling|debasement|sovereign debt|fiscal crisis|bond vigilante|currency devaluation|money printing)\b/i,
+      /\b(oil|crude|energy|opec)\b.*\b(surge|spike|jump|cut|shock|embargo)/i,
     ],
     bearish: [
       /\binflation\b.*\b(cool|ease|drop|fall|slow|below|tame)/i,
@@ -328,8 +353,8 @@ const DRIVER_RULES = [
     driver: 'geopolitics',
     bullish: [
       /\b(war|airstrike|missile|invasion|escalat|conflict|hostilit|(?<!labor\s)(?<!mine\s)(?<!union\s)(?<!workers\s)strike|retaliat)\b/i,
-      /\b(middle east|ukraine|gaza|iran|taiwan|red sea)\b.*\b(tension|attack|crisis|clash|warning|fear)/i,
-      /\b(sanction|tariff|trade war|embargo|geopolitical)\b/i,
+      /\b(middle east|ukraine|gaza|iran|taiwan|red sea|strait of hormuz|suez)\b.*\b(tension|attack|crisis|clash|warning|fear|disrupt|blockade|shipping)/i,
+      /\b(sanction|tariff|trade war|embargo|geopolitical|chokepoint)\b/i,
       /\b(geomagnetic storm|solar flare|coronal mass ejection|x-class flare|solar storm|grid blackout|satellite disruption|anti-satellite|cme impact)\b/i,
       /\bsafe[- ]haven\b/i,
     ],
@@ -342,8 +367,8 @@ const DRIVER_RULES = [
     driver: 'rates_usd',
     bullish: [
       /\b(rate cut|cut rates|dovish|pivot|easing cycle|lower rates)\b/i,
-      /\b(dollar|usd|dxy)\b.*\b(fall|drop|slip|weaken|slide|tumble|retreat)/i,
-      /\b(yield|treasury)\b.*\b(fall|drop|plunge|slip|decline|retreat)/i,
+      /\b(dollar|usd|dxy|yen)\b.*\b(fall|drop|slip|weaken|slide|tumble|retreat|intervention)/i,
+      /\b(yield|treasury|bond)\b.*\b(fall|drop|plunge|slip|decline|retreat|weak auction|tail)/i,
       /\bfed\b.*\b(pause|cut|dovish|soften)/i,
     ],
     bearish: [
@@ -369,8 +394,9 @@ const DRIVER_RULES = [
     bullish: [
       /\b(mine|mining|miner|smelter|san dimas|newmont|barrick|first majestic|pan american|hecla|agnico|wheaton)\b.*\b(strike|labor dispute|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output|aisc.*rise|aisc.*jump|cost.*rise)/i,
       /\b(silver|gold)\b.*\b(deficit|shortage|tight supply|vault drain|inventory drop|record demand|squeeze|sixth straight)/i,
-      /\b(solar|photovoltaic|ev|electrification|charging|electronics|ai data center)\b.*\b(silver|demand|grow|surge|boom|rise)/i,
+      /\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ev|electrification|charging|electronics|semiconductor|ai data center|ai server|antimicrobial)\b.*\b(silver|demand|grow|surge|boom|rise|record|battery|adoption)/i,
       /\b(space economy|satellite constellation|orbital solar|aerospace|lunar base|starship|nasa|spacex|satellite launch)\b.*\b(demand|launch|build|solar|silver|boom|record|contract|expand)/i,
+      /\b(us mint|royal mint|perth mint|bullion coin|silver eagle|costco gold)\b.*\b(shortage|sell out|sold out|surge|demand|premium|record|backlog)/i,
       /\bexport (ban|curb|restriction|licensing|control)\b.*\b(silver|gold|metal|mineral)/i,
       /\b(comex|lbma|shfe)\b.*\b(inventory|stock|vault)\b.*\b(drop|decline|drain|low|plummet)/i,
     ],
@@ -383,9 +409,10 @@ const DRIVER_RULES = [
     driver: 'central_banks',
     bullish: [
       /\bcentral bank\b.*\b(buy|buying|accumulat|add|reserve|record|gold)\b/i,
-      /\b(china|pboc|india|rbi|poland|turkey)\b.*\b(gold reserve|buys gold|adds gold|silver import)/i,
+      /\b(china|pboc|india|rbi|poland|nbp|turkey|brics|imf|sovereign)\b.*\b(gold reserve|buys gold|adds gold|silver import|gold import|repatriat|gold[- ]backed|settlement)/i,
       /\b(gold|silver) (etf|etp)\b.*\b(inflow|surge|buying|add|recover)/i,
-      /\bde-dollariz/i,
+      /\b(paxg|xaut|tether gold|tokenized gold|basel iii)\b.*\b(surge|inflow|demand|tier 1|record|growth|adoption|vault)/i,
+      /\bde-?dollariz/i,
     ],
     bearish: [
       /\bcentral bank\b.*\b(sell|selling|pause buying|halt gold|dump)\b/i,
@@ -397,22 +424,60 @@ const DRIVER_RULES = [
     bullish: [
       /\b(shanghai|sge|shfe)\b.*\b(premium|surge|high|squeeze|tight|demand|au99|ag\(t\+d\)|vault drain)/i,
       /\bchina\b.*\b(silver|gold)\b.*\b(export control|export restriction|licensing|premium|rush|shortage)/i,
+      /\b(india|dubai|dmcc|turkey|mcx|swiss gold exports|diwali|akshaya tritiya)\b.*\b(surge|jump|record|boom|import|demand|premium|buying)/i,
     ],
     bearish: [
-      /\b(shanghai|sge|shfe)\b.*\b(discount|margin hike|margin rate|cooling|inventory build|slump)/i,
+      /\b(shanghai|sge|shfe|india|dubai|turkey)\b.*\b(discount|margin hike|margin rate|cooling|inventory build|slump|import drop|import fall)/i,
     ],
   },
   {
     driver: 'comex_paper',
     bullish: [
-      /\bcomex\b.*\b(registered|vault|stockpile|inventor|delivery)\b.*\b(drop|drain|fall|low|squeeze|drawdown|outflow|stand for delivery)/i,
-      /\b(paper silver|paper gold|open interest)\b.*\b(surge|jump|squeeze|record|exceed|short covering)/i,
+      /\b(comex|lbma|london bullion)\b.*\b(registered|vault|stockpile|inventor|delivery)\b.*\b(drop|drain|fall|low|squeeze|drawdown|outflow|stand for delivery|tight)/i,
+      /\b(paper silver|paper gold|open interest|gold lease rate|silver lease rate|backwardation|efp spread)\b.*\b(surge|jump|squeeze|record|exceed|short covering|spike|soar|tight)/i,
     ],
     bearish: [
-      /\bcomex\b.*\b(margin hike|registered build|inventory surge|liquidation|paper dump|paper slam)/i,
+      /\b(comex|lbma)\b.*\b(margin hike|registered build|inventory surge|liquidation|paper dump|paper slam|lease rate.*fall)/i,
     ],
   },
 ];
+
+export const NEWS_TOPICS = {
+  central_banks: 'Central Banks & BRICS',
+  tech_solar_ai: 'Solar, AI & EV Tech',
+  vaults_physical: 'Vaults & Lease Rates',
+  asia_retail: 'India, China & Retail',
+  geo_space: 'World & Space',
+  macro_debt: 'Macro, Debt & Banks',
+  miners_supply: 'Mines & Energy',
+};
+
+export function classifyHeadlineTopic(text = '', driver = '') {
+  if (/\b(solar flare|geomagnetic|space weather|noaa|satellite|aerospace|spacex|nasa|orbital|war|missile|airstrike|sanction|tariff|strait of hormuz|red sea|geopolit|conflict|ceasefire)\b/i.test(text)) {
+    return { topic: 'geo_space', topicLabel: NEWS_TOPICS.geo_space };
+  }
+  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
+    return { topic: 'tech_solar_ai', topicLabel: NEWS_TOPICS.tech_solar_ai };
+  }
+  if (/\b(central bank|brics|pboc|rbi|nbp|repatriat|de-?dollariz|sovereign.*reserve|basel iii|paxg|xaut|tether gold|tokenized gold|gld|slv|pslv|etf)\b/i.test(text)) {
+    return { topic: 'central_banks', topicLabel: NEWS_TOPICS.central_banks };
+  }
+  if (/\b(comex|lbma|lease rate|backwardation|efp|registered|vault|swiss gold|delivery|open interest|cftc|cot)\b/i.test(text)) {
+    return { topic: 'vaults_physical', topicLabel: NEWS_TOPICS.vaults_physical };
+  }
+  if (/\b(shanghai|sge|shfe|india|mcx|dubai|dmcc|turkey|diwali|akshaya|costco|us mint|silver eagle|bullion coin|jewelry|retail)\b/i.test(text)) {
+    return { topic: 'asia_retail', topicLabel: NEWS_TOPICS.asia_retail };
+  }
+  if (/\b(mine|mining|miner|aisc|newmont|barrick|agnico|wheaton|pan american|hecla|first majestic|fresnillo|smelter|crude oil|opec|copper|commodity supercycle)\b/i.test(text)) {
+    return { topic: 'miners_supply', topicLabel: NEWS_TOPICS.miners_supply };
+  }
+  if (driver === 'geopolitics') return { topic: 'geo_space', topicLabel: NEWS_TOPICS.geo_space };
+  if (driver === 'central_banks') return { topic: 'central_banks', topicLabel: NEWS_TOPICS.central_banks };
+  if (driver === 'comex_paper') return { topic: 'vaults_physical', topicLabel: NEWS_TOPICS.vaults_physical };
+  if (driver === 'shanghai_sge') return { topic: 'asia_retail', topicLabel: NEWS_TOPICS.asia_retail };
+  if (driver === 'mining_supply') return { topic: 'miners_supply', topicLabel: NEWS_TOPICS.miners_supply };
+  return { topic: 'macro_debt', topicLabel: NEWS_TOPICS.macro_debt };
+}
 
 export function classifyHeadline(headline) {
   const text = `${headline.title || ''} ${headline.summary || ''}`.trim();
@@ -468,6 +533,8 @@ export function classifyHeadline(headline) {
     goldImpact *= 0.7;
   }
 
+  const topicInfo = classifyHeadlineTopic(text, bestMatch.driver);
+
   return {
     title: headline.title,
     source: headline.source || 'News Feed',
@@ -475,6 +542,8 @@ export function classifyHeadline(headline) {
     url: headline.url || '',
     driver: bestMatch.driver,
     driverLabel: DRIVER_META[bestMatch.driver].shortLabel,
+    topic: topicInfo.topic,
+    topicLabel: topicInfo.topicLabel,
     sentiment: bestMatch.polarity > 0 ? 'bullish' : bestMatch.polarity < 0 ? 'bearish' : 'neutral',
     goldImpact: clamp(goldImpact, -1, 1),
     silverImpact: clamp(silverImpact, -1, 1),
@@ -1073,6 +1142,7 @@ export function computeCrossAssetLeadLag({
   proSignals = null,
   shanghai = null,
   basis = null,
+  physicalPremiums = null,
   ratio = 82,
 } = {}) {
   const isSilver = metal === 'silver';
@@ -1098,12 +1168,14 @@ export function computeCrossAssetLeadLag({
         ? 0.28
         : 0;
 
+  const physLead = clamp(Number(physicalPremiums?.[metal]?.signal) || 0, -0.4, 0.92);
+
   const ratioLead = isSilver
     ? clamp((ratio - 76) / 22, -0.55, 0.75)
     : clamp((70 - ratio) / 28, -0.25, 0.35);
 
   const score = clamp(
-    minersSig * 0.42 + sgeLead * 0.26 + backwLead * 0.18 + ratioLead * 0.14,
+    minersSig * 0.35 + sgeLead * 0.22 + backwLead * 0.16 + physLead * 0.17 + ratioLead * 0.10,
     -1,
     1
   );
@@ -1121,6 +1193,7 @@ export function computeCrossAssetLeadLag({
       minersLead: +minersSig.toFixed(3),
       shanghaiLead: +sgeLead.toFixed(3),
       backwardationLead: +backwLead.toFixed(3),
+      physicalPremLead: +physLead.toFixed(3),
       ratioLead: +ratioLead.toFixed(3),
     },
   };
@@ -1238,6 +1311,7 @@ export function project30DayPrecision({
   proSignals = null,
   shanghai = null,
   basis = null,
+  physicalPremiums = null,
   learnedWeights = null,
   series = {},
   coneMultiplier = 1.0,
@@ -1286,12 +1360,13 @@ export function project30DayPrecision({
         : 0;
   const techReversionUnit = clamp(rawTrend * 0.72 * hurstTrendScale + rsiBrake, -1, 1);
 
-  // 3. Cross-Asset Lead-Lag Alpha (Miners + Shanghai + Backwardation + Ratio)
+  // 3. Cross-Asset Lead-Lag Alpha (Miners + Shanghai + Backwardation + Physical Dealer Premiums + Ratio)
   const leadLag = computeCrossAssetLeadLag({
     metal,
     proSignals,
     shanghai,
     basis,
+    physicalPremiums,
     ratio: quant?.ratio ?? 82,
   });
 
@@ -2159,13 +2234,38 @@ export function buildOutlook({
     basis,
   });
 
-  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap + world/space pulse
+  // Physical Bullion Dealer Premiums vs. Spot & Pure Melt (leading retail squeeze indicator)
+  const goldClosesArr = series.gold || [];
+  const silverClosesArr = series.silver || [];
+  const g1dPct = goldClosesArr.length >= 2 && goldClosesArr.at(-2) > 0
+    ? ((goldClosesArr.at(-1) - goldClosesArr.at(-2)) / goldClosesArr.at(-2)) * 100
+    : 0;
+  const s1dPct = silverClosesArr.length >= 2 && silverClosesArr.at(-2) > 0
+    ? ((silverClosesArr.at(-1) - silverClosesArr.at(-2)) / silverClosesArr.at(-2)) * 100
+    : 0;
+  const physicalPremiums = computePhysicalPremiumSignals({
+    spotGold,
+    spotSilver,
+    spotGoldDailyPct: g1dPct,
+    spotSilverDailyPct: s1dPct,
+    shanghai,
+    comex,
+    basis,
+    vix: vixVal,
+    gvz: gvzVal,
+    headlines: scoredHeadlines,
+  });
+  const physBoostGold = physicalPremiums.gold.predictionBoost || 0;
+  const physBoostSilver = physicalPremiums.silver.predictionBoost || 0;
+
+  // Blend: 78% macro+news+pro drivers, 22% technical trend (+ ratio mean reversion for silver) + backwardation + unfilled gap + physical premiums + world/space pulse
   const goldUnit = clamp(
     goldDriverComposite * 1.48 * 0.78 +
       quant.goldTrend * 0.22 +
       driftNudgeGold +
       backwBoostGold +
       gapBoostGold +
+      physBoostGold * 0.75 +
       worldSpacePulse.goldDynamicBoost * 0.65,
     -1,
     1
@@ -2177,6 +2277,7 @@ export function buildOutlook({
       driftNudgeSilver +
       backwBoostSilver +
       gapBoostSilver +
+      physBoostSilver * 0.75 +
       worldSpacePulse.silverDynamicBoost * 0.65,
     -1,
     1
@@ -2383,6 +2484,7 @@ export function buildOutlook({
     proSignals,
     shanghai,
     basis,
+    physicalPremiums,
     learnedWeights,
     series,
     coneMultiplier: effectiveConeMult,
@@ -2400,6 +2502,7 @@ export function buildOutlook({
     proSignals,
     shanghai,
     basis,
+    physicalPremiums,
     learnedWeights,
     series,
     coneMultiplier: effectiveConeMult,
@@ -2488,6 +2591,12 @@ export function buildOutlook({
       }
     : null;
 
+  const topicCoverage = {};
+  for (const h of scoredHeadlines) {
+    const k = h.topic || 'macro_debt';
+    topicCoverage[k] = (topicCoverage[k] || 0) + 1;
+  }
+
   return {
     generatedAt,
     disclaimer:
@@ -2523,6 +2632,7 @@ export function buildOutlook({
     },
     marketRegime,
     marketGaps,
+    physicalPremiums,
     spaceWeather: parsedSpace,
     worldSpacePulse,
     setupQuality,
@@ -2538,7 +2648,8 @@ export function buildOutlook({
     selfLearning,
     accuracy,
     matchedAnalogs,
-    headlines: scoredHeadlines.slice(0, 12),
+    topicCoverage,
+    headlines: scoredHeadlines.slice(0, 28),
   };
 }
 

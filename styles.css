@@ -4619,6 +4619,258 @@ button.sector-chip.selected {
   line-height: 1.3;
 }
 
+/* Expanded Multi-Subject News Topic Bar & Event Category Tags */
+.news-topic-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.news-topic-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.news-topic-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.news-topic-chip.active {
+  background: rgba(212, 168, 67, 0.14);
+  border-color: rgba(212, 168, 67, 0.55);
+  color: var(--gold-bright);
+}
+
+.news-topic-pill {
+  font-size: 9.5px;
+  font-weight: 650;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.event-cat-tag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.event-cat-tag.vaults { color: var(--gold-bright); background: rgba(212, 168, 67, 0.14); }
+.event-cat-tag.central_banks { color: #38BDF8; background: rgba(56, 189, 248, 0.12); }
+.event-cat-tag.physical { color: var(--up); background: rgba(34, 197, 94, 0.12); }
+.event-cat-tag.space { color: #A78BFA; background: rgba(167, 139, 250, 0.14); }
+.event-cat-tag.macro { color: #F59E0B; background: rgba(245, 158, 11, 0.12); }
+
+/* Physical Premiums vs. Spot & Melt Panel */
+.phys-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .phys-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.phys-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.phys-card.bullish {
+  border-color: rgba(34, 197, 94, 0.34);
+}
+
+.phys-card.value {
+  border-color: rgba(56, 189, 248, 0.32);
+}
+
+.phys-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.phys-metal {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.phys-metal.gold { color: var(--gold-bright); }
+.phys-metal.silver { color: var(--silver); }
+
+.phys-melt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.phys-gauge-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.phys-gauge-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-subtle);
+}
+
+.phys-gauge-track {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.phys-gauge-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gold);
+  transition: width 0.25s ease;
+}
+
+.phys-gauge-fill.bullish { background: var(--up); }
+.phys-gauge-fill.value { background: #38BDF8; }
+
+.phys-table {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.phys-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+
+.phys-prod-name {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.phys-prod-vals {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10.8px;
+  flex-wrap: wrap;
+}
+
+.phys-prem-tag {
+  font-weight: 700;
+  color: var(--gold-bright);
+}
+
+.phys-prem-tag.hot { color: var(--up); }
+
+.phys-buyback {
+  font-size: 10px;
+  color: var(--text-subtle);
+}
+
+.phys-buyback.above {
+  color: var(--up);
+  font-weight: 700;
+}
+
+.phys-advice {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.phys-impact {
+  font-size: 10.8px;
+  font-weight: 650;
+  color: var(--text-subtle);
+}
+
+.phys-impact.up { color: var(--up); }
+.phys-impact.down { color: var(--down); }
+
+.phys-override-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+
+.phys-override-input {
+  flex: 1;
+  min-width: 110px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.phys-override-btn {
+  padding: 5px 8px;
+  font-size: 10.5px;
+  font-weight: 650;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.phys-override-btn.primary {
+  border-color: rgba(212, 168, 67, 0.5);
+  color: var(--gold-bright);
+}
+
 /* Stack Dealer Spread, Lot Ledger & Ratio Swap Calculator */
 .stack-spread-row {
   display: flex;

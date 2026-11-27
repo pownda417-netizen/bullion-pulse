@@ -116,6 +116,11 @@ const DEFAULT_SETTINGS = {
   showGaps: true,
   showNewsDots: false,
   newsFilter: 'all', // 'all' | 'signal' | 'nohype'
+  newsTopic: 'all',
+  dealerQuotes: {
+    goldStreetOz: null,
+    silverStreetOz: null,
+  },
   forecastJournal: [],
   chartTimeframe: '1d', // '1d' | '7d' | '1m' | '6m' | '1y' | '5y' | '10y' | 'all'
   stack: {
@@ -478,6 +483,17 @@ function sanitizePersistedSettings(raw) {
     showGaps: s.showGaps !== undefined ? Boolean(s.showGaps) : DEFAULT_SETTINGS.showGaps,
     showNewsDots: Boolean(s.showNewsDots),
     newsFilter: s.newsFilter === 'signal' || s.newsFilter === 'nohype' ? s.newsFilter : 'all',
+    newsTopic: typeof s.newsTopic === 'string' && /^(all|central_banks|tech_solar_ai|vaults_physical|asia_retail|geo_space|macro_debt|miners_supply)$/.test(s.newsTopic) ? s.newsTopic : 'all',
+    dealerQuotes: {
+      goldStreetOz:
+        Number.isFinite(Number(s.dealerQuotes?.goldStreetOz)) && Number(s.dealerQuotes.goldStreetOz) > 100 && Number(s.dealerQuotes.goldStreetOz) < 50000
+          ? +Number(s.dealerQuotes.goldStreetOz).toFixed(2)
+          : null,
+      silverStreetOz:
+        Number.isFinite(Number(s.dealerQuotes?.silverStreetOz)) && Number(s.dealerQuotes.silverStreetOz) > 5 && Number(s.dealerQuotes.silverStreetOz) < 1000
+          ? +Number(s.dealerQuotes.silverStreetOz).toFixed(2)
+          : null,
+    },
     forecastJournal: sanitizeForecastJournal(s.forecastJournal),
     chartTimeframe: ALLOWED_TIMEFRAMES.has(s.chartTimeframe) ? s.chartTimeframe : DEFAULT_SETTINGS.chartTimeframe,
     stack: {
@@ -5006,7 +5022,145 @@ const OUTLOOK_SCENARIOS = [
   { id: 'comex_squeeze', label: 'Vault Supply Squeeze', driver: 'comex_paper', goldDelta: 0.65, silverDelta: 0.88 },
   { id: 'solar_storm', label: 'Solar Storm / Grid Risk (G4+)', driver: 'geopolitics', goldDelta: 0.55, silverDelta: 0.65 },
   { id: 'space_solar_boom', label: 'Space & Solar Tech Surge', driver: 'mining_supply', goldDelta: 0.25, silverDelta: 0.78 },
+  { id: 'ai_battery_silver', label: 'AI & Solid-State Silver Boom', driver: 'mining_supply', goldDelta: 0.22, silverDelta: 0.85 },
+  { id: 'sovereign_debt_brics', label: 'BRICS / Sovereign Debt Crisis', driver: 'central_banks', goldDelta: 0.82, silverDelta: 0.55 },
+  { id: 'physical_squeeze', label: 'Retail Physical Squeeze (+25% Premiums)', driver: 'comex_paper', goldDelta: 0.58, silverDelta: 0.88 },
 ];
+
+const CLIENT_NEWS_TOPICS = {
+  central_banks: 'Central Banks & BRICS',
+  tech_solar_ai: 'Solar, AI & EV Tech',
+  vaults_physical: 'Vaults & Lease Rates',
+  asia_retail: 'India, China & Retail',
+  geo_space: 'World & Space',
+  macro_debt: 'Macro, Debt & Banks',
+  miners_supply: 'Mines & Energy',
+};
+
+function classifyClientHeadlineTopic(h) {
+  if (h?.topic && CLIENT_NEWS_TOPICS[h.topic]) {
+    return { topic: h.topic, topicLabel: h.topicLabel || CLIENT_NEWS_TOPICS[h.topic] };
+  }
+  const text = `${h?.title || ''} ${h?.summary || ''} ${h?.source || ''}`;
+  if (/\b(solar flare|geomagnetic|space weather|noaa|satellite|aerospace|spacex|nasa|orbital|war|missile|airstrike|sanction|tariff|strait of hormuz|red sea|geopolit|conflict|ceasefire)\b/i.test(text)) {
+    return { topic: 'geo_space', topicLabel: CLIENT_NEWS_TOPICS.geo_space };
+  }
+  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
+    return { topic: 'tech_solar_ai', topicLabel: CLIENT_NEWS_TOPICS.tech_solar_ai };
+  }
+  if (/\b(central bank|brics|pboc|rbi|nbp|repatriat|de-?dollariz|sovereign.*reserve|basel iii|paxg|xaut|tether gold|tokenized gold|gld|slv|pslv|etf)\b/i.test(text)) {
+    return { topic: 'central_banks', topicLabel: CLIENT_NEWS_TOPICS.central_banks };
+  }
+  if (/\b(comex|lbma|lease rate|backwardation|efp|registered|vault|swiss gold|delivery|open interest|cftc|cot)\b/i.test(text)) {
+    return { topic: 'vaults_physical', topicLabel: CLIENT_NEWS_TOPICS.vaults_physical };
+  }
+  if (/\b(shanghai|sge|shfe|india|mcx|dubai|dmcc|turkey|diwali|akshaya|costco|us mint|silver eagle|bullion coin|jewelry|retail)\b/i.test(text)) {
+    return { topic: 'asia_retail', topicLabel: CLIENT_NEWS_TOPICS.asia_retail };
+  }
+  if (/\b(mine|mining|miner|aisc|newmont|barrick|agnico|wheaton|pan american|hecla|first majestic|fresnillo|smelter|crude oil|opec|copper|commodity supercycle)\b/i.test(text)) {
+    return { topic: 'miners_supply', topicLabel: CLIENT_NEWS_TOPICS.miners_supply };
+  }
+  const drv = h?.driver || '';
+  if (drv === 'geopolitics') return { topic: 'geo_space', topicLabel: CLIENT_NEWS_TOPICS.geo_space };
+  if (drv === 'central_banks') return { topic: 'central_banks', topicLabel: CLIENT_NEWS_TOPICS.central_banks };
+  if (drv === 'comex_paper') return { topic: 'vaults_physical', topicLabel: CLIENT_NEWS_TOPICS.vaults_physical };
+  if (drv === 'shanghai_sge') return { topic: 'asia_retail', topicLabel: CLIENT_NEWS_TOPICS.asia_retail };
+  if (drv === 'mining_supply') return { topic: 'miners_supply', topicLabel: CLIENT_NEWS_TOPICS.miners_supply };
+  return { topic: 'macro_debt', topicLabel: CLIENT_NEWS_TOPICS.macro_debt };
+}
+
+function buildClientExpandedEvents(nowDate = new Date()) {
+  const now = nowDate instanceof Date ? nowDate : new Date(nowDate);
+  const startUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const dayMs = 86400000;
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const firstFri = (y, m) => {
+    const d = new Date(Date.UTC(y, m, 1));
+    d.setUTCDate(1 + ((5 - d.getUTCDay() + 7) % 7));
+    return d;
+  };
+  const lastFri = (y, m) => {
+    const d = new Date(Date.UTC(y, m + 1, 0));
+    while (d.getUTCDay() !== 5) d.setUTCDate(d.getUTCDate() - 1);
+    return d;
+  };
+  const lastBiz = (y, m) => {
+    const d = new Date(Date.UTC(y, m + 1, 0));
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
+    return d;
+  };
+  const nthBizBack = (y, m, nBack) => {
+    const d = new Date(Date.UTC(y, m + 1, 0));
+    let seen = 0;
+    while (seen < nBack) {
+      if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) {
+        seen++;
+        if (seen === nBack) break;
+      }
+      d.setUTCDate(d.getUTCDate() - 1);
+    }
+    return d;
+  };
+
+  const list = [];
+  const fixedDates = [
+    ['fomc', 'macro', 'FOMC Rate Decision', ['2026-01-28','2026-03-18','2026-04-29','2026-06-17','2026-07-29','2026-09-16','2026-10-28','2026-12-09','2027-01-27','2027-03-17','2027-04-28','2027-06-16','2027-07-28','2027-09-22','2027-11-03','2027-12-15']],
+    ['ecb', 'central_banks', 'ECB Rate Decision', ['2026-02-05','2026-03-19','2026-04-30','2026-06-11','2026-07-23','2026-09-10','2026-10-29','2026-12-17','2027-02-04','2027-03-18','2027-04-29','2027-06-10']],
+    ['boj', 'central_banks', 'Bank of Japan (BoJ) Policy', ['2026-01-23','2026-03-19','2026-04-28','2026-06-16','2026-07-31','2026-09-18','2026-10-30','2026-12-18','2027-01-22','2027-03-19','2027-04-28','2027-06-18']],
+    ['cpi', 'macro', 'US CPI Inflation Print', ['2026-11-10','2026-12-10','2027-01-13','2027-02-11','2027-03-10','2027-04-13','2027-07-14','2027-08-11','2027-09-14','2027-10-14','2027-11-10','2027-12-10']],
+  ];
+  for (const [type, category, title, dates] of fixedDates) {
+    for (const date of dates) list.push({ type, category, title, date });
+  }
+
+  const fndSilver = new Set([1, 3, 5, 7, 10]);
+  const fndGold = new Set([0, 2, 4, 6, 8, 10]);
+  const wgcMonths = new Set([0, 3, 6, 9]);
+  for (let off = 0; off <= 2; off++) {
+    const dt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + off, 1));
+    const y = dt.getUTCFullYear();
+    const m = dt.getUTCMonth();
+    list.push({ type: 'nfp', category: 'macro', title: 'US Jobs Report (NFP)', date: iso(firstFri(y, m)) });
+    list.push({ type: 'pce', category: 'macro', title: 'US Core PCE Inflation', date: iso(lastFri(y, m)) });
+    if (fndSilver.has(m)) list.push({ type: 'comex_fnd', category: 'vaults', title: 'COMEX Silver Delivery Notice', date: iso(lastBiz(y, m)) });
+    if (fndGold.has(m)) {
+      list.push({ type: 'comex_gold_fnd', category: 'vaults', title: 'COMEX Gold Delivery Notice', date: iso(lastBiz(y, m)) });
+      list.push({ type: 'comex_opex', category: 'vaults', title: 'COMEX Gold/Silver Options Expiry', date: iso(nthBizBack(y, m, 4)) });
+    }
+    if (wgcMonths.has(m)) list.push({ type: 'wgc_report', category: 'central_banks', title: 'World Gold Council Demand Report', date: iso(lastBiz(y, m)) });
+  }
+
+  const cotD = new Date(startUtc);
+  cotD.setUTCDate(cotD.getUTCDate() + ((5 - cotD.getUTCDay() + 7) % 7));
+  list.push({ type: 'cftc_cot', category: 'positioning', title: 'CFTC COT Positioning Report', date: iso(cotD) });
+
+  for (const yr of [now.getUTCFullYear(), now.getUTCFullYear() + 1]) {
+    list.push(
+      { type: 'festival_cny', category: 'physical', title: 'Chinese New Year Gold Restock', date: `${yr}-01-20` },
+      { type: 'solar_equinox', category: 'space', title: 'Spring Equinox Solar Storm Peak', date: `${yr}-03-20` },
+      { type: 'festival_akshaya', category: 'physical', title: 'India Akshaya Tritiya Buying', date: `${yr}-04-20` },
+      { type: 'solar_equinox', category: 'space', title: 'Autumn Equinox Solar Storm Peak', date: `${yr}-09-22` },
+      { type: 'festival_diwali', category: 'physical', title: 'India Dhanteras & Diwali Peak', date: `${yr}-10-28` },
+      { type: 'yearend_vault', category: 'vaults', title: 'Year-End Bullion Vault Positioning', date: `${yr}-12-15` }
+    );
+  }
+
+  const seen = new Set();
+  return list
+    .map((e) => ({
+      ...e,
+      daysUntil: Math.ceil((Date.UTC(Number(e.date.slice(0, 4)), Number(e.date.slice(5, 7)) - 1, Number(e.date.slice(8, 10))) - startUtc) / dayMs),
+    }))
+    .filter((e) => e.daysUntil >= 0 && e.daysUntil <= 45)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .filter((e) => {
+      const k = `${e.date}|${e.type}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .slice(0, 8);
+}
 
 const spaceWeatherState = {
   data: null,
@@ -5111,7 +5265,221 @@ const DRIVER_FRIENDLY_LABELS = {
   positioning_miners: 'Big Traders & Mining Stocks',
   comex_paper: 'Paper Contracts vs. Vaults',
   market_gaps: 'Chart Gaps & Fill Targets',
+  physical_premiums: 'Physical Coin & Bar Premiums',
 };
+
+const CLIENT_PHYS_BENCHMARKS = {
+  gold: {
+    normalLowPct: 2.0,
+    normalHighPct: 5.0,
+    squeezeStartPct: 6.5,
+    products: [
+      { id: 'gold_eagle', name: '1 oz Gold Eagle', oz: 1, basePremPct: 4.3, stressMult: 1.35, buybackOffsetPct: -1.8 },
+      { id: 'gold_buffalo', name: '1 oz Gold Buffalo', oz: 1, basePremPct: 4.8, stressMult: 1.42, buybackOffsetPct: -1.6 },
+      { id: 'gold_bar_1oz', name: '1 oz Gold Bar', oz: 1, basePremPct: 2.4, stressMult: 0.78, buybackOffsetPct: -1.4 },
+    ],
+  },
+  silver: {
+    normalLowPct: 8.0,
+    normalHighPct: 15.0,
+    squeezeStartPct: 20.0,
+    products: [
+      { id: 'silver_eagle', name: '1 oz Silver Eagle', oz: 1, basePremPct: 14.5, stressMult: 1.55, buybackOffsetPct: -5.5 },
+      { id: 'silver_bar_10oz', name: '10 oz Silver Bar', oz: 10, basePremPct: 8.2, stressMult: 0.92, buybackOffsetPct: -4.8 },
+      { id: 'silver_round_1oz', name: '1 oz Generic Round', oz: 1, basePremPct: 7.4, stressMult: 0.86, buybackOffsetPct: -5.0 },
+    ],
+  },
+};
+
+function computeClientPhysicalPremiums({
+  spotGold,
+  spotSilver,
+  spotGoldDailyPct = 0,
+  spotSilverDailyPct = 0,
+  base = null,
+  futures = null,
+  liveComex = null,
+  userOverrides = null,
+  scenarioSqueeze = false,
+} = {}) {
+  let retailShortageHits = 0;
+  let retailCoolingHits = 0;
+  for (const h of base?.headlines || []) {
+    const txt = `${h?.title || ''} ${h?.summary || ''}`;
+    if (/\b(us mint|royal mint|perth mint|silver eagle|gold eagle|gold buffalo|costco gold|bullion coin|coin dealer|refiner)\b.*\b(shortage|sold out|sell out|ration|delay|backlog|surge|record|premium|spike|scramble|rush)/i.test(txt)) {
+      retailShortageHits++;
+    } else if (/\b(coin premium|bullion premium|dealer premium)\b.*\b(fall|drop|cool|compress|ease|plunge|low)/i.test(txt)) {
+      retailCoolingHits++;
+    }
+  }
+  const newsStress = clampNum(retailShortageHits * 0.22 - retailCoolingHits * 0.14, -0.20, 0.65);
+  const vix = base?.macroSnapshot?.vix ?? 18;
+  const gvz = base?.institutionalSignals?.impliedVol?.gvz ?? null;
+
+  const buildMetal = (metal, spot, dailyPct) => {
+    const isSilver = metal === 'silver';
+    const cfg = CLIENT_PHYS_BENCHMARKS[metal];
+    const safeSpot = Number.isFinite(Number(spot)) && Number(spot) > 0 ? Number(spot) : (isSilver ? 42.5 : 3600);
+
+    const basisM = futures?.[metal] || base?.institutionalSignals?.basis?.[metal] || null;
+    const isBackw = Boolean(basisM?.isBackwardation || (basisM?.basisUsd ?? 1) < 0);
+    const backwStress = isBackw
+      ? clampNum(0.48 + Math.abs(basisM?.basisPct || 0.3) * 0.22, 0.45, 0.95)
+      : basisM?.state === 'Compressed EFP'
+        ? 0.22
+        : 0;
+
+    const sgeData = shanghaiState.data?.[metal] || base?.shanghai?.[metal] || null;
+    let sgeStress = 0;
+    if (sgeData) {
+      const prem = isSilver ? sgeData.exVatPremiumUsdOz : sgeData.premiumUsdOz;
+      if (typeof prem === 'number' && Number.isFinite(prem)) {
+        sgeStress = isSilver ? clampNum((prem - 0.8) / 3.2, -0.25, 0.85) : clampNum((prem - 8) / 35, -0.25, 0.85);
+      }
+    }
+
+    const comexRatio = liveComex?.[metal]?.paperToRegisteredRatio;
+    const vaultStress =
+      typeof comexRatio === 'number' && Number.isFinite(comexRatio)
+        ? isSilver ? clampNum((comexRatio - 4.5) / 4.0, -0.15, 0.65) : clampNum((comexRatio - 2.6) / 3.0, -0.15, 0.55)
+        : 0;
+    const fearStress =
+      (Number.isFinite(gvz) ? clampNum((gvz - 18) / 22, -0.1, 0.55) : 0) +
+      (Number.isFinite(vix) ? clampNum((vix - 19) / 24, -0.1, 0.50) : 0);
+    const dipRush = dailyPct <= -1.2 && (fearStress > 0.15 || backwStress > 0.2) ? clampNum(-dailyPct / 6.0, 0, 0.35) : 0;
+
+    const rawStress = clampNum(
+      backwStress * 0.38 + sgeStress * 0.24 + vaultStress * 0.18 + fearStress * 0.18 + newsStress * 0.35 + dipRush + (scenarioSqueeze ? 0.95 : 0),
+      -0.32,
+      1.65
+    );
+
+    const overrideKey = isSilver ? 'silverStreetOz' : 'goldStreetOz';
+    const userStreet = Number(userOverrides?.[overrideKey]);
+    const hasUserOverride = Number.isFinite(userStreet) && userStreet > safeSpot * 0.90;
+
+    const products = cfg.products.map((p, idx) => {
+      const meltVal = safeSpot * p.oz;
+      let premPct;
+      if (hasUserOverride && idx === 0) {
+        premPct = ((userStreet - safeSpot) / safeSpot) * 100;
+      } else {
+        const dynamicAdd = isSilver ? rawStress * 12.5 * p.stressMult : rawStress * 3.1 * p.stressMult;
+        premPct = clampNum(p.basePremPct + dynamicAdd, isSilver ? 2.5 : 0.7, isSilver ? 68 : 18);
+      }
+      const streetPrice = meltVal * (1 + premPct / 100);
+      const premUsd = streetPrice - meltVal;
+      const squeezeBuybackLift =
+        premPct > cfg.squeezeStartPct
+          ? (premPct - cfg.squeezeStartPct) * (isSilver ? 0.55 : 0.48)
+          : 0;
+      const buybackVsSpotPct = clampNum(
+        p.buybackOffsetPct + squeezeBuybackLift + (hasUserOverride && idx === 0 ? Math.max(0, (premPct - cfg.normalHighPct) * 0.35) : 0),
+        isSilver ? -9 : -3.5,
+        isSilver ? 25 : 6.5
+      );
+      const buybackPrice = meltVal * (1 + buybackVsSpotPct / 100);
+      return {
+        id: p.id,
+        name: p.name,
+        oz: p.oz,
+        meltPrice: +meltVal.toFixed(2),
+        streetPrice: +streetPrice.toFixed(2),
+        premiumUsd: +premUsd.toFixed(2),
+        premiumPct: +premPct.toFixed(2),
+        buybackPrice: +buybackPrice.toFixed(2),
+        buybackVsSpotPct: +buybackVsSpotPct.toFixed(2),
+        buybackAboveSpot: buybackVsSpotPct > 0.05,
+        isUserQuote: hasUserOverride && idx === 0,
+      };
+    });
+
+    const coin = products[0];
+    const bar = products[products.length - 1];
+    const compositePremPct = +(coin.premiumPct * 0.6 + bar.premiumPct * 0.4).toFixed(2);
+    const barSavingsPct = +Math.max(0, ((coin.streetPrice / coin.oz - bar.streetPrice / bar.oz) / (coin.streetPrice / coin.oz)) * 100).toFixed(1);
+    const normalMid = (cfg.normalLowPct + cfg.normalHighPct) / 2;
+    const isSqueeze = coin.premiumPct >= cfg.squeezeStartPct * (isSilver ? 1.15 : 1.1) || compositePremPct >= cfg.squeezeStartPct;
+    const isElevated = !isSqueeze && (coin.premiumPct > cfg.normalHighPct || compositePremPct > cfg.normalHighPct);
+    const isCompressed = compositePremPct < cfg.normalLowPct;
+    const paperPhysicalDisconnect = (isSqueeze || isElevated) && dailyPct <= -0.35;
+
+    let status = 'Normal Retail Spread';
+    let tone = 'neutral';
+    let signal = 0;
+    let predictionBoost = 0;
+
+    if (isSqueeze) {
+      status = paperPhysicalDisconnect ? 'Paper-Physical Disconnect ↑↑' : 'Physical Squeeze ↑↑';
+      tone = 'bullish';
+      const excess = (compositePremPct - cfg.normalHighPct) / (isSilver ? 18 : 5.5);
+      signal = clampNum(0.45 + excess * 0.42, 0.45, 0.92);
+      predictionBoost = clampNum(signal * 0.16, 0.07, 0.15);
+    } else if (isElevated) {
+      status = paperPhysicalDisconnect ? 'Physical Catch-Up Signal ↑' : 'Elevated Retail Demand ↑';
+      tone = 'bullish';
+      const excess = (compositePremPct - normalMid) / (isSilver ? 14 : 4.5);
+      signal = clampNum(0.18 + excess * 0.32, 0.15, 0.48);
+      predictionBoost = clampNum(signal * 0.14, 0.025, 0.07);
+    } else if (isCompressed) {
+      status = 'Compressed · Best Buyer Value';
+      tone = 'value';
+      signal = -0.14;
+      predictionBoost = -0.025;
+    } else {
+      status = 'Normal Retail Spread';
+      tone = 'neutral';
+      const mildTilt = (compositePremPct - normalMid) / (isSilver ? 20 : 6);
+      signal = clampNum(mildTilt * 0.12, -0.08, 0.10);
+      predictionBoost = clampNum(signal * 0.08, -0.01, 0.015);
+    }
+
+    let advice = `Retail markups (${compositePremPct}% avg) sit inside the normal ${cfg.normalLowPct}–${cfg.normalHighPct}% range — shelves are well stocked, making this a clean accumulation window.`;
+    if (isSqueeze) {
+      advice = paperPhysicalDisconnect
+        ? `Paper spot dipped while physical premiums surged to ${coin.premiumPct}% on ${coin.name} — classic Paper-Physical Disconnect (leading bullish spot catch-up). Rotate into ${bar.name} (${bar.premiumPct}%) for ~${barSavingsPct}% more metal per dollar.`
+        : `High physical retail demand (${coin.premiumPct}% on ${coin.name}) signals mint/dealer tightness${coin.buybackAboveSpot ? ' with buybacks above spot' : ''}. Rotate into ${bar.name} (${bar.premiumPct}%) to get ~${barSavingsPct}% more ounces per dollar.`;
+    } else if (isElevated) {
+      advice = `Physical premiums (${coin.premiumPct}% on ${coin.name}) sit above normal ${cfg.normalLowPct}–${cfg.normalHighPct}% — rising retail buying adds bullish support. ${bar.name} (${bar.premiumPct}%) saves ~${barSavingsPct}% in markup.`;
+    } else if (isCompressed) {
+      advice = `Dealer markups compressed to ${compositePremPct}% (below normal ${cfg.normalLowPct}–${cfg.normalHighPct}%) — retail rush cooled, giving buyers the lowest over-melt cost.`;
+    }
+
+    return {
+      metal,
+      spot: +safeSpot.toFixed(2),
+      meltPerGram: +(safeSpot / TROY_OZ_TO_GRAMS).toFixed(2),
+      compositePremPct,
+      normalRangeLabel: `${cfg.normalLowPct}–${cfg.normalHighPct}%`,
+      gaugeMaxPct: isSilver ? 40 : 12,
+      status,
+      tone,
+      paperPhysicalDisconnect,
+      hasUserOverride,
+      barSavingsPct,
+      buybackAboveSpot: coin.buybackAboveSpot,
+      signal: +signal.toFixed(3),
+      predictionBoost: +predictionBoost.toFixed(4),
+      advice,
+      products,
+    };
+  };
+
+  const gold = buildMetal('gold', spotGold, spotGoldDailyPct);
+  const silver = buildMetal('silver', spotSilver, spotSilverDailyPct);
+  const overallStatus =
+    gold.tone === 'bullish' && silver.tone === 'bullish'
+      ? 'Physical Squeeze Active ↑'
+      : silver.tone === 'bullish'
+        ? 'Silver Physical Squeeze ↑'
+        : gold.tone === 'bullish'
+          ? 'Gold Physical Tightness ↑'
+          : gold.tone === 'value' || silver.tone === 'value'
+            ? 'Low Markup · Buyer Window'
+            : 'Normal Dealer Spreads';
+
+  return { overallStatus, gold, silver };
+}
 
 const DRIVER_WEIGHTS = {
   inflation: { gold: 0.16, silver: 0.13 },
@@ -6087,7 +6455,13 @@ function computeInteractiveOutlook() {
   const liveShockGold = Math.abs(liveGoldPct) >= 0.45 ? clampNum((liveGoldPct / 3.2) * 0.10, -0.10, 0.10) : 0;
   const liveShockSilver = Math.abs(liveSilverPct) >= 0.80 ? clampNum((liveSilverPct / 5.5) * 0.11, -0.11, 0.11) : 0;
 
-  const nextWorldEv = base?.institutionalSignals?.eventRisk?.nextEvent || null;
+  const liveCalEvents = buildClientExpandedEvents(new Date());
+  const nextWorldEv =
+    (base?.institutionalSignals?.eventRisk?.nextEvent && base.institutionalSignals.eventRisk.nextEvent.daysUntil >= 0
+      ? base.institutionalSignals.eventRisk.nextEvent
+      : null) ||
+    liveCalEvents[0] ||
+    null;
   const daysToWorldEv = nextWorldEv?.daysUntil;
   const eventHeat =
     typeof daysToWorldEv === 'number' && Number.isFinite(daysToWorldEv)
@@ -6135,13 +6509,38 @@ function computeInteractiveOutlook() {
     topCatalyst: base?.headlines?.[0]?.title || null,
   };
 
+  // Physical Bullion Dealer Premiums vs. Spot & Melt (leading retail squeeze indicator)
+  const physicalPremiums = computeClientPhysicalPremiums({
+    spotGold,
+    spotSilver,
+    spotGoldDailyPct: liveGoldPct,
+    spotSilverDailyPct: liveSilverPct,
+    base,
+    futures,
+    liveComex,
+    userOverrides: state.settings.dealerQuotes,
+    scenarioSqueeze: outlookState.activeScenarios.has('physical_squeeze'),
+  });
+  const physBoostGold = physicalPremiums.gold?.predictionBoost || 0;
+  const physBoostSilver = physicalPremiums.silver?.predictionBoost || 0;
+  if (!drivers.some((d) => d.id === 'physical_premiums')) {
+    drivers.push({
+      id: 'physical_premiums',
+      label: 'Physical Coin & Bar Premiums',
+      shortLabel: 'Physical Premiums',
+      gold: +(physicalPremiums.gold?.signal || 0).toFixed(3),
+      silver: +(physicalPremiums.silver?.signal || 0).toFixed(3),
+      headlineCount: 0,
+    });
+  }
+
   const gUnit = clampNum(
-    gComp * 1.45 + driftG + backwBoostGold + gapBoostGold + goldDynamicPulse * 0.72,
+    gComp * 1.45 + driftG + backwBoostGold + gapBoostGold + physBoostGold * 0.75 + goldDynamicPulse * 0.72,
     -1,
     1
   );
   const sUnit = clampNum(
-    sComp * 1.45 + driftS + backwBoostSilver + gapBoostSilver + silverDynamicPulse * 0.72,
+    sComp * 1.45 + driftS + backwBoostSilver + gapBoostSilver + physBoostSilver * 0.75 + silverDynamicPulse * 0.72,
     -1,
     1
   );
@@ -6201,11 +6600,12 @@ function computeInteractiveOutlook() {
         : f?.state === 'Compressed EFP'
           ? 0.28
           : 0;
+    const physLead = clampNum(Number(physicalPremiums?.[metal]?.signal) || 0, -0.4, 0.92);
     const ratioLead = isSilver
       ? clampNum((liveRatioVal - 76) / 22, -0.55, 0.75)
       : clampNum((70 - liveRatioVal) / 28, -0.25, 0.35);
     const score = clampNum(
-      minersSig * 0.42 + sgeLead * 0.26 + backwLead * 0.18 + ratioLead * 0.14,
+      minersSig * 0.35 + sgeLead * 0.22 + backwLead * 0.16 + physLead * 0.17 + ratioLead * 0.10,
       -1,
       1
     );
@@ -6585,6 +6985,18 @@ function computeInteractiveOutlook() {
   if (openGapNotes.length) {
     plainParts.push(`${openGapNotes.join('; ')}, factored directly into today's forecast.`);
   }
+  const hotPhys = [];
+  if (physicalPremiums?.gold?.tone === 'bullish') {
+    hotPhys.push(`Gold coins/bars (+${physicalPremiums.gold.compositePremPct.toFixed(1)}% over melt)`);
+  }
+  if (physicalPremiums?.silver?.tone === 'bullish') {
+    hotPhys.push(`Silver coins/bars (+${physicalPremiums.silver.compositePremPct.toFixed(1)}% over melt)`);
+  }
+  if (hotPhys.length) {
+    plainParts.push(
+      `Physical retail dealer premiums are elevated on ${hotPhys.join(' and ')}, adding a bullish physical-demand lead to forecasts.`
+    );
+  }
   if (ratioAnalytics.tone !== 'neutral') {
     plainParts.push(
       `At ${liveRatio.toFixed(1)} oz of silver per oz of gold, ${ratioAnalytics.regime.toLowerCase()} (higher than ${ratioAnalytics.percentile5y}% of the past 5 years).`
@@ -6637,6 +7049,7 @@ function computeInteractiveOutlook() {
     dollarStrength,
     marketRegime,
     marketGaps,
+    physicalPremiums,
     worldSpacePulse,
     ratioAnalytics,
     setupQuality,
@@ -7562,7 +7975,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=49', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=50', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -8654,6 +9067,91 @@ function render30DayForecastRoadmap(res) {
   gridEl.innerHTML = cardsHtml;
 }
 
+function renderPhysicalPremiums(res) {
+  const gridEl = document.getElementById('phys-grid');
+  const badgeEl = document.getElementById('phys-status-badge');
+  const pp = res?.physicalPremiums;
+  if (!gridEl || !pp) return;
+
+  if (badgeEl) {
+    badgeEl.textContent = pp.overallStatus;
+    badgeEl.className = `signal-pill ${pp.gold.tone === 'bullish' || pp.silver.tone === 'bullish' ? 'bullish' : ''}`;
+  }
+
+  const dq = state.settings.dealerQuotes || {};
+  const cardsHtml = [
+    ['gold', 'Gold', 'goldStreetOz'],
+    ['silver', 'Silver', 'silverStreetOz'],
+  ]
+    .map(([metal, name, overrideKey]) => {
+      const m = pp[metal];
+      const pillCls = m.tone === 'bullish' ? 'bullish' : '';
+      const gaugePct = clampNum((m.compositePremPct / (m.gaugeMaxPct || 20)) * 100, 6, 100);
+      const pts = Math.round((m.predictionBoost || 0) * 100);
+      const impactCls = pts > 0 ? 'up' : pts < 0 ? 'down' : '';
+      const impactTxt =
+        pts > 0
+          ? `Forecast impact: +${pts} pts bullish physical squeeze lead${m.paperPhysicalDisconnect ? ' (Paper-Physical Disconnect)' : ''}`
+          : pts < 0
+            ? `Forecast impact: −${Math.abs(pts)} pts cooled retail momentum (low buyer markup)`
+            : 'Forecast impact: Neutral (0 pts — normal dealer shelves)';
+
+      const rowsHtml = m.products
+        .map((p) => {
+          const isHot = p.premiumPct > (metal === 'silver' ? 18 : 5.8);
+          const bbTxt = p.buybackAboveSpot
+            ? `Buyback ${formatMoney(p.buybackPrice, 2)} (ABOVE SPOT +${p.buybackVsSpotPct.toFixed(1)}%)`
+            : `Est. Buyback ${formatMoney(p.buybackPrice, 2)}`;
+          const userMark = p.isUserQuote ? ' ★' : '';
+          return `
+            <div class="phys-row">
+              <span class="phys-prod-name">${escapeHtml(p.name)}${userMark}</span>
+              <div class="phys-prod-vals">
+                <strong>${escapeHtml(formatMoney(p.streetPrice, 2))}</strong>
+                <span class="phys-prem-tag ${isHot ? 'hot' : ''}">+${p.premiumPct.toFixed(1)}% over melt</span>
+                <span class="phys-buyback ${p.buybackAboveSpot ? 'above' : ''}">${escapeHtml(bbTxt)}</span>
+              </div>
+            </div>`;
+        })
+        .join('');
+
+      const curOverrideVal = dq[overrideKey] != null ? String(dq[overrideKey]) : '';
+      const placeholderTxt = `Enter dealer 1 oz ${name} coin $ (auto ${formatMoney(m.products[0].streetPrice, 2)})`;
+
+      return `
+        <article class="phys-card ${m.tone}">
+          <div class="phys-head">
+            <span class="phys-metal ${metal}">${name} Physical vs. Melt</span>
+            <span class="signal-pill ${pillCls}">${escapeHtml(m.status)}</span>
+          </div>
+          <div class="phys-melt-row">
+            <span>Spot / Pure Melt: <strong>${escapeHtml(formatMoney(m.spot, 2))}/oz</strong> (${escapeHtml(formatMoney(m.meltPerGram, 2))}/g)</span>
+            <span>Avg Markup: <strong>+${m.compositePremPct.toFixed(1)}%</strong></span>
+          </div>
+          <div class="phys-gauge-wrap">
+            <div class="phys-gauge-meta">
+              <span>Normal ${escapeHtml(m.normalRangeLabel)}</span>
+              <span>Squeeze Zone ↑</span>
+            </div>
+            <div class="phys-gauge-track">
+              <div class="phys-gauge-fill ${m.tone}" style="width:${gaugePct.toFixed(1)}%"></div>
+            </div>
+          </div>
+          <div class="phys-table">${rowsHtml}</div>
+          <div class="phys-advice">${escapeHtml(m.advice)}</div>
+          <div class="phys-impact ${impactCls}">${escapeHtml(impactTxt)}</div>
+          <div class="phys-override-row">
+            <input type="number" step="any" inputmode="decimal" class="phys-override-input" data-phys-input="${overrideKey}" value="${escapeHtml(curOverrideVal)}" placeholder="${escapeHtml(placeholderTxt)}" aria-label="${escapeHtml(`Custom dealer street price for 1 oz ${name} coin`)}" />
+            <button type="button" class="phys-override-btn primary" data-phys-apply="${overrideKey}">Apply</button>
+            <button type="button" class="phys-override-btn" data-phys-reset="${overrideKey}">Auto</button>
+          </div>
+        </article>`;
+    })
+    .join('');
+
+  gridEl.innerHTML = cardsHtml;
+}
+
 function renderWorldSpacePulse(res) {
   const gridEl = document.getElementById('wsp-grid');
   const badgeEl = document.getElementById('wsp-activity-badge');
@@ -8752,6 +9250,7 @@ function renderOutlook() {
   document.getElementById('outlook-narrative').textContent = res.narrative;
   render30DayForecastRoadmap(res);
   renderWorldSpacePulse(res);
+  renderPhysicalPremiums(res);
   renderSetupQuality(res);
   renderGapAnalyzer(res);
   renderRatioAnalytics(res);
@@ -9073,17 +9572,18 @@ function renderOutlook() {
     accList.innerHTML = rows.join('');
   }
 
-  // Scored News Feed + #228 AI "Real Signal vs. Clickbait Hype" News Filter
+  // Scored News Feed + #228 AI "Real Signal vs. Clickbait Hype" Filter + 7-Subject Gold/Silver Topic Filter
   const newsEl = document.getElementById('outlook-news');
   const updatedEl = document.getElementById('outlook-updated');
   const filterSummaryEl = document.getElementById('news-filter-summary');
   if (updatedEl && res.base.generatedAt) {
     const dt = new Date(res.base.generatedAt);
     updatedEl.textContent = Number.isNaN(dt.getTime())
-      ? 'Recent headlines scored for real market impact vs. clickbait hype'
-      : `Updated ${dt.toLocaleDateString()} · Scored for real signal vs. clickbait hype`;
+      ? '16 global feeds across central banks, vaults, solar/AI silver, retail demand, geopolitics & space'
+      : `Updated ${dt.toLocaleDateString()} · 16 Gold & Silver global feeds scored for real signal vs. hype`;
   }
   const activeNewsFilter = state.settings.newsFilter || 'all';
+  const activeNewsTopic = state.settings.newsTopic || 'all';
   document.getElementById('news-filter-all')?.classList.toggle('active', activeNewsFilter === 'all');
   document.getElementById('news-filter-signal')?.classList.toggle('active', activeNewsFilter === 'signal');
   document.getElementById('news-filter-nohype')?.classList.toggle('active', activeNewsFilter === 'nohype');
@@ -9093,10 +9593,10 @@ function renderOutlook() {
     const lower = title.toLowerCase();
     const src = String(h?.source || '').toLowerCase();
     let score = 55;
-    if (/(reuters|bloomberg|wsj|wall street|financial times|cnbc|marketwatch|kitco|mining\.com|world gold council|silver institute|federal reserve|bls|cme|comex)/i.test(src + ' ' + title)) {
+    if (/(reuters|bloomberg|wsj|wall street|financial times|cnbc|marketwatch|kitco|mining\.com|world gold council|silver institute|federal reserve|bls|cme|comex|lbma|noaa|ecb|bank of japan)/i.test(src + ' ' + title)) {
       score += 18;
     }
-    if (/(fed|fomc|cpi|inflation|payroll|central bank|pboc|sge|shanghai|comex|vault|inventory|deficit|import|tariff|treasury|yield|production|aisc|strike|rate cut|rate hike|etf)/i.test(lower)) {
+    if (/(fed|fomc|cpi|pce|inflation|payroll|central bank|pboc|rbi|brics|repatriat|sge|shanghai|comex|lbma|lease rate|vault|inventory|deficit|import|tariff|treasury|yield|production|aisc|strike|rate cut|rate hike|etf|solar|topcon|solid-state|ai data center|geomagnetic|solar flare|paxg|xaut|swiss|dubai)/i.test(lower)) {
       score += 18;
     }
     if (Number(h?.clusterCount) > 1) score += 10;
@@ -9113,10 +9613,32 @@ function renderOutlook() {
   };
 
   if (newsEl) {
-    const rawItems = (res.base.headlines || []).map((h) => ({ ...h, _q: classifyNewsSignalQuality(h) }));
+    const rawItems = (res.base.headlines || []).map((h) => ({
+      ...h,
+      _q: classifyNewsSignalQuality(h),
+      _topic: classifyClientHeadlineTopic(h),
+    }));
+    const topicCounts = {};
+    for (const item of rawItems) {
+      topicCounts[item._topic.topic] = (topicCounts[item._topic.topic] || 0) + 1;
+    }
+    const topicBarEl = document.getElementById('news-topic-chips');
+    if (topicBarEl) {
+      topicBarEl.querySelectorAll('.news-topic-chip').forEach((btn) => {
+        const key = btn.dataset.topic || 'all';
+        btn.classList.toggle('active', key === activeNewsTopic);
+        const cnt = key === 'all' ? rawItems.length : (topicCounts[key] || 0);
+        const baseLbl = btn.dataset.baseLabel || btn.textContent.replace(/\s*\(\d+\)$/, '');
+        btn.dataset.baseLabel = baseLbl;
+        btn.textContent = cnt > 0 ? `${baseLbl} (${cnt})` : baseLbl;
+      });
+    }
+
     const signalCount = rawItems.filter((h) => h._q.tier === 'signal').length;
     const hypeCount = rawItems.filter((h) => h._q.tier === 'hype').length;
+    const activeSubjectsCount = Object.keys(topicCounts).length;
     const filtered = rawItems.filter((h) => {
+      if (activeNewsTopic !== 'all' && h._topic.topic !== activeNewsTopic) return false;
       if (activeNewsFilter === 'signal') return h._q.tier === 'signal';
       if (activeNewsFilter === 'nohype') return h._q.tier !== 'hype';
       return true;
@@ -9124,12 +9646,12 @@ function renderOutlook() {
     if (filterSummaryEl) {
       filterSummaryEl.textContent =
         rawItems.length
-          ? `${signalCount} Real Signal · ${rawItems.length - signalCount - hypeCount} Market Notes · ${hypeCount} Clickbait Hype filtered`
+          ? `${rawItems.length} stories across ${activeSubjectsCount} subjects · ${signalCount} Real Signal · ${hypeCount} Hype filtered`
           : 'Waiting for headlines…';
     }
     newsEl.innerHTML = filtered.length
       ? filtered
-          .slice(0, 10)
+          .slice(0, 24)
           .map((h) => {
             const safeUrl = sanitizeHttpUrl(h.url);
             const titleHtml = safeUrl
@@ -9146,6 +9668,7 @@ function renderOutlook() {
                 <div class="news-meta">
                   <span>${escapeHtml(h.source || 'News')} · ${escapeHtml(h.driverLabel || 'Market')}${clusterBadge}</span>
                   <div class="news-pills-wrap">
+                    <span class="news-topic-pill">${escapeHtml(h._topic.topicLabel)}</span>
                     <span class="news-sig-badge ${qCls}">${escapeHtml(h._q.label)}</span>
                     <span class="news-pill ${sentCls}">${escapeHtml(moodWord)}</span>
                   </div>
@@ -9153,7 +9676,7 @@ function renderOutlook() {
               </li>`;
           })
           .join('')
-      : '<li class="empty-state">No headlines match this filter right now. Tap "All" to see everything.</li>';
+      : '<li class="empty-state">No headlines match this subject/filter right now. Tap "All Topics" or "All" to see everything.</li>';
   }
 
   renderAccuracyReplayChart(res);
@@ -9434,15 +9957,31 @@ function renderInstitutionalPulse(outlookRes) {
   }
   const stripEl = document.getElementById('inst-event-strip');
   if (stripEl) {
-    stripEl.innerHTML = inst.eventRisk.upcoming
-      .slice(0, 2)
+    const liveExpanded = buildClientExpandedEvents(new Date());
+    const backendExpanded = Array.isArray(inst.eventRisk.expandedEvents) && inst.eventRisk.expandedEvents.length
+      ? inst.eventRisk.expandedEvents
+      : [];
+    const evList = liveExpanded.length ? liveExpanded : (backendExpanded.length ? backendExpanded : inst.eventRisk.upcoming);
+    const catLabels = {
+      macro: 'Macro',
+      vaults: 'Vaults',
+      central_banks: 'Central Bank',
+      positioning: 'COT',
+      physical: 'Physical',
+      space: 'Space',
+    };
+    stripEl.innerHTML = evList
+      .slice(0, 6)
       .map((ev) => {
         const dtLbl = new Date(`${ev.date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
         const eta = ev.daysUntil === 0 ? 'TODAY' : `${ev.daysUntil}d · ${dtLbl}`;
+        const catKey = ev.category || 'macro';
+        const catLbl = catLabels[catKey] || 'Event';
         return `
           <div class="event-pill ${ev.daysUntil <= 3 ? 'imminent' : ''}">
             <span class="event-left">
               <span class="event-dot"></span>
+              <span class="event-cat-tag ${escapeHtml(catKey)}">${escapeHtml(catLbl)}</span>
               <span class="event-name">${escapeHtml(ev.title)}</span>
             </span>
             <span class="event-eta">${escapeHtml(eta)}</span>
@@ -11625,6 +12164,36 @@ function wireEvents() {
       savePersistedState();
     });
   }
+  document.getElementById('news-topic-chips')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.news-topic-chip');
+    if (!btn) return;
+    state.settings.newsTopic = btn.dataset.topic || 'all';
+    renderOutlook();
+    savePersistedState();
+  });
+  document.getElementById('phys-grid')?.addEventListener('click', (e) => {
+    const applyBtn = e.target.closest('[data-phys-apply]');
+    const resetBtn = e.target.closest('[data-phys-reset]');
+    if (applyBtn) {
+      const key = applyBtn.dataset.physApply;
+      const inp = document.querySelector(`[data-phys-input="${key}"]`);
+      const val = Number(inp?.value);
+      if (!state.settings.dealerQuotes) state.settings.dealerQuotes = { goldStreetOz: null, silverStreetOz: null };
+      if (Number.isFinite(val) && val > 0) {
+        state.settings.dealerQuotes[key] = +val.toFixed(2);
+        savePersistedState();
+        renderOutlook();
+        renderChart();
+      }
+    } else if (resetBtn) {
+      const key = resetBtn.dataset.physReset;
+      if (!state.settings.dealerQuotes) state.settings.dealerQuotes = { goldStreetOz: null, silverStreetOz: null };
+      state.settings.dealerQuotes[key] = null;
+      savePersistedState();
+      renderOutlook();
+      renderChart();
+    }
+  });
 
   // Interactive 60fps dual-canvas OHLC crosshair, wheel/pinch zoom & drag-to-pan on candlestick chart
   const chartCanvas = document.getElementById('intraday-chart');
@@ -12143,7 +12712,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 49,
+      version: 50,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),

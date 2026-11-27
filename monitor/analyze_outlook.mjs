@@ -94,6 +94,34 @@ const RSS_FEEDS = [
     name: 'Space, Solar Weather & Aerospace',
     url: 'https://news.google.com/rss/search?q=("solar+flare"+OR+"geomagnetic+storm"+OR+"space+weather"+OR+"NOAA+solar"+OR+"satellite+launch"+OR+"space+economy"+OR+"orbital+solar")+when:4d&hl=en-US&gl=US&ceid=US:en',
   },
+  {
+    name: 'Central Banks, BRICS & De-Dollarization',
+    url: 'https://news.google.com/rss/search?q=("BRICS+gold"+OR+"central+bank+gold"+OR+"gold+repatriation"+OR+"de-dollarization"+OR+"PBOC+gold"+OR+"RBI+gold"+OR+"sovereign+gold+reserves")+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'Solar PV, AI Data Centers & Solid-State Silver',
+    url: 'https://news.google.com/rss/search?q=("silver+paste"+OR+"solar+silver"+OR+"TOPCon+silver"+OR+"AI+data+center"+silver+OR+"solid-state+battery"+silver+OR+"EV+silver"+OR+"semiconductor+silver")+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'Sovereign Debt, Banking Stress & Currencies',
+    url: 'https://news.google.com/rss/search?q=("US+national+debt"+gold+OR+"sovereign+debt+crisis"+OR+"Treasury+auction"+yield+OR+"yen+intervention"+OR+"currency+devaluation"+gold+OR+"banking+stress")+when:4d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'India, Dubai, Turkey & Retail Bullion Demand',
+    url: 'https://news.google.com/rss/search?q=("India+gold+imports"+OR+"India+silver+imports"+OR+"Dubai+gold"+OR+"Turkey+gold"+OR+"Costco+gold"+OR+"US+Mint"+silver+OR+"bullion+coin+premium")+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'LBMA Vaults, Lease Rates & Swiss Refining',
+    url: 'https://news.google.com/rss/search?q=("LBMA+vault"+OR+"silver+lease+rate"+OR+"gold+lease+rate"+OR+"Swiss+gold+exports"+OR+"COMEX+delivery"+OR+"gold+backwardation"+OR+"silver+backwardation")+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'Energy, Oil Shocks & Shipping Chokepoints',
+    url: 'https://news.google.com/rss/search?q=("crude+oil+spike"+OR+"OPEC+cut"+OR+"Strait+of+Hormuz"+OR+"Red+Sea+shipping"+OR+"commodity+supercycle"+OR+"copper+price+surge")+when:4d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'Tokenized Gold, ETFs & Basel III Finance',
+    url: 'https://news.google.com/rss/search?q=("PAXG"+OR+"Tether+Gold"+OR+"XAUT"+OR+"tokenized+gold"+OR+"gold+ETF+inflows"+OR+"SLV+inflows"+OR+"Basel+III+gold")+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
 ];
 
 const YAHOO_SYMBOLS = {
@@ -146,7 +174,7 @@ export function parseRssItems(xmlText, fallbackSource = 'News') {
   const items = [];
   const itemMatches = safeXml.match(/<item\b[\s\S]*?<\/item>/gi) || [];
 
-  for (const block of itemMatches.slice(0, 15)) {
+  for (const block of itemMatches.slice(0, 18)) {
     const pick = (tag) => {
       const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
       return m ? decodeXmlEntities(m[1]) : '';
