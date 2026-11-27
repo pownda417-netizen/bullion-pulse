@@ -711,6 +711,7 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     let active = true;
     const boot = async () => {
       await refreshRepoRef.current();
+      if (!active) return;
       const gotLive = await refreshSpotRef.current();
       if (active && !gotLive) {
         setMode((prev) => (prev === 'connecting' ? 'demo' : prev));

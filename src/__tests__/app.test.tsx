@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { act, cleanup, render, screen, fireEvent } from '@testing-library/react';
 import {
   generatePrivateNtfyTopic,
   sanitizeHttpUrl,
@@ -192,6 +192,11 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
         return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
       })
     );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('renders Markets, switches to Outlook, Trade, Stack, and Settings with Privacy Mode & 128-bit ntfy generator', () => {
