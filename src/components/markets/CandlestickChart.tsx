@@ -28,7 +28,6 @@ export const CandlestickChart: React.FC = () => {
     timeframes,
     candles,
     candles1m,
-    outlook,
     quant,
     isLightTheme,
   } = useBullion();
@@ -111,17 +110,15 @@ export const CandlestickChart: React.FC = () => {
     return base;
   }, [activeBars, livePrice, replayStep]);
 
-  const fairValueUsd = useMemo(() => {
+  const activeRegime = useMemo(() => {
     if (mode === 'ratio') return null;
-    const base30 = Number(outlook?.[mode]?.horizon30d?.base);
-    return Number.isFinite(base30) && base30 > 0 ? base30 : null;
-  }, [mode, outlook]);
+    return quant.marketRegime?.[mode] || null;
+  }, [mode, quant.marketRegime]);
 
-  const squeezeLevelUsd = useMemo(() => {
-    if (mode === 'ratio') return null;
-    const res = Number(quant.setupQuality?.resistance);
-    return Number.isFinite(res) && res > 0 ? res : null;
-  }, [mode, quant.setupQuality]);
+  const metalUnit = useMemo(() => {
+    if (mode === 'ratio') return 0;
+    return Number(quant.interactiveForecast?.unitScore ?? 0);
+  }, [mode, quant.interactiveForecast?.unitScore]);
 
   // 60fps Canvas Render
   useEffect(() => {
@@ -149,17 +146,12 @@ export const CandlestickChart: React.FC = () => {
           showFib: settings.showFib,
           showSma: settings.showSma,
           showRsi: settings.showRsi,
-          showMyBuys: settings.showMyBuys,
           showPatterns: settings.showPatterns,
           showGaps: settings.showGaps,
-          showNewsDots: settings.showNewsDots,
         },
         precisionLine: quant.precisionLine,
-        fairValueUsd,
-        squeezeLevelUsd,
-        gaps: quant.gaps,
-        lots: settings.stackLots,
-        news: Array.isArray(outlook?.headlines) ? outlook.headlines : [],
+        activeRegime,
+        metalUnit,
         isLightTheme,
       });
     };
@@ -174,18 +166,16 @@ export const CandlestickChart: React.FC = () => {
       window.removeEventListener('resize', onResize);
     };
   }, [
+    activeRegime,
     barsToDraw,
-    fairValueUsd,
     fxRates,
     hoverIdx,
     isLightTheme,
     livePrice,
+    metalUnit,
     mode,
-    outlook?.headlines,
-    quant.gaps,
     quant.precisionLine,
     settings,
-    squeezeLevelUsd,
     tf,
     zoomCount,
     zoomStart,
@@ -234,10 +224,8 @@ export const CandlestickChart: React.FC = () => {
       | 'showFib'
       | 'showSma'
       | 'showRsi'
-      | 'showMyBuys'
       | 'showPatterns'
       | 'showGaps'
-      | 'showNewsDots'
   ) => {
     updateSettings((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -250,10 +238,8 @@ export const CandlestickChart: React.FC = () => {
       | 'showFib'
       | 'showSma'
       | 'showRsi'
-      | 'showMyBuys'
       | 'showPatterns'
-      | 'showGaps'
-      | 'showNewsDots';
+      | 'showGaps';
     label: string;
   }> = [
     { key: 'showForecast', label: 'Forecast' },
@@ -262,10 +248,8 @@ export const CandlestickChart: React.FC = () => {
     { key: 'showFib', label: 'Key Levels' },
     { key: 'showSma', label: 'Avg Trend' },
     { key: 'showRsi', label: 'Momentum' },
-    { key: 'showMyBuys', label: 'My Buys' },
     { key: 'showPatterns', label: 'Patterns' },
     { key: 'showGaps', label: 'Gaps' },
-    { key: 'showNewsDots', label: 'News Pins' },
   ];
 
   const handleModeChange = (nextMode: ChartMode) => {

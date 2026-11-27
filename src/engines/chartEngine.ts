@@ -3,12 +3,11 @@ import type {
   CandleBar,
   ChartMode,
   CurrencyCode,
-  NewsArticle,
-  StackLot,
   TimeframeKey,
   UnitMode,
 } from '../types/bullion';
 import { clampNum, convertUnit, DEFAULT_FX_RATES, formatMoney } from '../utils/format';
+import { analyzeMarketGaps } from '../../monitor/historical_patterns.mjs';
 
 export interface ChartRenderOptions {
   canvas: HTMLCanvasElement;
@@ -30,17 +29,12 @@ export interface ChartRenderOptions {
     showFib: boolean;
     showSma: boolean;
     showRsi: boolean;
-    showMyBuys: boolean;
     showPatterns: boolean;
     showGaps: boolean;
-    showNewsDots: boolean;
   };
   precisionLine?: any;
-  fairValueUsd?: number | null;
-  squeezeLevelUsd?: number | null;
-  gaps?: any;
-  lots?: StackLot[];
-  news?: NewsArticle[];
+  activeRegime?: any;
+  metalUnit?: number;
   isLightTheme?: boolean;
 }
 
@@ -93,6 +87,77 @@ function calcRsi(values: number[], period = 14): Array<number | null> {
   return out;
 }
 
+function computePriceDiscoverySeries(bars: CandleBar[], regimeObj: any, metalUnit = 0): number[] {
+  if (!Array.isArray(bars) || !bars.length) return [];
+  const n = bars.length;
+  const period = Math.min(26, Math.max(8, Math.round(n * 0.28)));
+  const alpha = 2 / (period + 1);
+  const discScore = Number.isFinite(Number(regimeObj?.discoveryScore)) ? Number(regimeObj.discoveryScore) : 45;
+  const discTilt = clampNum((discScore - 45) / 100, -0.4, 0.55);
+  const unitTilt = clampNum(metalUnit || 0, -1, 1);
+
+  const out = new Array<number>(n);
+  let ema = bars[0].c;
+  let cumTyp = (bars[0].h + bars[0].l + bars[0].c) / 3;
+  let smoothRangePct = Math.max(0.001, (bars[0].h - bars[0].l) / Math.max(0.01, bars[0].c));
+
+  for (let i = 0; i < n; i++) {
+    const b = bars[i];
+    const tp = (b.h + b.l + b.c) / 3;
+    const prevC = i > 0 ? bars[i - 1].c : b.o;
+    const tr = Math.max(b.h - b.l, Math.abs(b.h - prevC), Math.abs(b.l - prevC));
+    const trPct = tr / Math.max(0.01, prevC);
+
+    if (i > 0) {
+      ema = alpha * b.c + (1 - alpha) * ema;
+      const anchorAlpha = Math.max(1 / (i + 1), 0.045);
+      cumTyp = anchorAlpha * tp + (1 - anchorAlpha) * cumTyp;
+      smoothRangePct = 0.14 * trPct + 0.86 * smoothRangePct;
+    }
+
+    const baseFair = ema * 0.68 + cumTyp * 0.32;
+    const structuralNudge = baseFair * smoothRangePct * (discTilt * 0.9 + unitTilt * 0.35);
+    out[i] = Math.max(0.01, baseFair + structuralNudge);
+  }
+  return out;
+}
+
+function computeShortSqueezeSeries(bars: CandleBar[], regimeObj: any): number[] {
+  if (!Array.isArray(bars) || !bars.length) return [];
+  const n = bars.length;
+  const sqzScore = Number.isFinite(Number(regimeObj?.squeezeScore)) ? Number(regimeObj.squeezeScore) : 35;
+  const sqzIntensity = clampNum(sqzScore / 100, 0.1, 1.0);
+  const backwBoost = regimeObj?.isBackwardation ? 0.22 : 0;
+
+  const fastPeriod = Math.min(12, Math.max(5, Math.round(n * 0.14)));
+  const fastAlpha = 2 / (fastPeriod + 1);
+  const out = new Array<number>(n);
+
+  let fastEma = bars[0].c;
+  let atrPct = Math.max(0.0015, (bars[0].h - bars[0].l) / Math.max(0.01, bars[0].c));
+  let velocity = 0;
+
+  for (let i = 0; i < n; i++) {
+    const b = bars[i];
+    const prevC = i > 0 ? bars[i - 1].c : b.o;
+    const tr = Math.max(b.h - b.l, Math.abs(b.h - prevC), Math.abs(b.l - prevC));
+    const trPct = tr / Math.max(0.01, prevC);
+
+    if (i > 0) {
+      fastEma = fastAlpha * b.c + (1 - fastAlpha) * fastEma;
+      atrPct = 0.18 * trPct + 0.82 * atrPct;
+      const barVel = Math.max(0, (b.c - fastEma) / Math.max(0.01, fastEma));
+      velocity = 0.35 * barVel + 0.65 * velocity;
+    }
+
+    const baseAnchor = Math.max(fastEma, b.c * 0.5 + fastEma * 0.5);
+    const volSpread = atrPct * (0.65 + sqzIntensity * 1.45 + backwBoost);
+    const stretch = velocity * (0.45 + sqzIntensity * 0.85);
+    out[i] = Math.max(0.01, baseAnchor * (1 + clampNum(volSpread + stretch, 0.0015, 0.12)));
+  }
+  return out;
+}
+
 export function buildRatioBars(goldBars: CandleBar[], silverBars: CandleBar[]): CandleBar[] {
   const len = Math.min(goldBars.length, silverBars.length);
   if (len === 0) return [];
@@ -127,11 +192,8 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     zoomCount,
     overlays,
     precisionLine,
-    fairValueUsd,
-    squeezeLevelUsd,
-    gaps,
-    lots = [],
-    news = [],
+    activeRegime,
+    metalUnit = 0,
     isLightTheme = false,
   } = opts;
 
@@ -169,6 +231,24 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
   const startIdx = clampNum(zoomStart ?? Math.max(0, total - visibleCount), 0, Math.max(0, total - visibleCount));
   const visBars = bars.slice(startIdx, startIdx + visibleCount);
 
+  // Compute dynamic Fair Value (Price Discovery) & Short Squeeze curves causally across full bars, then slice to visible window
+  const fullDiscovery =
+    overlays.showDiscovery && mode !== 'ratio'
+      ? computePriceDiscoverySeries(bars, activeRegime, metalUnit)
+      : null;
+  const fullSqueeze =
+    overlays.showSqueeze && mode !== 'ratio'
+      ? computeShortSqueezeSeries(bars, activeRegime)
+      : null;
+  const discoverySeries = fullDiscovery ? fullDiscovery.slice(startIdx, startIdx + visibleCount) : null;
+  const squeezeSeries = fullSqueeze ? fullSqueeze.slice(startIdx, startIdx + visibleCount) : null;
+
+  // Analyze market gaps directly on the visible window so indices & fill zones align 100% with visible candles
+  const visGapAnalysis =
+    overlays.showGaps && mode !== 'ratio' && visBars.length >= 2
+      ? analyzeMarketGaps(visBars, livePrice ?? visBars[visBars.length - 1].c, mode, opts.timeframe)
+      : null;
+
   const forecastPts: number[] = [];
   if (overlays.showForecast && mode !== 'ratio') {
     const rawPts: any[] = Array.isArray(precisionLine?.points)
@@ -193,7 +273,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
 
   const padL = 12;
   const padR = 66;
-  const padT = 18;
+  const padT = 22;
   const padB = 26;
   const plotW = Math.max(100, cssW - padL - padR);
   const plotH = Math.max(100, cssH - padT - padB);
@@ -214,13 +294,21 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     minP = Math.min(minP, livePrice);
     maxP = Math.max(maxP, livePrice);
   }
-  if (overlays.showDiscovery && fairValueUsd && mode !== 'ratio') {
-    minP = Math.min(minP, fairValueUsd);
-    maxP = Math.max(maxP, fairValueUsd);
+  if (discoverySeries) {
+    for (const v of discoverySeries) {
+      if (Number.isFinite(v)) {
+        minP = Math.min(minP, v);
+        maxP = Math.max(maxP, v);
+      }
+    }
   }
-  if (overlays.showSqueeze && squeezeLevelUsd && mode !== 'ratio') {
-    minP = Math.min(minP, squeezeLevelUsd);
-    maxP = Math.max(maxP, squeezeLevelUsd);
+  if (squeezeSeries) {
+    for (const v of squeezeSeries) {
+      if (Number.isFinite(v)) {
+        minP = Math.min(minP, v);
+        maxP = Math.max(maxP, v);
+      }
+    }
   }
   if (!Number.isFinite(minP) || !Number.isFinite(maxP) || maxP <= minP) {
     const mid = visBars[visBars.length - 1].c;
@@ -233,6 +321,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
 
   const yOf = (p: number) => padT + ((maxP - p) / (maxP - minP)) * plotH;
   const xOf = (i: number) => padL + (i + 0.5) * slotW;
+  const candleAreaRight = padL + visBars.length * slotW;
 
   // 1. Horizontal price grid + right-axis labels
   const gridSteps = 4;
@@ -257,16 +346,70 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     ctx.fillText(lbl, cssW - padR + 6, y + 3.5);
   }
 
-  // 2. Unfilled Gaps overlay
-  if (overlays.showGaps && Array.isArray(gaps?.unfilledGaps) && mode !== 'ratio') {
-    for (const g of gaps.unfilledGaps.slice(0, 3)) {
-      const top = Number(g.top ?? g.high);
-      const bot = Number(g.bottom ?? g.low);
-      if (!Number.isFinite(top) || !Number.isFinite(bot)) continue;
-      const y1 = yOf(Math.max(top, bot));
-      const y2 = yOf(Math.min(top, bot));
-      ctx.fillStyle = g.direction === 'up' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
-      ctx.fillRect(padL, y1, plotW, Math.max(2, y2 - y1));
+  // 2. Market Gaps overlay (shaded gap zones + dashed fill target + pill label)
+  if (overlays.showGaps && mode !== 'ratio') {
+    const detectedGaps: any[] = Array.isArray(visGapAnalysis?.gaps) ? visGapAnalysis.gaps : [];
+    if (detectedGaps.length > 0) {
+      for (const gp of detectedGaps) {
+        const zHi = Number(gp.zoneHigh);
+        const zLo = Number(gp.zoneLow);
+        if (!Number.isFinite(zHi) || !Number.isFinite(zLo)) continue;
+        const x1 = Math.max(padL, xOf(Math.max(0, Number(gp.idx || 1) - 1)) + slotW * 0.35);
+        const x2 =
+          gp.isFilled && gp.filledAtIdx != null
+            ? Math.min(candleAreaRight, xOf(Number(gp.filledAtIdx)) + slotW * 0.4)
+            : candleAreaRight;
+        const y1 = clampNum(yOf(Math.max(zHi, zLo)), padT, padT + plotH);
+        const y2 = clampNum(yOf(Math.min(zHi, zLo)), padT, padT + plotH);
+        const bandH = Math.max(4, y2 - y1);
+        const bandW = Math.max(8, x2 - x1);
+        const isUp = gp.dir === 'up';
+        const fresh = Number(gp.freshness ?? (gp.isFilled ? 0 : 1));
+        const fillAlpha = gp.isFilled ? 0.08 : +(0.1 + 0.14 * fresh).toFixed(3);
+        const borderCol = isUp
+          ? gp.isFilled ? 'rgba(34,197,94,0.32)' : 'rgba(34,197,94,0.72)'
+          : gp.isFilled ? 'rgba(239,68,68,0.32)' : 'rgba(239,68,68,0.72)';
+
+        ctx.save();
+        ctx.fillStyle = isUp
+          ? `rgba(34,197,94,${fillAlpha})`
+          : `rgba(239,68,68,${fillAlpha})`;
+        ctx.fillRect(x1, y1, bandW, bandH);
+        ctx.strokeStyle = borderCol;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x1, y1, bandW, bandH);
+
+        // Dashed Fill Target line for unfilled gaps
+        const fillTgt = Number(gp.fillTarget);
+        if (!gp.isFilled && Number.isFinite(fillTgt)) {
+          const ty = clampNum(yOf(fillTgt), padT, padT + plotH);
+          ctx.setLineDash([4, 3]);
+          ctx.strokeStyle = isUp ? '#34d399' : '#f87171';
+          ctx.lineWidth = 1.15;
+          ctx.beginPath();
+          ctx.moveTo(x1, ty);
+          ctx.lineTo(x2, ty);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Crisp inline badge label
+        const gapPctVal = Number(gp.gapPct ?? 0);
+        const sign = gapPctVal >= 0 ? '+' : '';
+        const lbl = gp.isFilled
+          ? `${gp.kind || 'Gap'} ${sign}${gapPctVal.toFixed(1)}% ✓`
+          : `${gp.kind || 'Gap'} ${isUp ? '↑' : '↓'} ${sign}${gapPctVal.toFixed(1)}%`;
+        ctx.font = '600 9px "JetBrains Mono", monospace';
+        const tw = ctx.measureText(lbl).width;
+        const lx = Math.min(cssW - padR - tw - 10, x1 + 4);
+        const ly = Math.max(padT + 11, Math.min(padT + plotH - 6, y1 - 3));
+        ctx.fillStyle = isLightTheme ? 'rgba(255,255,255,0.88)' : 'rgba(13,14,17,0.84)';
+        ctx.fillRect(lx - 3, ly - 9, tw + 6, 12);
+        ctx.fillStyle = isUp ? '#34d399' : '#f87171';
+        ctx.textAlign = 'left';
+        ctx.fillText(lbl, lx, ly);
+        ctx.restore();
+      }
     }
   }
 
@@ -293,60 +436,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     ctx.restore();
   }
 
-  // 4. Fair Value & Squeeze Risk lines
-  if (overlays.showDiscovery && fairValueUsd && mode !== 'ratio') {
-    const y = yOf(fairValueUsd);
-    ctx.save();
-    ctx.setLineDash([6, 4]);
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(padL, y);
-    ctx.lineTo(cssW - padR, y);
-    ctx.stroke();
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = '600 9px Inter, sans-serif';
-    ctx.fillText('Fair Value', padL + 6, Math.max(padT + 10, y - 4));
-    ctx.restore();
-  }
-
-  if (overlays.showSqueeze && squeezeLevelUsd && mode !== 'ratio') {
-    const y = yOf(squeezeLevelUsd);
-    ctx.save();
-    ctx.setLineDash([4, 3]);
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(padL, y);
-    ctx.lineTo(cssW - padR, y);
-    ctx.stroke();
-    ctx.fillStyle = '#f59e0b';
-    ctx.font = '600 9px Inter, sans-serif';
-    ctx.fillText('Squeeze Trigger', padL + 84, Math.max(padT + 10, y - 4));
-    ctx.restore();
-  }
-
-  // 5. My Buys horizontal cost basis lines
-  if (overlays.showMyBuys && mode !== 'ratio' && lots.length) {
-    const metalLots = lots.filter((l) => l.metal === mode);
-    ctx.save();
-    ctx.setLineDash([2, 3]);
-    ctx.strokeStyle = '#a855f7';
-    ctx.fillStyle = '#c084fc';
-    ctx.font = '600 9px Inter, sans-serif';
-    for (const lot of metalLots.slice(0, 6)) {
-      if (lot.cost < minP || lot.cost > maxP) continue;
-      const y = yOf(lot.cost);
-      ctx.beginPath();
-      ctx.moveTo(padL, y);
-      ctx.lineTo(cssW - padR, y);
-      ctx.stroke();
-      ctx.fillText(`My Buy ${lot.oz}oz`, padL + 6, y - 3);
-    }
-    ctx.restore();
-  }
-
-  // 6. Candlesticks (with clean wick + crisp body)
+  // 4. Candlesticks (with clean wick + crisp body)
   const bodyW = Math.max(2, Math.min(14, slotW * 0.64));
   for (let i = 0; i < visBars.length; i++) {
     const b = visBars[i];
@@ -382,6 +472,107 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
         ctx.fillText(bullEngulf ? '▲' : '▼', x, bullEngulf ? yL + 10 : yH - 4);
         ctx.textAlign = 'left';
       }
+    }
+  }
+
+  // 5. Dynamic Fair Value (solid emerald #10B981) & Short Squeeze Risk (dashed crimson #F43F5E) curves
+  const drawRegimeCurve = (arr: number[], color: string, dash: number[] | null, width: number) => {
+    ctx.save();
+    if (dash) ctx.setLineDash(dash);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (!Number.isFinite(v)) continue;
+      const x = xOf(i);
+      const y = yOf(v);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  if (discoverySeries && discoverySeries.length) {
+    drawRegimeCurve(discoverySeries, '#10b981', null, 1.9);
+  }
+
+  if (squeezeSeries && squeezeSeries.length) {
+    // Soft translucent crimson squeeze envelope above closing prices
+    ctx.save();
+    ctx.fillStyle = 'rgba(244, 63, 94, 0.08)';
+    ctx.beginPath();
+    for (let i = 0; i < squeezeSeries.length; i++) {
+      const x = xOf(i);
+      const y = yOf(squeezeSeries[i]);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = visBars.length - 1; i >= 0; i--) {
+      ctx.lineTo(xOf(i), yOf(Math.max(visBars[i].c, visBars[i].o)));
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    drawRegimeCurve(squeezeSeries, '#f43f5e', [6, 4], 1.9);
+  }
+
+  // Compact top-left legend strip for active dynamic overlays (Fair Value / Squeeze Risk / Gaps)
+  if (mode !== 'ratio') {
+    const chips: Array<{ text: string; color: string }> = [];
+    if (discoverySeries && discoverySeries.length) {
+      const lastFv = discoverySeries[discoverySeries.length - 1];
+      chips.push({
+        text: `● Fair ${formatMoney(convertUnit(lastFv, unit), mode === 'silver' ? 2 : 0, currency, fxRates)}`,
+        color: '#10b981',
+      });
+    }
+    if (squeezeSeries && squeezeSeries.length) {
+      const lastSq = squeezeSeries[squeezeSeries.length - 1];
+      chips.push({
+        text: `┄ Squeeze ${formatMoney(convertUnit(lastSq, unit), mode === 'silver' ? 2 : 0, currency, fxRates)}`,
+        color: '#f43f5e',
+      });
+    }
+    if (overlays.showGaps) {
+      const gCount = Array.isArray(visGapAnalysis?.gaps) ? visGapAnalysis.gaps.length : 0;
+      const openCount = Number(visGapAnalysis?.openCount ?? 0);
+      chips.push({
+        text:
+          openCount > 0
+            ? `▭ ${openCount} Open Gap${openCount > 1 ? 's' : ''}`
+            : gCount > 0
+              ? `▭ ${gCount} Filled Gap${gCount > 1 ? 's' : ''}`
+              : `▭ Gaps: None (${opts.timeframe.toUpperCase()})`,
+        color: openCount > 0 ? '#34d399' : textCol,
+      });
+    }
+    if (chips.length > 0) {
+      ctx.save();
+      ctx.font = '600 9.5px "JetBrains Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      let cx = padL + 2;
+      const cy = 10;
+      for (const ch of chips) {
+        const tw = ctx.measureText(ch.text).width;
+        if (cx + tw + 10 > cssW - padR) break;
+        ctx.fillStyle = isLightTheme ? 'rgba(255,255,255,0.86)' : 'rgba(13,14,17,0.78)';
+        ctx.fillRect(cx - 2, cy - 7, tw + 8, 14);
+        ctx.fillStyle = ch.color;
+        ctx.fillText(ch.text, cx + 2, cy + 0.5);
+        cx += tw + 12;
+      }
+      ctx.restore();
     }
   }
 
@@ -450,25 +641,7 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     ctx.restore();
   }
 
-  // 9. News Pins overlay
-  if (overlays.showNewsDots && news.length && visBars.length > 2) {
-    const firstT = visBars[0].t;
-    const lastT = visBars[visBars.length - 1].t;
-    ctx.save();
-    for (const art of news.slice(0, 8)) {
-      const ts = art.publishedAt ? Date.parse(art.publishedAt) : NaN;
-      if (!Number.isFinite(ts) || ts < firstT || ts > lastT) continue;
-      const frac = (ts - firstT) / Math.max(1, lastT - firstT);
-      const bx = padL + frac * (visBars.length * slotW);
-      ctx.fillStyle = art.direction === 'bullish' ? '#22c55e' : art.direction === 'bearish' ? '#ef4444' : '#d4a843';
-      ctx.beginPath();
-      ctx.arc(bx, padT + 6, 3.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // 10. Live Current Price Line + Highlighted Right-Axis Price Tag (TradingView style)
+  // 9. Live Current Price Line + Highlighted Right-Axis Price Tag (TradingView style)
   const currentP = livePrice ?? visBars[visBars.length - 1].c;
   if (Number.isFinite(currentP) && currentP >= minP && currentP <= maxP) {
     const ly = yOf(currentP);

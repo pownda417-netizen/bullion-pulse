@@ -28,7 +28,7 @@ export async function fetchFreshRepoJson<T = Record<string, unknown>>(fileName: 
     throw new Error('Invalid data filename');
   }
   const localFetch = async (): Promise<T> => {
-    const res = await fetchWithTimeout(`./data/${fileName}`, {}, 8000);
+    const res = await fetchWithTimeout(`./data/${fileName}?t=${Date.now()}`, { cache: 'no-store' }, 8000);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return (await res.json()) as T;
   };
@@ -76,9 +76,85 @@ function isSaneQuote(metal: 'gold' | 'silver', p: number): boolean {
   return metal === 'gold' ? p >= 1000 && p <= 25000 : p >= 10 && p <= 500;
 }
 
+const TROY_OZ_PER_KG = 32.15074656862798;
+
+async function fetchBullionVaultSpot(): Promise<{ goldPrice: number; silverPrice: number } | null> {
+  try {
+    const res = await fetchWithTimeout(
+      `https://www.bullionvault.com/view_market_json.do?t=${Date.now()}`,
+      { cache: 'no-store' },
+      5500
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      market?: {
+        pitches?: Array<{
+          securityId?: string;
+          securityClassNarrative?: string;
+          considerationCurrency?: string;
+          buyPrices?: Array<{ limit?: number }>;
+          sellPrices?: Array<{ limit?: number }>;
+        }>;
+      };
+    };
+    const pitches = data?.market?.pitches;
+    if (!Array.isArray(pitches) || !pitches.length) return null;
+
+    const pickMidOz = (preferredIds: string[], narrative: string): number | null => {
+      const usdPitches = pitches.filter(
+        (p) => p?.considerationCurrency === 'USD' && p?.securityClassNarrative === narrative
+      );
+      let chosen = null;
+      for (const id of preferredIds) {
+        chosen = usdPitches.find((p) => p.securityId === id) || null;
+        if (chosen) break;
+      }
+      if (!chosen) chosen = usdPitches[0] || null;
+      if (!chosen) return null;
+      const bid = Number(chosen.buyPrices?.[0]?.limit);
+      const ask = Number(chosen.sellPrices?.[0]?.limit);
+      const midKg =
+        Number.isFinite(bid) && bid > 0 && Number.isFinite(ask) && ask > 0
+          ? (bid + ask) / 2
+          : Number.isFinite(bid) && bid > 0
+            ? bid
+            : Number.isFinite(ask) && ask > 0
+              ? ask
+              : NaN;
+      if (!Number.isFinite(midKg) || midKg <= 0) return null;
+      return +(midKg / TROY_OZ_PER_KG).toFixed(2);
+    };
+
+    const goldPrice = pickMidOz(['AUXLN', 'AUXZU', 'AUXNY', 'AUXSG', 'AUXTR'], 'GOLD');
+    const silverPrice = pickMidOz(['AGXZU', 'AGXLN', 'AGXSG', 'AGXTR'], 'SILVER');
+    if (goldPrice == null || silverPrice == null) return null;
+    if (!isSaneQuote('gold', goldPrice) || !isSaneQuote('silver', silverPrice)) return null;
+    return { goldPrice, silverPrice };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCoinbasePaxgSpot(): Promise<number | null> {
+  try {
+    const res = await fetchWithTimeout(
+      'https://api.coinbase.com/v2/prices/PAXG-USD/spot',
+      { cache: 'no-store' },
+      4500
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { data?: { amount?: string } };
+    const gp = Number(data?.data?.amount);
+    if (!isSaneQuote('gold', gp)) return null;
+    return +gp.toFixed(2);
+  } catch {
+    return null;
+  }
+}
+
 async function fetchGoldPriceOrg(): Promise<{ gold: MetalQuote; silver: MetalQuote } | null> {
   try {
-    const res = await fetchWithTimeout('https://data-asg.goldprice.org/dbXRates/USD', {}, 6500);
+    const res = await fetchWithTimeout('https://data-asg.goldprice.org/dbXRates/USD', {}, 5000);
     if (!res.ok) return null;
     const data = (await res.json()) as { items?: Array<Record<string, number>> };
     const item = data?.items?.[0];
@@ -110,8 +186,8 @@ async function fetchGoldPriceOrg(): Promise<{ gold: MetalQuote; silver: MetalQuo
 async function fetchGoldApi(): Promise<{ goldPrice: number; silverPrice: number } | null> {
   try {
     const [gRes, sRes] = await Promise.all([
-      fetchWithTimeout('https://api.gold-api.com/price/XAU', {}, 5500),
-      fetchWithTimeout('https://api.gold-api.com/price/XAG', {}, 5500),
+      fetchWithTimeout('https://api.gold-api.com/price/XAU', {}, 4500),
+      fetchWithTimeout('https://api.gold-api.com/price/XAG', {}, 4500),
     ]);
     if (!gRes.ok || !sRes.ok) return null;
     const gJson = (await gRes.json()) as { price?: number };
@@ -126,25 +202,90 @@ async function fetchGoldApi(): Promise<{ goldPrice: number; silverPrice: number 
 }
 
 let goldPriceOrgBlockedUntil = 0;
+let goldApiBlockedUntil = 0;
+
+function anchorQuote(price: number, prevClose?: number | null, maxDrift = 0.18): MetalQuote {
+  const p = +price.toFixed(2);
+  const prev =
+    prevClose != null &&
+    Number.isFinite(prevClose) &&
+    prevClose > 0 &&
+    Math.abs(p - prevClose) / prevClose < maxDrift
+      ? +prevClose.toFixed(2)
+      : p;
+  const chg = +(p - prev).toFixed(2);
+  const pct = prev > 0 ? +(((p - prev) / prev) * 100).toFixed(2) : 0;
+  return { price: p, prevClose: prev, chg, pct };
+}
 
 export async function fetchLiveSpotQuorum(
   prevCloseGold?: number | null,
   prevCloseSilver?: number | null,
   lastGoldPrice?: number | null
 ): Promise<SpotFetchResult | null> {
-  const tryPrimary = Date.now() >= goldPriceOrgBlockedUntil;
+  const now = Date.now();
+
+  // Primary browser-CORS physical exchange quorum: BullionVault (London/Zurich XAU & XAG) + Coinbase PAXG-USD
+  const [bvRes, cbRes] = await Promise.allSettled([
+    fetchBullionVaultSpot(),
+    fetchCoinbasePaxgSpot(),
+  ]);
+  const bv = bvRes.status === 'fulfilled' ? bvRes.value : null;
+  const cbGold = cbRes.status === 'fulfilled' ? cbRes.value : null;
+
+  if (bv && cbGold != null) {
+    const spreadPct = +((Math.abs(bv.goldPrice - cbGold) / cbGold) * 100).toFixed(2);
+    if (spreadPct <= 2.5) {
+      return {
+        gold: anchorQuote(bv.goldPrice, prevCloseGold, 0.15),
+        silver: anchorQuote(bv.silverPrice, prevCloseSilver, 0.22),
+        source: 'BullionVault + Coinbase Quorum',
+        trustStatus: 'verified',
+        spreadPct,
+        note: `Dual-source live quorum verified (spread ${spreadPct.toFixed(2)}%)`,
+        ts: now,
+      };
+    }
+    const useCb =
+      lastGoldPrice != null &&
+      Math.abs(cbGold - lastGoldPrice) < Math.abs(bv.goldPrice - lastGoldPrice);
+    const gp = useCb ? cbGold : bv.goldPrice;
+    return {
+      gold: anchorQuote(gp, prevCloseGold, 0.15),
+      silver: anchorQuote(bv.silverPrice, prevCloseSilver, 0.22),
+      source: useCb ? 'Coinbase PAXG (Auto-Healed)' : 'BullionVault (Auto-Healed)',
+      trustStatus: 'auto-healed',
+      spreadPct,
+      note: `Source divergence ${spreadPct.toFixed(2)}% auto-healed against anchor`,
+      ts: now,
+    };
+  }
+
+  if (bv) {
+    return {
+      gold: anchorQuote(bv.goldPrice, prevCloseGold, 0.15),
+      silver: anchorQuote(bv.silverPrice, prevCloseSilver, 0.22),
+      source: 'BullionVault Live Spot',
+      trustStatus: 'single',
+      spreadPct: null,
+      note: 'Live BullionVault London/Zurich orderbook feed active',
+      ts: now,
+    };
+  }
+
+  // Fallback chain (cooldown-gated so rate-limited or offline hosts never stall 15s polling)
+  const tryGpOrg = now >= goldPriceOrgBlockedUntil;
+  const tryGoldApi = now >= goldApiBlockedUntil;
   const [primaryRes, secondaryRes] = await Promise.allSettled([
-    tryPrimary ? fetchGoldPriceOrg() : Promise.resolve(null),
-    fetchGoldApi(),
+    tryGpOrg ? fetchGoldPriceOrg() : Promise.resolve(null),
+    tryGoldApi ? fetchGoldApi() : Promise.resolve(null),
   ]);
   const primary = primaryRes.status === 'fulfilled' ? primaryRes.value : null;
   const secondary = secondaryRes.status === 'fulfilled' ? secondaryRes.value : null;
-  if (tryPrimary && !primary) {
-    goldPriceOrgBlockedUntil = Date.now() + 10 * 60 * 1000;
-  } else if (primary) {
-    goldPriceOrgBlockedUntil = 0;
-  }
-  const now = Date.now();
+  if (tryGpOrg && !primary) goldPriceOrgBlockedUntil = now + 10 * 60 * 1000;
+  else if (primary) goldPriceOrgBlockedUntil = 0;
+  if (tryGoldApi && !secondary) goldApiBlockedUntil = now + 10 * 60 * 1000;
+  else if (secondary) goldApiBlockedUntil = 0;
 
   if (primary && secondary) {
     const gDiffPct = Math.abs((primary.gold.price! - secondary.goldPrice) / secondary.goldPrice) * 100;
@@ -166,11 +307,9 @@ export async function fetchLiveSpotQuorum(
       Math.abs(secondary.goldPrice - lastGoldPrice) < Math.abs(primary.gold.price! - lastGoldPrice);
     const gp = useSecondary ? secondary.goldPrice : primary.gold.price!;
     const sp = useSecondary ? secondary.silverPrice : primary.silver.price!;
-    const gPrev = primary.gold.prevClose || prevCloseGold || gp;
-    const sPrev = primary.silver.prevClose || prevCloseSilver || sp;
     return {
-      gold: { price: gp, prevClose: gPrev, chg: +(gp - gPrev).toFixed(2), pct: gPrev > 0 ? +(((gp - gPrev) / gPrev) * 100).toFixed(2) : 0 },
-      silver: { price: sp, prevClose: sPrev, chg: +(sp - sPrev).toFixed(2), pct: sPrev > 0 ? +(((sp - sPrev) / sPrev) * 100).toFixed(2) : 0 },
+      gold: anchorQuote(gp, primary.gold.prevClose || prevCloseGold, 0.15),
+      silver: anchorQuote(sp, primary.silver.prevClose || prevCloseSilver, 0.22),
       source: useSecondary ? 'Gold-API (Auto-Healed)' : 'GoldPrice (Auto-Healed)',
       trustStatus: 'auto-healed',
       spreadPct: maxSpread,
@@ -186,37 +325,34 @@ export async function fetchLiveSpotQuorum(
       source: 'GoldPrice Spot',
       trustStatus: 'single',
       spreadPct: null,
-      note: 'Primary GoldPrice live feed active',
+      note: 'GoldPrice live feed active',
       ts: now,
     };
   }
 
   if (secondary) {
-    const gPrev =
-      prevCloseGold && Math.abs(secondary.goldPrice - prevCloseGold) / prevCloseGold < 0.15
-        ? prevCloseGold
-        : secondary.goldPrice;
-    const sPrev =
-      prevCloseSilver && Math.abs(secondary.silverPrice - prevCloseSilver) / prevCloseSilver < 0.2
-        ? prevCloseSilver
-        : secondary.silverPrice;
     return {
-      gold: {
-        price: +secondary.goldPrice.toFixed(2),
-        prevClose: +gPrev.toFixed(2),
-        chg: +(secondary.goldPrice - gPrev).toFixed(2),
-        pct: gPrev > 0 ? +(((secondary.goldPrice - gPrev) / gPrev) * 100).toFixed(2) : 0,
-      },
-      silver: {
-        price: +secondary.silverPrice.toFixed(2),
-        prevClose: +sPrev.toFixed(2),
-        chg: +(secondary.silverPrice - sPrev).toFixed(2),
-        pct: sPrev > 0 ? +(((secondary.silverPrice - sPrev) / sPrev) * 100).toFixed(2) : 0,
-      },
+      gold: anchorQuote(secondary.goldPrice, prevCloseGold, 0.15),
+      silver: anchorQuote(secondary.silverPrice, prevCloseSilver, 0.22),
       source: 'Gold-API Live Spot',
-      trustStatus: 'auto-healed',
+      trustStatus: 'single',
       spreadPct: null,
       note: 'Live Gold-API Spot active with synced daily previous close',
+      ts: now,
+    };
+  }
+
+  // Last-resort live gold fallback via Coinbase PAXG-USD preserving synced Gold/Silver ratio
+  if (cbGold != null && prevCloseSilver && prevCloseSilver > 0) {
+    const ratio = prevCloseGold && prevCloseGold > 0 ? prevCloseGold / prevCloseSilver : 83.4;
+    const estSilver = +(cbGold / Math.max(40, Math.min(130, ratio))).toFixed(2);
+    return {
+      gold: anchorQuote(cbGold, prevCloseGold, 0.15),
+      silver: anchorQuote(estSilver, prevCloseSilver, 0.22),
+      source: 'Coinbase PAXG Live',
+      trustStatus: 'single',
+      spreadPct: null,
+      note: 'Live Coinbase PAXG gold feed active',
       ts: now,
     };
   }

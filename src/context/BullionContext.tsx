@@ -25,6 +25,8 @@ import type {
   VaultThemeId,
 } from '../types/bullion';
 import {
+  CANDLE_1M_MS,
+  CANDLE_INTERVAL_MS,
   DEFAULT_FX_RATES,
   formatMoney,
   formatTime,
@@ -198,8 +200,8 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [feedTrust, setFeedTrust] = useState<FeedTrustState>({
     status: 'connecting',
-    primarySource: 'GoldPrice Spot',
-    secondarySource: 'Gold-API Spot',
+    primarySource: 'BullionVault Live Spot',
+    secondarySource: 'Coinbase PAXG Quorum',
     lastSpreadPct: null,
     rejectedOutliers: 0,
     failovers: 0,
@@ -505,6 +507,44 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return best?.c ?? best?.o ?? currentPrice;
   }, []);
 
+  const upsertLiveCandle = useCallback(
+    (bars: CandleBar[], price: number, ts: number, bucketMs: number, maxLen: number): CandleBar[] => {
+      if (!Number.isFinite(price) || price <= 0) return bars;
+      const p = +price.toFixed(2);
+      const bucket = Math.floor(ts / bucketMs) * bucketMs;
+      if (!bars.length) {
+        return [{ t: bucket, o: p, h: p, l: p, c: p, v: 1 }];
+      }
+      const last = bars[bars.length - 1];
+      // Guard against huge outlier jump (>8%) corrupting chart range
+      if (last.c > 0 && Math.abs(p - last.c) / last.c > 0.08) return bars;
+      const lastBucket = Math.floor(last.t / bucketMs) * bucketMs;
+      if (bucket <= lastBucket) {
+        const nextLast: CandleBar = {
+          ...last,
+          h: +Math.max(last.h, p).toFixed(2),
+          l: +Math.min(last.l, p).toFixed(2),
+          c: p,
+          v: (last.v || 0) + 1,
+        };
+        return [...bars.slice(0, -1), nextLast];
+      }
+      // Roll over cleanly into a new live candle bucket
+      const gapMs = bucket - lastBucket;
+      const open = gapMs <= 2 * bucketMs ? last.c : p;
+      const nextBar: CandleBar = {
+        t: bucket,
+        o: +open.toFixed(2),
+        h: +Math.max(open, p).toFixed(2),
+        l: +Math.min(open, p).toFixed(2),
+        c: p,
+        v: 1,
+      };
+      return [...bars, nextBar].slice(-maxLen);
+    },
+    []
+  );
+
   const refreshSpot = useCallback(async () => {
     const q = quotesRef.current;
     const c = candlesRef.current;
@@ -536,11 +576,24 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         gold: [...prev.gold.slice(-59), { ts: res.ts, price: res.gold.price! }],
         silver: [...prev.silver.slice(-59), { ts: res.ts, price: res.silver.price! }],
       }));
+      // Append/update live 1m & 5m ticker candles every 15s so the candlestick chart ticks live
+      if (res.gold.price != null && res.silver.price != null) {
+        const gp = res.gold.price;
+        const sp = res.silver.price;
+        setCandles1m((prev) => ({
+          gold: upsertLiveCandle(prev.gold, gp, res.ts, CANDLE_1M_MS, 240),
+          silver: upsertLiveCandle(prev.silver, sp, res.ts, CANDLE_1M_MS, 240),
+        }));
+        setCandles((prev) => ({
+          gold: upsertLiveCandle(prev.gold, gp, res.ts, CANDLE_INTERVAL_MS, 288),
+          silver: upsertLiveCandle(prev.silver, sp, res.ts, CANDLE_INTERVAL_MS, 288),
+        }));
+      }
       evaluateAlerts(res.gold, res.silver);
       return true;
     }
     return false;
-  }, [evaluateAlerts, pick24hPrevClose, syncFuturesFromBasis]);
+  }, [evaluateAlerts, pick24hPrevClose, syncFuturesFromBasis, upsertLiveCandle]);
 
   const refreshRepoAndMacro = useCallback(async () => {
     const [bundle, liveFx] = await Promise.all([fetchAllRepoData(), fetchLiveFxRates()]);
@@ -610,20 +663,38 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const gotLive = await refreshSpot();
       if (active && !gotLive) {
         setMode((prev) => (prev === 'connecting' ? 'demo' : prev));
+        setFeedTrust((prev) =>
+          prev.status === 'connecting'
+            ? {
+                ...prev,
+                status: 'demo',
+                lastEventNote: 'Using synced 10m repo snapshot — retrying live 15s feed automatically',
+              }
+            : prev
+        );
       }
     };
     void boot();
 
+    // Live ticker & candlestick chart poll every 15 seconds (REFRESH_MS)
     const spotTimer = setInterval(() => {
       if (!document.hidden) void refreshSpot();
     }, REFRESH_MS);
 
+    // Rest of application (news, outlook, COMEX, Shanghai, FX, NOAA) refreshes every 10 minutes (SLOW_REFRESH_MS)
     const slowTimer = setInterval(() => {
       if (!document.hidden) void refreshRepoAndMacro();
     }, SLOW_REFRESH_MS);
 
+    let lastSlowRefresh = Date.now();
     const onVis = () => {
-      if (!document.hidden) void refreshSpot();
+      if (!document.hidden) {
+        void refreshSpot();
+        if (Date.now() - lastSlowRefresh >= SLOW_REFRESH_MS) {
+          lastSlowRefresh = Date.now();
+          void refreshRepoAndMacro();
+        }
+      }
     };
     document.addEventListener('visibilitychange', onVis);
 

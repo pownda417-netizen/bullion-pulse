@@ -589,7 +589,7 @@ export function computeFullQuantSuite(params: {
     macroUnit: adjustedUnitScore,
     leadLagAlpha: Number(outlook?.[metal]?.leadLagAlpha ?? 0),
     seasonalityTilt: Number(seasonality?.unitTilt ?? 0),
-    gapPrimary: gaps?.primaryGap || null,
+    gapPrimary: gaps?.primary || null,
     opexMagnetPrice: Number(alphaForMetal?.opexMagnet?.magnetPrice) || null,
     opexPinStrength: Number(alphaForMetal?.opexMagnet?.pinStrength ?? 0),
     breakoutEnergyMult: Number(alphaForMetal?.springCoiling?.breakoutEnergyMult ?? 1.0),

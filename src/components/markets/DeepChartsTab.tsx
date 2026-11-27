@@ -34,8 +34,20 @@ export const DeepChartsTab: React.FC = () => {
               {t('Live cross-market macro drivers, multi-source sanity quorum, and feed timestamps')}
             </p>
           </div>
-          <span className={`badge-pill ${feedTrust.status === 'verified' ? 'bullish' : 'neutral'}`}>
-            {feedTrust.status === 'verified' ? t('Verified · 15s') : feedTrust.status}
+          <span
+            className={`badge-pill ${
+              feedTrust.status === 'verified' || feedTrust.status === 'single' ? 'bullish' : 'neutral'
+            }`}
+          >
+            {feedTrust.status === 'verified'
+              ? t('Verified · 15s')
+              : feedTrust.status === 'single'
+                ? t('Live · 15s')
+                : feedTrust.status === 'auto-healed'
+                  ? t('Auto-Healed · 15s')
+                  : feedTrust.status === 'demo'
+                    ? t('Synced · 10m')
+                    : t('Connecting…')}
           </span>
         </div>
 
@@ -190,34 +202,59 @@ export const DeepChartsTab: React.FC = () => {
 
       {/* 4. Market Gaps & Liquidity Magnet */}
       <section className="panel" aria-label="Market Gap Analyzer">
-        <div className="panel-header">
-          <div>
-            <h2 className="panel-title">{t('Unfilled Price Gaps & Magnets')}</h2>
-            <p className="panel-subtitle">
-              {t('Session & weekend open gaps that price historically tends to retest')}
-            </p>
-          </div>
-          <span className="badge-pill neutral">
-            {`${Array.isArray(quant.gaps?.unfilledGaps) ? quant.gaps.unfilledGaps.length : 0} open`}
-          </span>
-        </div>
-        {Array.isArray(quant.gaps?.unfilledGaps) && quant.gaps.unfilledGaps.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {quant.gaps.unfilledGaps.slice(0, 4).map((g: Record<string, unknown>, idx: number) => (
-              <div key={idx} className="stat-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {(() => {
+          const allGaps: Array<Record<string, unknown>> = Array.isArray(quant.gaps?.gaps) ? quant.gaps.gaps : [];
+          const openGaps = allGaps.filter((g) => !g.isFilled);
+          const displayGaps = openGaps.length > 0 ? openGaps : allGaps;
+          return (
+            <>
+              <div className="panel-header">
                 <div>
-                  <strong>{g.direction === 'up' ? 'Bullish Gap Up' : 'Bearish Gap Down'}</strong>
-                  <div className="panel-subtitle">
-                    {`${formatMoney(Number(g.bottom ?? g.low), 2, settings.currency, fxRates)} – ${formatMoney(Number(g.top ?? g.high), 2, settings.currency, fxRates)}`}
-                  </div>
+                  <h2 className="panel-title">{t('Unfilled Price Gaps & Magnets')}</h2>
+                  <p className="panel-subtitle">
+                    {t('Session & weekend open gaps that price historically tends to retest')}
+                  </p>
                 </div>
-                <span className="mono">{`${Number(g.sizePct ?? 0).toFixed(2)}%`}</span>
+                <span className={`badge-pill ${openGaps.length > 0 ? 'bullish' : 'neutral'}`}>
+                  {openGaps.length > 0
+                    ? `${openGaps.length} open`
+                    : allGaps.length > 0
+                      ? `${allGaps.length} filled ✓`
+                      : '0 open'}
+                </span>
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="panel-note">{t('No significant unfilled price gaps on the active timeframe.')}</p>
-        )}
+              {displayGaps.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {displayGaps.slice(0, 4).map((g, idx) => {
+                    const isUp = g.dir === 'up';
+                    const isFilled = Boolean(g.isFilled);
+                    const pct = Number(g.gapPct ?? 0);
+                    return (
+                      <div key={idx} className="stat-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                        <div>
+                          <strong style={{ color: isUp ? 'var(--up)' : 'var(--down)' }}>
+                            {`${String(g.kind || (isUp ? 'Gap Up' : 'Gap Down'))} (${isUp ? '↑' : '↓'})`}
+                          </strong>
+                          <div className="panel-subtitle">
+                            {`Zone ${formatMoney(Number(g.zoneLow), 2, settings.currency, fxRates)} – ${formatMoney(Number(g.zoneHigh), 2, settings.currency, fxRates)} · Fill target ${formatMoney(Number(g.fillTarget), 2, settings.currency, fxRates)} (${isFilled ? 'Filled ✓' : `${Number(g.fillPct ?? 0)}% filled`})`}
+                          </div>
+                        </div>
+                        <span
+                          className="mono"
+                          style={{ fontWeight: 700, color: isUp ? 'var(--up)' : 'var(--down)', whiteSpace: 'nowrap' }}
+                        >
+                          {`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="panel-note">{t('No significant unfilled price gaps on the active timeframe.')}</p>
+              )}
+            </>
+          );
+        })()}
       </section>
     </div>
   );

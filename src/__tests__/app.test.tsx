@@ -205,6 +205,11 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(screen.getByText('Gold Spot')).toBeInTheDocument();
     expect(screen.getByText('Silver Spot')).toBeInTheDocument();
     expect(document.getElementById('btn-listen-brief')).toBeNull();
+    // Chart overlays: Gaps & Squeeze Risk present; My Buys & News Pins removed
+    expect(screen.getByRole('button', { name: 'Gaps' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Squeeze Risk' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'My Buys' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'News Pins' })).toBeNull();
 
     // Navigate to Outlook -> What Moves It (All 6 Hidden Alpha Engines + Detailed 36-Ticker AI Race)
     fireEvent.click(document.getElementById('top-nav-outlook')!);

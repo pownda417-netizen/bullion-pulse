@@ -17,14 +17,25 @@ if (typeof window !== 'undefined' && window.top && window.top !== window.self) {
   }
 }
 
-// Register hardened Service Worker in production browser context
+// Register hardened Service Worker in production browser context with auto-upgrade reload
 if (
   typeof window !== 'undefined' &&
   'serviceWorker' in navigator &&
   (window.location.protocol === 'https:' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')
 ) {
+  let swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swReloaded) return;
+    swReloaded = true;
+    window.location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker
+      .register('./sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        reg.update().catch(() => {});
+      })
+      .catch(() => {});
   });
 }
 

@@ -9,8 +9,8 @@ import type {
 } from '../types/bullion';
 
 export const TROY_OZ_TO_GRAMS = 31.1034768;
-export const REFRESH_MS = 15_000;
-export const SLOW_REFRESH_MS = 60_000;
+export const REFRESH_MS = 15_000;           // 15 seconds — live spot prices & live ticker chart
+export const SLOW_REFRESH_MS = 10 * 60 * 1000; // 10 minutes — news, outlook, macro, COMEX, SGE, FX & NOAA
 export const CANDLE_INTERVAL_MS = 5 * 60 * 1000;
 export const CANDLE_1M_MS = 60 * 1000;
 export const MIN_ZOOM_BARS = 6;

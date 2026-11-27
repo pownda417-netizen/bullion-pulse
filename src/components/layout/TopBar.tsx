@@ -23,9 +23,9 @@ export const TopBar: React.FC = () => {
 
   const statusText =
     mode === 'live'
-      ? `Live · ${formatTime(lastUpdated)}`
+      ? `Live 15s · ${formatTime(lastUpdated)}`
       : mode === 'demo'
-        ? 'Snapshot Mode · Cached Feed'
+        ? 'Synced Snapshot · 10m Refresh'
         : t('Connecting to spot feed…');
 
   const dotClass = `status-dot${mode === 'live' ? ' live' : mode === 'demo' ? ' demo' : ''}`;

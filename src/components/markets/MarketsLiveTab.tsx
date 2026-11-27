@@ -62,8 +62,26 @@ export const MarketsLiveTab: React.FC<MarketsLiveTabProps> = ({ inSplitPane = fa
         </div>
         <div className="stat-box">
           <div className="stat-label">{t('Feed Trust')}</div>
-          <div className="stat-value">
-            {feedTrust.status === 'verified' ? t('Verified · 15s') : feedTrust.status}
+          <div
+            className="stat-value"
+            style={{
+              color:
+                feedTrust.status === 'verified' || feedTrust.status === 'single'
+                  ? 'var(--up)'
+                  : feedTrust.status === 'auto-healed'
+                    ? 'var(--gold)'
+                    : 'var(--text)',
+            }}
+          >
+            {feedTrust.status === 'verified'
+              ? t('Verified · 15s')
+              : feedTrust.status === 'single'
+                ? t('Live · 15s')
+                : feedTrust.status === 'auto-healed'
+                  ? t('Auto-Healed · 15s')
+                  : feedTrust.status === 'demo'
+                    ? t('Synced · 10m')
+                    : t('Connecting…')}
           </div>
         </div>
       </section>
