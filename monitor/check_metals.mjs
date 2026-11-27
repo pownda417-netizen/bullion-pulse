@@ -255,7 +255,73 @@ export async function fetchSpotPrices(fetchImpl = fetch) {
       return parseGoldApiQuotes(xauJson, xagJson, prevCloses);
     }
   } catch (secErr) {
-    console.warn(`gold-api.com fallback failed (${secErr.message}), trying Yahoo Finance…`);
+    console.warn(`gold-api.com fallback failed (${secErr.message}), trying Swissquote interbank spot…`);
+  }
+
+  // Tertiary: Swissquote live interbank XAU/USD & XAG/USD spot BBO midpoint (true spot distinct from COMEX futures)
+  try {
+    const [sqGRes, sqSRes] = await Promise.all([
+      callApi('https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD', {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      }),
+      callApi('https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAG/USD', {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      }),
+    ]);
+    if (sqGRes.ok && sqSRes.ok) {
+      const [sqG, sqS] = await Promise.all([
+        readResponseJsonWithLimit(sqGRes, 256 * 1024),
+        readResponseJsonWithLimit(sqSRes, 256 * 1024),
+      ]);
+      const midOf = (arr) => {
+        const prices = Array.isArray(arr) ? arr[0]?.spreadProfilePrices : null;
+        if (!Array.isArray(prices) || !prices.length) return null;
+        const p = prices.find((x) => x.spreadProfile === 'prime') || prices[0];
+        const bid = Number(p?.bid);
+        const ask = Number(p?.ask);
+        return Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0 ? (bid + ask) / 2 : null;
+      };
+      const gMid = midOf(sqG);
+      const sMid = midOf(sqS);
+      if (isSaneSpotPrice('gold', gMid) && isSaneSpotPrice('silver', sMid)) {
+        const prevCloses = {};
+        try {
+          const [gYRes, sYRes] = await Promise.all([
+            callApi('https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m', {
+              'User-Agent': USER_AGENT,
+            }),
+            callApi('https://query1.finance.yahoo.com/v8/finance/chart/SI=F?range=1d&interval=5m', {
+              'User-Agent': USER_AGENT,
+            }),
+          ]);
+          if (gYRes.ok) {
+            const gMeta = (await readResponseJsonWithLimit(gYRes, 512 * 1024))?.chart?.result?.[0]?.meta;
+            if (gMeta?.regularMarketPrice > 0 && gMeta?.chartPreviousClose > 0) {
+              // Apply COMEX daily % move backward from live spot to derive spot previous close accurately
+              const gRatio = gMeta.chartPreviousClose / gMeta.regularMarketPrice;
+              prevCloses.gold = +(gMid * gRatio).toFixed(2);
+            }
+          }
+          if (sYRes.ok) {
+            const sMeta = (await readResponseJsonWithLimit(sYRes, 512 * 1024))?.chart?.result?.[0]?.meta;
+            if (sMeta?.regularMarketPrice > 0 && sMeta?.chartPreviousClose > 0) {
+              const sRatio = sMeta.chartPreviousClose / sMeta.regularMarketPrice;
+              prevCloses.silver = +(sMid * sRatio).toFixed(2);
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        return {
+          ...parseGoldApiQuotes({ price: gMid }, { price: sMid }, prevCloses),
+          source: 'Swissquote Interbank Spot',
+        };
+      }
+    }
+  } catch (sqErr) {
+    console.warn(`Swissquote spot fallback failed (${sqErr.message}), trying Yahoo Finance…`);
   }
 
   // Final fallback: Yahoo Finance COMEX continuous futures (GC=F & SI=F)

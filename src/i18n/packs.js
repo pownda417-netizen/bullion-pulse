@@ -1,3 +1,4 @@
+let __BP_I18N_PACKS = null;
 'use strict';
 
 /* ==========================================================================
@@ -163,12 +164,12 @@
     'Running automatic price checks every 15 seconds.': ['กำลังตรวจสอบราคาอัตโนมัติทุก 15 วินาที', 'ກຳລັງກວດສອບລາຄາອັດຕະໂນມັດທຸກ 15 ວິນາທີ', 'Ejecutando verificaciones automáticas cada 15 segundos.', '每15秒自动执行一次价格校验。', '15秒ごとに自動価格チェックを実行中です。', 'हर 15 सेकंड में स्वचालित कीमत जांच चल रही है।'],
   });
 
-  window.__BP_I18N_PACKS = { EXACT, addPack, LANG_KEYS };
+  __BP_I18N_PACKS = { EXACT, addPack, LANG_KEYS };
 })();
 
 /* ---------- 3. Outlook View (Forecast, What Moves It, Vaults & Miners, Odds & News) ---------- */
 (() => {
-  const { addPack } = window.__BP_I18N_PACKS;
+  const { addPack } = __BP_I18N_PACKS;
   addPack({
     'Price Forecast & Market Signals': ['คาดการณ์ราคาและสัญญาณตลาด', 'ຄາດຄະເນລາຄາ ແລະ ສັນຍານຕະຫຼາດ', 'Pronóstico y Señales de Mercado', '价格预测与市场信号', '価格予測・市場シグナル', 'कीमत अनुमान और बाज़ार संकेत'],
     '7-Day': ['7 วัน', '7 ມື້', '7 Días', '7天', '7日間', '7 दिन'],
@@ -310,7 +311,7 @@
 
 /* ---------- 4. Trade, Stack & Settings Views + Themes + Placeholders ---------- */
 (() => {
-  const { addPack, LANG_KEYS } = window.__BP_I18N_PACKS;
+  const { addPack, LANG_KEYS } = __BP_I18N_PACKS;
   addPack({
     // Trade View
     'Buy, Grade & Swap Tools': ['เครื่องมือซื้อ เช็กราคา และสลับโลหะ', 'ເຄື່ອງມືຊື້ ກວດລາຄາ ແລະ ແລກປ່ຽນ', 'Herramientas de Compra y Cambio', '买入、验价与换仓工具', '購入・査定・交換ツール', 'खरीद, जांच और स्वैप टूल'],
@@ -552,7 +553,7 @@
   };
 
   function trExact(s, lang) {
-    return window.__BP_I18N_PACKS.EXACT[s]?.[lang] || s;
+    return __BP_I18N_PACKS.EXACT[s]?.[lang] || s;
   }
 
   const PATTERNS = [
@@ -940,12 +941,12 @@
     ],
   ];
 
-  window.__BP_I18N_PACKS.PATTERNS = PATTERNS;
+  __BP_I18N_PACKS.PATTERNS = PATTERNS;
 })();
 
 /* ---------- 6. Complete Coverage Pack (Alert Descriptions, Install Steps & Dynamic JS Cards) ---------- */
 (() => {
-  const { addPack, PATTERNS } = window.__BP_I18N_PACKS;
+  const { addPack, PATTERNS } = __BP_I18N_PACKS;
   addPack({
     // Remaining Alert descriptions, Install steps & Time Machine tip
     'Gold Sideways / Calm': ['ทองคำทรงตัว / นิ่ง', 'ຄຳຊົງຕົວ / ສະຫງົບ', 'Oro Lateral / Tranquilo', '黄金横盘 / 平稳', '金 横ばい・静穏', 'सोना स्थिर / शांत'],
@@ -1038,8 +1039,8 @@
     [
       /^Smart Split:\s*(\d+%)\s*(Gold|Silver)\s*\/\s*(\d+%)\s*(Gold|Silver)\s*\((.+)\)$/,
       (m, l) => {
-        const g1 = window.__BP_I18N_PACKS.EXACT[m[2]]?.[l] || m[2];
-        const g2 = window.__BP_I18N_PACKS.EXACT[m[4]]?.[l] || m[4];
+        const g1 = __BP_I18N_PACKS.EXACT[m[2]]?.[l] || m[2];
+        const g2 = __BP_I18N_PACKS.EXACT[m[4]]?.[l] || m[4];
         return ({
           th: `แบ่งอัตโนมัติ: ${m[1]} ${g1} / ${m[3]} ${g2}`,
           lo: `ແບ່ງອັດຕະໂນມັດ: ${m[1]} ${g1} / ${m[3]} ${g2}`,
@@ -1130,7 +1131,7 @@
 
 /* ---------- 7A. Complete 18-Page Live-Audit Exact Translations (All 6 Target Languages) ---------- */
 (() => {
-  const { addPack } = window.__BP_I18N_PACKS;
+  const { addPack } = __BP_I18N_PACKS;
   addPack({
     // Remove unnecessary English parentheticals from theme titles
     'Swiss Gold': ['ทองคำสวิส', 'ຄຳສະວິດ', 'Oro Suizo', '瑞士鎏金', 'スイスゴールド', 'स्विस गोल्ड'],
@@ -1311,7 +1312,7 @@
 
 /* ---------- 7B. Complete 18-Page Dynamic Pattern Translators (All 6 Target Languages) ---------- */
 (() => {
-  const { EXACT, PATTERNS } = window.__BP_I18N_PACKS;
+  const { EXACT, PATTERNS } = __BP_I18N_PACKS;
   const ex = (k, l) => EXACT[k]?.[l] || k;
   const agoFmt = (v, l) => {
     const m = String(v).match(/^(\d+)([smhd]) ago$/);
@@ -2271,7 +2272,7 @@
   );
 
   // Add lowercase sentiment words for Outlook narrative & Install menu label
-  window.__BP_I18N_PACKS.addPack({
+  __BP_I18N_PACKS.addPack({
     'balanced': ['สมดุล', 'ສົມດຸນ', 'equilibrado', '均衡', '中立', 'संतुलित'],
     'bullish': ['ขาขึ้น', 'ຂາຂຶ້ນ', 'alcista', '看涨', '強気', 'तेज़ी'],
     'bearish': ['ขาลง', 'ຂາລົງ', 'bajista', '看跌', '弱気', 'मंदी'],
@@ -2678,8 +2679,8 @@
   });
 
   // v59 Dynamic Template Patterns covering all v48–v58 runtime cards, counters, placeholders & live badges
-  const P = window.__BP_I18N_PACKS.PATTERNS;
-  const EX = window.__BP_I18N_PACKS.EXACT;
+  const P = __BP_I18N_PACKS.PATTERNS;
+  const EX = __BP_I18N_PACKS.EXACT;
   const tr = (s, l) => EX[s]?.[l] || s;
   const pick = (l, arr) => {
     const idx = ['th', 'lo', 'es', 'zh', 'ja', 'hi'].indexOf(l);
@@ -3472,5 +3473,9 @@
   // Freeze dictionary & pattern arrays to prevent runtime tampering
   Object.freeze(EX);
   Object.freeze(P);
-  Object.freeze(window.__BP_I18N_PACKS);
+  Object.freeze(__BP_I18N_PACKS);
 })();
+
+export const I18N_PACKS = __BP_I18N_PACKS;
+export const EXACT = __BP_I18N_PACKS.EXACT;
+export const PATTERNS = __BP_I18N_PACKS.PATTERNS;

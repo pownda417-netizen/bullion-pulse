@@ -1,0 +1,311 @@
+/* Bullion Pulse React + Vite Refinement Layer */
+
+.app-shell {
+  transform: translate(var(--oled-shift-x, 0px), var(--oled-shift-y, 0px));
+  transition: transform 1.2s ease;
+}
+
+.sub-tab-stack,
+.markets-live-stack,
+.split-live-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
+.view-panel.active > .panel,
+.view-panel.active > .toolbar-row,
+.view-panel.active > .sub-nav {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.spot-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.split-spot-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+
+/* Multi-column responsive metric tiles everywhere */
+.stats-row {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)) !important;
+  gap: 10px !important;
+  width: 100%;
+}
+
+.stat-box {
+  background: var(--bg-soft, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* Guarantee side-by-side Split-Desk and zero visible scrollbars on pinned left pane */
+@media (min-width: 1100px) {
+  body[data-desk-active='split'] .desk-workspace {
+    display: grid !important;
+    grid-template-columns: minmax(440px, 0.96fr) minmax(480px, 1.04fr) !important;
+    gap: 20px !important;
+    align-items: start !important;
+  }
+}
+
+body[data-desk-active='split'] .split-desk-left,
+body.desk-split-active .split-desk-left {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overflow-y: auto;
+}
+body[data-desk-active='split'] .split-desk-left::-webkit-scrollbar,
+body.desk-split-active .split-desk-left::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.chart-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chart-mode-pills,
+.chart-tf-pills,
+.chart-overlay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.chart-overlay-bar {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.chart-ohlc-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: nowrap;
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin: 6px 0 8px;
+}
+
+.chart-ohlc-text {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart-ohlc-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.rsi-pane-wrap {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.rsi-pane-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.tf-btn {
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft, rgba(255, 255, 255, 0.03));
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tf-btn.active {
+  background: var(--accent, #d4a843);
+  color: #0d0e11;
+  border-color: var(--accent, #d4a843);
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.badge-pill.bullish {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: var(--up, #22c55e);
+}
+
+.badge-pill.bearish {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--down, #ef4444);
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.text-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-card, var(--surface));
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.text-input:focus {
+  outline: 2px solid var(--accent, #d4a843);
+  outline-offset: 1px;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+.panel-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Top nav buttons styled identically to original anchor nav links */
+.top-nav button.nav-btn {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Vertically & horizontally centered language / currency dropdown pills (zero native arrow glitches) */
+.bp-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+}
+
+.bp-select-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.bp-select-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.bp-select-arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.bp-select-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.bp-select-wrap:hover .bp-select-face,
+.bp-select-wrap:focus-within .bp-select-face {
+  border-color: var(--gold, #d4a843);
+}
+
+.bp-select-wrap:hover .bp-select-arrow,
+.bp-select-wrap:focus-within .bp-select-arrow {
+  color: var(--gold, #d4a843);
+}
+
+@media (max-width: 720px) {
+  .split-spot-pair,
+  .spot-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}

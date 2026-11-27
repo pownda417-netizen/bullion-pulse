@@ -1,4 +1,4 @@
-name: Deploy Bullion Pulse PWA to GitHub Pages
+name: Deploy Bullion Pulse React PWA to GitHub Pages
 
 on:
   push:
@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -31,14 +31,27 @@ jobs:
           ref: main
           persist-credentials: false
 
+      - name: Setup Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check, test, and build Vite bundle
+        run: |
+          npm run typecheck
+          npm run test:frontend
+          npm run build
+
       - name: Setup Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
-      - name: Validate and stage static PWA files
+      - name: Validate and sync latest cron data/*.json into dist/data
         run: |
-          mkdir -p _site/icons _site/data
-          cp -- index.html styles.css app.js intel.js i18n_packs.js display_i18n.js mc_worker.js tts_worker.js manifest.json sw.js _site/
-          cp -- icons/*.png icons/*.jpg _site/icons/
+          mkdir -p dist/data
           if [ -d data ]; then
             shopt -s nullglob
             for f in data/*.json; do
@@ -47,14 +60,14 @@ jobs:
                 exit 1
               fi
               python3 -m json.tool "$f" >/dev/null
-              cp -- "$f" _site/data/
+              cp -- "$f" dist/data/
             done
           fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
-          path: '_site'
+          path: 'dist'
 
   deploy:
     timeout-minutes: 10

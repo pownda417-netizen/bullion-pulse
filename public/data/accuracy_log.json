@@ -1,0 +1,411 @@
+{
+  "updatedAt": "2026-11-27T16:53:52.977Z",
+  "scorecard": {
+    "live7d": {
+      "count": 2,
+      "dirHitPct": 50,
+      "inConePct": 50,
+      "avgErrPct": 3.12,
+      "rmsePct": 3.12,
+      "conformalRadiusPct": 3.17,
+      "signedBiasPct": 3.12
+    },
+    "live30d": {
+      "count": 0,
+      "dirHitPct": null,
+      "inConePct": null,
+      "avgErrPct": null,
+      "rmsePct": null,
+      "conformalRadiusPct": null,
+      "signedBiasPct": null
+    },
+    "coneMultiplier": 1,
+    "pendingStatus": {
+      "pending7dCount": 4,
+      "pending30dCount": 6,
+      "next7dInDays": 1,
+      "next30dInDays": 23
+    },
+    "recentGrades": [
+      {
+        "date": "2026-11-20",
+        "metal": "silver",
+        "signal": "Neutral",
+        "predictedPct": 0.28,
+        "actualPct": 3.29,
+        "absErrorPct": 3.01,
+        "directionCorrect": true,
+        "insideCone": true
+      },
+      {
+        "date": "2026-11-20",
+        "metal": "gold",
+        "signal": "Neutral",
+        "predictedPct": -0.08,
+        "actualPct": 3.15,
+        "absErrorPct": 3.23,
+        "directionCorrect": false,
+        "insideCone": false
+      }
+    ],
+    "recentGrades30d": []
+  },
+  "predictions": [
+    {
+      "id": "2026-11-20-gold",
+      "createdAt": "2026-11-20T07:40:00.000Z",
+      "metal": "gold",
+      "spotAtForecast": 3542.81,
+      "score": -4,
+      "signal": "Neutral",
+      "horizon7d": {
+        "bear": 3434.09,
+        "base": 3539.83,
+        "bull": 3645.57,
+        "bearPct": -3.07,
+        "expectedPct": -0.08,
+        "bullPct": 2.9
+      },
+      "horizon30d": {
+        "bear": 3320.01,
+        "base": 3536.71,
+        "bull": 3753.4,
+        "bearPct": -6.29,
+        "expectedPct": -0.17,
+        "bullPct": 5.94
+      },
+      "graded7d": {
+        "actualSpot": 3654.3,
+        "actualPct": 3.15,
+        "directionCorrect": false,
+        "insideCone": false,
+        "signedErrorPct": 3.23,
+        "absErrorPct": 3.23,
+        "gradedAt": "2026-11-27T16:47:26.782Z"
+      },
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-20-silver",
+      "createdAt": "2026-11-20T07:40:00.000Z",
+      "metal": "silver",
+      "spotAtForecast": 42.22,
+      "score": 13,
+      "signal": "Neutral",
+      "horizon7d": {
+        "bear": 40.96,
+        "base": 42.34,
+        "bull": 43.71,
+        "bearPct": -2.98,
+        "expectedPct": 0.28,
+        "bullPct": 3.54
+      },
+      "horizon30d": {
+        "bear": 39.64,
+        "base": 42.46,
+        "bull": 45.28,
+        "bearPct": -6.1,
+        "expectedPct": 0.57,
+        "bullPct": 7.25
+      },
+      "graded7d": {
+        "actualSpot": 43.61,
+        "actualPct": 3.29,
+        "directionCorrect": true,
+        "insideCone": true,
+        "signedErrorPct": 3.01,
+        "absErrorPct": 3.01,
+        "gradedAt": "2026-11-27T16:47:26.782Z"
+      },
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-21-gold",
+      "createdAt": "2026-11-21T02:17:14.555Z",
+      "metal": "gold",
+      "spotAtForecast": 3539,
+      "score": -31,
+      "signal": "Bearish",
+      "horizon7d": {
+        "bear": 3362.99,
+        "base": 3509.24,
+        "bull": 3655.49,
+        "bearPct": -4.97,
+        "expectedPct": -0.84,
+        "bullPct": 3.29
+      },
+      "horizon30d": {
+        "bear": 3178.29,
+        "base": 3478.01,
+        "bull": 3777.73,
+        "bearPct": -10.19,
+        "expectedPct": -1.72,
+        "bullPct": 6.75
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-21-silver",
+      "createdAt": "2026-11-21T02:17:14.555Z",
+      "metal": "silver",
+      "spotAtForecast": 41.08,
+      "score": -18,
+      "signal": "Bearish",
+      "horizon7d": {
+        "bear": 38.08,
+        "base": 40.77,
+        "bull": 43.46,
+        "bearPct": -7.31,
+        "expectedPct": -0.75,
+        "bullPct": 5.8
+      },
+      "horizon30d": {
+        "bear": 34.92,
+        "base": 40.45,
+        "bull": 45.97,
+        "bearPct": -14.98,
+        "expectedPct": -1.54,
+        "bullPct": 11.9
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-27-gold",
+      "createdAt": "2026-11-27T16:47:26.782Z",
+      "metal": "gold",
+      "spotAtForecast": 3654.3,
+      "score": 18,
+      "signal": "Bullish",
+      "horizon7d": {
+        "bear": 3518.17,
+        "base": 3672.43,
+        "bull": 3826.69,
+        "bearPct": -3.73,
+        "expectedPct": 0.5,
+        "bullPct": 4.72
+      },
+      "horizon30d": {
+        "bear": 3341.66,
+        "base": 3673.54,
+        "bull": 3953.97,
+        "bearPct": -8.56,
+        "expectedPct": 0.53,
+        "bullPct": 8.2,
+        "unit30d": 0.091,
+        "score30d": 9,
+        "probHigherPct": 53,
+        "agreementPct": 50,
+        "agreeCount": 2,
+        "hurst": 0.44,
+        "hurstLabel": "Mean-Reverting",
+        "leadLag": {
+          "score": 0.005,
+          "label": "Lead Signals Balanced",
+          "components": {
+            "minersLead": 0.319,
+            "shanghaiLead": -0.744,
+            "backwardationLead": 0.28,
+            "physicalPremLead": 0.228,
+            "aiDatacenterLead": -0.009,
+            "ratioLead": -0.25
+          }
+        },
+        "seasonality": {
+          "blendedPct": 2.01,
+          "unitTilt": 0.125,
+          "windowLabel": "Nov–Dec",
+          "label": "Seasonal Tailwind"
+        },
+        "historicalTwins": {
+          "count": 4,
+          "matchPct": 87,
+          "avgReturnPct": 2.86,
+          "upPct": 75,
+          "unitTilt": 0.239
+        },
+        "milestones": [
+          {
+            "day": 7,
+            "label": "Day 7",
+            "pct": 0.48,
+            "price": 3671.84,
+            "note": "Near-term flow"
+          },
+          {
+            "day": 14,
+            "label": "Day 14",
+            "pct": 0.48,
+            "price": 3671.84,
+            "note": "Mid-month balance"
+          },
+          {
+            "day": 21,
+            "label": "Day 21",
+            "pct": 0.49,
+            "price": 3672.21,
+            "note": "Structural macro build"
+          },
+          {
+            "day": 30,
+            "label": "Day 30",
+            "pct": 0.53,
+            "price": 3673.67,
+            "note": "Seasonal Tailwind"
+          }
+        ],
+        "topDrivers30d": [
+          "Geopolitics",
+          "Inflation"
+        ],
+        "modelVotes": [
+          {
+            "id": "macro",
+            "label": "Macro & Vaults",
+            "dir": "up",
+            "score": 28
+          },
+          {
+            "id": "leadlag",
+            "label": "Lead-Lag Alpha",
+            "dir": "flat",
+            "score": 1
+          },
+          {
+            "id": "hurst",
+            "label": "Hurst & RSI",
+            "dir": "down",
+            "score": -66
+          },
+          {
+            "id": "seasonal",
+            "label": "Seasonal & Twins",
+            "dir": "up",
+            "score": 47
+          }
+        ]
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-27-silver",
+      "createdAt": "2026-11-27T16:47:26.782Z",
+      "metal": "silver",
+      "spotAtForecast": 43.61,
+      "score": 26,
+      "signal": "Bullish",
+      "horizon7d": {
+        "bear": 41.15,
+        "base": 44.12,
+        "bull": 47.08,
+        "bearPct": -5.64,
+        "expectedPct": 1.16,
+        "bullPct": 7.97
+      },
+      "horizon30d": {
+        "bear": 37.15,
+        "base": 44.13,
+        "bull": 50.62,
+        "bearPct": -14.82,
+        "expectedPct": 1.19,
+        "bullPct": 16.07,
+        "unit30d": 0.127,
+        "score30d": 13,
+        "probHigherPct": 54,
+        "agreementPct": 75,
+        "agreeCount": 3,
+        "hurst": 0.44,
+        "hurstLabel": "Mean-Reverting",
+        "leadLag": {
+          "score": 0.221,
+          "label": "Lead Signals Bullish ↑",
+          "components": {
+            "minersLead": 0.583,
+            "shanghaiLead": -0.277,
+            "backwardationLead": 0.28,
+            "physicalPremLead": 0.274,
+            "aiDatacenterLead": -0.024,
+            "ratioLead": 0.355
+          }
+        },
+        "seasonality": {
+          "blendedPct": 2.48,
+          "unitTilt": 0.14,
+          "windowLabel": "Nov–Dec",
+          "label": "Seasonal Tailwind"
+        },
+        "historicalTwins": {
+          "count": 4,
+          "matchPct": 97,
+          "avgReturnPct": -1.42,
+          "upPct": 50,
+          "unitTilt": -0.118
+        },
+        "milestones": [
+          {
+            "day": 7,
+            "label": "Day 7",
+            "pct": 1.11,
+            "price": 44.09,
+            "note": "Near-term flow"
+          },
+          {
+            "day": 14,
+            "label": "Day 14",
+            "pct": 1.09,
+            "price": 44.09,
+            "note": "Lead-lag pass-through"
+          },
+          {
+            "day": 21,
+            "label": "Day 21",
+            "pct": 1.11,
+            "price": 44.09,
+            "note": "Structural macro build"
+          },
+          {
+            "day": 30,
+            "label": "Day 30",
+            "pct": 1.19,
+            "price": 44.13,
+            "note": "Seasonal Tailwind"
+          }
+        ],
+        "topDrivers30d": [
+          "Inflation",
+          "COT / Miners"
+        ],
+        "modelVotes": [
+          {
+            "id": "macro",
+            "label": "Macro & Vaults",
+            "dir": "up",
+            "score": 27
+          },
+          {
+            "id": "leadlag",
+            "label": "Lead-Lag Alpha",
+            "dir": "up",
+            "score": 22
+          },
+          {
+            "id": "hurst",
+            "label": "Hurst & RSI",
+            "dir": "down",
+            "score": -66
+          },
+          {
+            "id": "seasonal",
+            "label": "Seasonal & Twins",
+            "dir": "up",
+            "score": 29
+          }
+        ]
+      },
+      "graded7d": null,
+      "graded30d": null
+    }
+  ]
+}

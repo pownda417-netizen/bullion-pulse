@@ -1,0 +1,838 @@
+{
+  "version": 2,
+  "schedule": "5:10 PM ET (10m after close)",
+  "lastLearnedDay": "2026-11-19",
+  "lastUpdatedAt": "2026-11-19T22:10:00.000Z",
+  "totalCycles": 5,
+  "activeRegime": "stress",
+  "coneMultiplier": 0.96,
+  "driftBiasGoldPct": -0.323,
+  "driftBiasSilverPct": -0.265,
+  "weights": {
+    "gold": {
+      "inflation": 0.1594,
+      "geopolitics": 0.1603,
+      "rates_usd": 0.1906,
+      "equities": 0.0718,
+      "mining_supply": 0.0501,
+      "central_banks": 0.0792,
+      "shanghai_sge": 0.0992,
+      "positioning_miners": 0.0905,
+      "comex_paper": 0.0989
+    },
+    "silver": {
+      "inflation": 0.1291,
+      "geopolitics": 0.0907,
+      "rates_usd": 0.1408,
+      "equities": 0.0923,
+      "mining_supply": 0.168,
+      "central_banks": 0.05,
+      "shanghai_sge": 0.1097,
+      "positioning_miners": 0.1003,
+      "comex_paper": 0.1191
+    }
+  },
+  "regimeWeights": {
+    "calm": {
+      "gold": {
+        "inflation": 0.1599,
+        "geopolitics": 0.16,
+        "rates_usd": 0.1901,
+        "equities": 0.0702,
+        "mining_supply": 0.05,
+        "central_banks": 0.0798,
+        "shanghai_sge": 0.0999,
+        "positioning_miners": 0.09,
+        "comex_paper": 0.1001
+      },
+      "silver": {
+        "inflation": 0.1298,
+        "geopolitics": 0.0902,
+        "rates_usd": 0.1402,
+        "equities": 0.0906,
+        "mining_supply": 0.1695,
+        "central_banks": 0.05,
+        "shanghai_sge": 0.1099,
+        "positioning_miners": 0.1,
+        "comex_paper": 0.1198
+      }
+    },
+    "stress": {
+      "gold": {
+        "inflation": 0.1594,
+        "geopolitics": 0.1603,
+        "rates_usd": 0.1906,
+        "equities": 0.0718,
+        "mining_supply": 0.0501,
+        "central_banks": 0.0792,
+        "shanghai_sge": 0.0992,
+        "positioning_miners": 0.0905,
+        "comex_paper": 0.0989
+      },
+      "silver": {
+        "inflation": 0.1291,
+        "geopolitics": 0.0907,
+        "rates_usd": 0.1408,
+        "equities": 0.0923,
+        "mining_supply": 0.168,
+        "central_banks": 0.05,
+        "shanghai_sge": 0.1097,
+        "positioning_miners": 0.1003,
+        "comex_paper": 0.1191
+      }
+    }
+  },
+  "weightDeltasFromBase": {
+    "gold": {
+      "inflation": -0.06,
+      "geopolitics": 0.03,
+      "rates_usd": 0.06,
+      "equities": 0.18,
+      "mining_supply": 0.01,
+      "central_banks": -0.08,
+      "shanghai_sge": -0.08,
+      "positioning_miners": 0.05,
+      "comex_paper": -0.11
+    },
+    "silver": {
+      "inflation": -0.09,
+      "geopolitics": 0.07,
+      "rates_usd": 0.08,
+      "equities": 0.23,
+      "mining_supply": -0.2,
+      "central_banks": 0,
+      "shanghai_sge": -0.03,
+      "positioning_miners": 0.03,
+      "comex_paper": -0.09
+    }
+  },
+  "jumpCalibration": {
+    "lambdaMult": 0.99,
+    "sigmaJMult": 0.99,
+    "observedTailBreachPct": 30,
+    "targetTailBreachPct": 20
+  },
+  "championChallenger": {
+    "status": "challenger_active",
+    "evaluatedDays": 5,
+    "learnedPinballLoss": 0.6018,
+    "baselinePinballLoss": 0.6017,
+    "edgePct": -0.02,
+    "rollbackActive": false
+  },
+  "pendingSnapshot": {
+    "dayKey": "2026-11-19",
+    "recordedAt": "2026-11-19T22:10:00.000Z",
+    "regime": "stress",
+    "goldClose": 3542.81,
+    "silverClose": 42.22,
+    "pred1dGoldPct": 0.42,
+    "pred1dSilverPct": 0.72,
+    "halfCone1dGoldPct": 1.05,
+    "halfCone1dSilverPct": 2.05,
+    "drivers": [
+      {
+        "id": "inflation",
+        "gold": 0.44,
+        "silver": 0.68
+      },
+      {
+        "id": "geopolitics",
+        "gold": 0.32,
+        "silver": 0.22
+      },
+      {
+        "id": "rates_usd",
+        "gold": 0.28,
+        "silver": 0.26
+      },
+      {
+        "id": "equities",
+        "gold": -0.22,
+        "silver": -0.34
+      },
+      {
+        "id": "mining_supply",
+        "gold": 0.3,
+        "silver": 0.82
+      },
+      {
+        "id": "central_banks",
+        "gold": 0.6,
+        "silver": 0.44
+      },
+      {
+        "id": "shanghai_sge",
+        "gold": 0.52,
+        "silver": 0.54
+      },
+      {
+        "id": "positioning_miners",
+        "gold": 0.22,
+        "silver": 0.4
+      },
+      {
+        "id": "comex_paper",
+        "gold": 0.58,
+        "silver": 0.72
+      }
+    ]
+  },
+  "snapshotQueue": [
+    {
+      "dayKey": "2026-11-19",
+      "regime": "stress",
+      "goldClose": 3542.81,
+      "silverClose": 42.22,
+      "pred1dGoldPct": -0.78,
+      "pred1dSilverPct": -1.12,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ],
+      "recordedAt": "2026-11-19T22:10:00.000Z"
+    },
+    {
+      "dayKey": "2026-11-18",
+      "regime": "stress",
+      "goldClose": 3626.21,
+      "silverClose": 42.84,
+      "pred1dGoldPct": -0.65,
+      "pred1dSilverPct": -0.95,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ],
+      "recordedAt": "2026-11-18T22:10:00.000Z"
+    },
+    {
+      "dayKey": "2026-11-17",
+      "regime": "stress",
+      "goldClose": 3719.8,
+      "silverClose": 44.29,
+      "pred1dGoldPct": -0.3,
+      "pred1dSilverPct": -0.45,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ],
+      "recordedAt": "2026-11-17T22:10:00.000Z"
+    },
+    {
+      "dayKey": "2026-11-16",
+      "regime": "calm",
+      "goldClose": 3704.6,
+      "silverClose": 44.08,
+      "pred1dGoldPct": -0.52,
+      "pred1dSilverPct": -0.74,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ],
+      "recordedAt": "2026-11-16T22:10:00.000Z"
+    },
+    {
+      "dayKey": "2026-11-13",
+      "regime": "calm",
+      "goldClose": 3738.2,
+      "silverClose": 44.62,
+      "pred1dGoldPct": -0.45,
+      "pred1dSilverPct": -0.68,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ],
+      "recordedAt": "2026-11-13T22:10:00.000Z"
+    },
+    {
+      "dayKey": "2026-11-11",
+      "regime": "stress",
+      "goldClose": 3642,
+      "silverClose": 43.45,
+      "pred1dGoldPct": 0.32,
+      "pred1dSilverPct": 0.52,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ]
+    },
+    {
+      "dayKey": "2026-11-10",
+      "regime": "calm",
+      "goldClose": 3628.5,
+      "silverClose": 43.1,
+      "pred1dGoldPct": 0.28,
+      "pred1dSilverPct": 0.48,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ]
+    },
+    {
+      "dayKey": "2026-11-09",
+      "regime": "calm",
+      "goldClose": 3615,
+      "silverClose": 42.85,
+      "pred1dGoldPct": 0.25,
+      "pred1dSilverPct": 0.44,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ]
+    },
+    {
+      "dayKey": "2026-11-06",
+      "regime": "calm",
+      "goldClose": 3601.2,
+      "silverClose": 42.55,
+      "pred1dGoldPct": 0.22,
+      "pred1dSilverPct": 0.4,
+      "halfCone1dGoldPct": 1.05,
+      "halfCone1dSilverPct": 2.05,
+      "drivers": [
+        {
+          "id": "inflation",
+          "gold": 0.44,
+          "silver": 0.68
+        },
+        {
+          "id": "geopolitics",
+          "gold": 0.32,
+          "silver": 0.22
+        },
+        {
+          "id": "rates_usd",
+          "gold": 0.28,
+          "silver": 0.26
+        },
+        {
+          "id": "equities",
+          "gold": -0.22,
+          "silver": -0.34
+        },
+        {
+          "id": "mining_supply",
+          "gold": 0.3,
+          "silver": 0.82
+        },
+        {
+          "id": "central_banks",
+          "gold": 0.6,
+          "silver": 0.44
+        },
+        {
+          "id": "shanghai_sge",
+          "gold": 0.52,
+          "silver": 0.54
+        },
+        {
+          "id": "positioning_miners",
+          "gold": 0.22,
+          "silver": 0.4
+        },
+        {
+          "id": "comex_paper",
+          "gold": 0.58,
+          "silver": 0.72
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "rollingDirHitGoldPct": 80,
+    "rollingDirHitSilverPct": 80,
+    "rollingInConePct": 70,
+    "avgAbsErrGoldPct": 0.95,
+    "avgAbsErrSilverPct": 0.89,
+    "horizonsActive": [
+      "1D",
+      "5D"
+    ],
+    "topBoostedDriver": {
+      "id": "equities",
+      "label": "Equities",
+      "avgDeltaPct": 0.21
+    },
+    "topTrimmedDriver": {
+      "id": "comex_paper",
+      "label": "COMEX Paper",
+      "avgDeltaPct": -0.1
+    }
+  },
+  "history": [
+    {
+      "date": "2026-11-19",
+      "fromDate": "2026-11-18",
+      "regime": "stress",
+      "horizonsGraded": [
+        "1D",
+        "5D"
+      ],
+      "goldPredPct": -0.78,
+      "goldActualPct": -2.3,
+      "goldErrPct": -1.52,
+      "dirHitGold": true,
+      "inConeGold": false,
+      "tailBreachGold": true,
+      "silverPredPct": -1.12,
+      "silverActualPct": -1.447,
+      "silverErrPct": -0.327,
+      "dirHitSilver": true,
+      "inConeSilver": true,
+      "tailBreachSilver": false,
+      "learnedPinball": 0.7835,
+      "baselinePinball": 0.7838
+    },
+    {
+      "date": "2026-11-18",
+      "fromDate": "2026-11-17",
+      "regime": "stress",
+      "horizonsGraded": [
+        "1D",
+        "5D"
+      ],
+      "goldPredPct": -0.65,
+      "goldActualPct": -2.516,
+      "goldErrPct": -1.866,
+      "dirHitGold": true,
+      "inConeGold": false,
+      "tailBreachGold": true,
+      "silverPredPct": -0.95,
+      "silverActualPct": -3.274,
+      "silverErrPct": -2.324,
+      "dirHitSilver": true,
+      "inConeSilver": false,
+      "tailBreachSilver": true,
+      "learnedPinball": 1.296,
+      "baselinePinball": 1.2946
+    },
+    {
+      "date": "2026-11-17",
+      "fromDate": "2026-11-16",
+      "regime": "stress",
+      "horizonsGraded": [
+        "1D",
+        "5D"
+      ],
+      "goldPredPct": -0.3,
+      "goldActualPct": 0.41,
+      "goldErrPct": 0.71,
+      "dirHitGold": false,
+      "inConeGold": true,
+      "tailBreachGold": false,
+      "silverPredPct": -0.45,
+      "silverActualPct": 0.476,
+      "silverErrPct": 0.926,
+      "dirHitSilver": false,
+      "inConeSilver": true,
+      "tailBreachSilver": false,
+      "learnedPinball": 0.1554,
+      "baselinePinball": 0.1554
+    },
+    {
+      "date": "2026-11-16",
+      "fromDate": "2026-11-13",
+      "regime": "calm",
+      "horizonsGraded": [
+        "1D",
+        "5D"
+      ],
+      "goldPredPct": -0.52,
+      "goldActualPct": -0.899,
+      "goldErrPct": -0.379,
+      "dirHitGold": true,
+      "inConeGold": true,
+      "tailBreachGold": false,
+      "silverPredPct": -0.74,
+      "silverActualPct": -1.21,
+      "silverErrPct": -0.47,
+      "dirHitSilver": true,
+      "inConeSilver": true,
+      "tailBreachSilver": false,
+      "learnedPinball": 0.406,
+      "baselinePinball": 0.4068
+    },
+    {
+      "date": "2026-11-13",
+      "fromDate": "2026-11-12",
+      "regime": "calm",
+      "horizonsGraded": [
+        "1D"
+      ],
+      "goldPredPct": -0.45,
+      "goldActualPct": -0.722,
+      "goldErrPct": -0.272,
+      "dirHitGold": true,
+      "inConeGold": true,
+      "tailBreachGold": false,
+      "silverPredPct": -0.68,
+      "silverActualPct": -1.064,
+      "silverErrPct": -0.384,
+      "dirHitSilver": true,
+      "inConeSilver": true,
+      "tailBreachSilver": false,
+      "learnedPinball": 0.3679,
+      "baselinePinball": 0.3679
+    }
+  ]
+}

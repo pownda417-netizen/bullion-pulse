@@ -424,6 +424,41 @@ async function fetchSpotBaseline(series) {
       }
     }
   } catch {
+    // Fall through to Swissquote interbank spot feed
+  }
+  try {
+    const [sqGRes, sqSRes] = await Promise.all([
+      safeFetch(
+        'https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD',
+        { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } },
+        { timeoutMs: FETCH_TIMEOUT_MS, maxRedirects: 0 }
+      ),
+      safeFetch(
+        'https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAG/USD',
+        { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } },
+        { timeoutMs: FETCH_TIMEOUT_MS, maxRedirects: 0 }
+      ),
+    ]);
+    if (sqGRes.ok && sqSRes.ok) {
+      const [sqG, sqS] = await Promise.all([
+        readResponseJsonWithLimit(sqGRes, 256 * 1024),
+        readResponseJsonWithLimit(sqSRes, 256 * 1024),
+      ]);
+      const midOf = (arr) => {
+        const prices = Array.isArray(arr) ? arr[0]?.spreadProfilePrices : null;
+        if (!Array.isArray(prices) || !prices.length) return null;
+        const p = prices.find((x) => x.spreadProfile === 'prime') || prices[0];
+        const bid = Number(p?.bid);
+        const ask = Number(p?.ask);
+        return Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0 ? +((bid + ask) / 2).toFixed(2) : null;
+      };
+      const spotGold = midOf(sqG);
+      const spotSilver = midOf(sqS);
+      if (isSaneSpotPrice('gold', spotGold) && isSaneSpotPrice('silver', spotSilver)) {
+        return { spotGold, spotSilver, source: 'swissquote-interbank' };
+      }
+    }
+  } catch {
     // Fall back to latest Yahoo close
   }
   const gArr = series.gold || [];

@@ -2,6 +2,7 @@
 Thumbs.db
 desktop.ini
 node_modules/
+dist/
 _site/
 monitor/state.json
 bullion-pulse-backup-*.json

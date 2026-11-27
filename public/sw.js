@@ -1,15 +1,9 @@
 const CACHE_PREFIX = 'bullion-pulse-';
-const CACHE_NAME = 'bullion-pulse-v60';
+const CACHE_NAME = 'bullion-pulse-react-v60';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=60',
-  './app.js?v=60',
-  './intel.js?v=60',
-  './i18n_packs.js?v=60',
-  './display_i18n.js?v=60',
-  './mc_worker.js?v=60',
-  './tts_worker.js?v=60',
+  './mc_worker.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -83,26 +77,19 @@ self.addEventListener('fetch', (event) => {
   const isScopedDataJson = p.startsWith(`${scopePath}data/`) && p.endsWith('.json');
   const isNav = request.mode === 'navigate' || p === scopePath || p.endsWith('/index.html');
   const isCoreAsset =
-    p.endsWith('/app.js') ||
-    p.endsWith('/intel.js') ||
-    p.endsWith('/i18n_packs.js') ||
-    p.endsWith('/display_i18n.js') ||
-    p.endsWith('/styles.css') ||
     p.endsWith('/mc_worker.js') ||
-    p.endsWith('/tts_worker.js') ||
     p.endsWith('/manifest.json');
+  const isHashedBundle =
+    p.startsWith(`${scopePath}assets/`) && /\.(?:js|css)$/i.test(p);
 
   if (isNav || isCoreAsset || isScopedDataJson) {
     const expectedMime = isScopedDataJson
       ? 'application/json'
       : isNav
         ? 'text/html'
-        : p.endsWith('.css')
-          ? 'text/css'
-          : p.endsWith('.js')
-            ? 'javascript'
-            : 'json';
-    // Strip arbitrary cache-busting query params for normalized data/navigation keys to prevent cache bloat
+        : p.endsWith('.js')
+          ? 'javascript'
+          : 'json';
     const normalizedKey = isNav
       ? './index.html'
       : isScopedDataJson
@@ -146,9 +133,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const isStaticAsset = /\.(?:png|jpe?g|svg|ico|webp|woff2?)$/i.test(p);
+  const isStaticAsset = isHashedBundle || /\.(?:png|jpe?g|svg|ico|webp|woff2?)$/i.test(p);
   if (!isStaticAsset) return;
 
+  const expectedStaticMime = p.endsWith('.js')
+    ? 'javascript'
+    : p.endsWith('.css')
+      ? 'text/css'
+      : '';
   const staticKey = `${url.origin}${p}`;
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
@@ -156,7 +148,7 @@ self.addEventListener('fetch', (event) => {
         if (cached) return cached;
         return fetch(request)
           .then((response) => {
-            if (isCacheableSameOriginResponse(response)) {
+            if (isCacheableSameOriginResponse(response, expectedStaticMime)) {
               const clone = response.clone();
               event.waitUntil(cache.put(staticKey, clone).catch(() => {}));
             }
