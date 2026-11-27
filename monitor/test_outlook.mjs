@@ -14,6 +14,7 @@ import {
   parseNoaaSpaceWeather,
   project30DayPrecision,
   recencyDecayWeight,
+  selectBalancedHeadlines,
 } from './historical_patterns.mjs';
 import {
   computeHurstExponent,
@@ -1375,15 +1376,32 @@ const aiSurgeSeries = {
   xiaomi: mkUp(29, 0.010),
   li: mkUp(24, 0.009),
   xpev: mkUp(14, 0.012),
+  asml: mkUp(720, 0.010),
+  schneider: mkUp(240, 0.009),
+  siemens: mkUp(195, 0.008),
+  infineon: mkUp(33, 0.009),
+  softbank: mkUp(9200, 0.011),
+  tokyoelec: mkUp(25000, 0.010),
+  advantest: mkUp(8500, 0.012),
+  toyota: mkUp(2700, 0.007),
+  samsung: mkUp(62000, 0.008),
+  skhynix: mkUp(190000, 0.012),
+  ytlpower: mkUp(3.8, 0.011),
+  inari: mkUp(3.2, 0.010),
+  celestica: mkUp(85, 0.013),
+  brookfield: mkUp(34, 0.007),
+  weg: mkUp(54, 0.009),
+  meli: mkUp(1950, 0.008),
+  reliance: mkUp(1300, 0.007),
   vrt: mkUp(110, 0.015),
   etn: mkUp(330, 0.009),
   ceg: mkUp(240, 0.013),
   copper: mkUp(4.2, 0.006),
 };
 const aiSurgeNews = [
-  { title: 'Google, OpenAI, and Anthropic expand 500MW hyperscale AI data center buildout with switchgear upgrades' },
-  { title: 'Tesla Megapack and SpaceX Starlink satellite launches accelerate global silver and gold hardware demand' },
-  { title: 'Alibaba Qwen, DeepSeek, Huawei Ascend, and BYD solid-state EV battery expansion boost China AI CapEx and EV deliveries' },
+  { title: 'Google, OpenAI, Anthropic, and Mistral expand 500MW hyperscale AI data center buildout with Schneider Electric switchgear' },
+  { title: 'Tesla Megapack, SpaceX Starlink, and Malaysia Johor YTL Power green AI data center launches lift silver and gold hardware demand' },
+  { title: 'Alibaba Qwen, DeepSeek, Huawei Ascend, Samsung, SK Hynix HBM, and BYD solid-state EV battery expansion boost global AI and EV deliveries' },
 ];
 const aiSurge = computeAiDatacenterSignal({
   series: aiSurgeSeries,
@@ -1392,10 +1410,15 @@ const aiSurge = computeAiDatacenterSignal({
   basis: { silver: { isBackwardation: true, basisUsd: -0.7 } },
   physicalPremiums: { silver: { tone: 'bullish' } },
 });
-assert.ok(aiSurge.raceIndex >= 74 && aiSurge.tone === 'bullish', `Surging US+China AI/EV + Power stocks must score >= 74 (got ${aiSurge.raceIndex})`);
+assert.ok(aiSurge.raceIndex >= 74 && aiSurge.tone === 'bullish', `Surging global AI/EV + Power stocks must score >= 74 (got ${aiSurge.raceIndex})`);
 assert.ok(aiSurge.chinaAiEvBasket?.live && aiSurge.chinaAiEvBasket.members.some((m) => m.key === 'byd'), 'China AI & EV basket must include live BYD/Alibaba/Tencent/Xiaomi tickers');
+assert.ok(aiSurge.worldAiBasket?.live && aiSurge.worldAiBasket.members.length === 17, 'World Tech basket must track all 17 EU/JP/KR/MY/CA/SA/IN giants');
+const worldRegions = new Set(aiSurge.worldAiBasket.members.map((m) => m.region));
+for (const reg of ['EU', 'JP', 'KR', 'MY', 'CA', 'SA', 'IN']) {
+  assert.ok(worldRegions.has(reg), `World Tech basket must cover region ${reg}`);
+}
 assert.ok(aiSurge.computeBasket.members.some((m) => m.key === 'tsla'), 'US AI & Compute basket must include Tesla (TSLA)');
-assert.ok(aiSurge.news.labMentions.openai >= 1 && aiSurge.news.labMentions.anthropic >= 1 && aiSurge.news.labMentions.spacex >= 1 && aiSurge.news.labMentions.deepseek >= 1, 'Private Frontier AI & Space labs (OpenAI, Anthropic, SpaceX, DeepSeek) must be tracked from headlines');
+assert.ok(aiSurge.news.labMentions.openai >= 1 && aiSurge.news.labMentions.anthropic >= 1 && aiSurge.news.labMentions.spacex >= 1 && aiSurge.news.labMentions.deepseek >= 1 && aiSurge.news.labMentions.mistral >= 1, 'Private Frontier AI & Space labs (OpenAI, Anthropic, SpaceX, DeepSeek, Mistral) must be tracked from headlines');
 assert.ok(aiSurge.supplyTightMult > 1.15, `Tight COMEX/backwardation/premiums must amplify AI Silver squeeze (got ${aiSurge.supplyTightMult})`);
 assert.ok(aiSurge.silver.predictionBoost > 0.05 && aiSurge.gold.predictionBoost > 0.015, 'AI/EV race surge must lift both Silver and Gold');
 assert.ok(aiSurge.silver.predictionBoost > aiSurge.gold.predictionBoost * 2.0, 'Silver (non-thriftable switchgear/EVs/Starlink solar) must respond >2x stronger than Gold');
@@ -1418,6 +1441,23 @@ const aiPauseSeries = {
   xiaomi: mkDn(33, 0.012),
   li: mkDn(28, 0.012),
   xpev: mkDn(17, 0.013),
+  asml: mkDn(760, 0.012),
+  schneider: mkDn(250, 0.011),
+  siemens: mkDn(205, 0.010),
+  infineon: mkDn(36, 0.011),
+  softbank: mkDn(9800, 0.013),
+  tokyoelec: mkDn(26000, 0.012),
+  advantest: mkDn(9000, 0.014),
+  toyota: mkDn(2900, 0.009),
+  samsung: mkDn(65000, 0.010),
+  skhynix: mkDn(200000, 0.014),
+  ytlpower: mkDn(4.2, 0.012),
+  inari: mkDn(3.5, 0.012),
+  celestica: mkDn(92, 0.014),
+  brookfield: mkDn(36, 0.010),
+  weg: mkDn(58, 0.011),
+  meli: mkDn(2100, 0.010),
+  reliance: mkDn(1380, 0.010),
   vrt: mkDn(135, 0.016),
   etn: mkDn(360, 0.011),
   ceg: mkDn(270, 0.014),
@@ -1437,6 +1477,8 @@ assert.equal(scoredAiNews.bearHits, 2);
 
 const clsAi = classifyHeadline({ title: 'BYD and Alibaba expand solid-state EV battery and Qwen AI data center buildout with massive silver demand' });
 assert.ok(clsAi && clsAi.driver === 'mining_supply' && clsAi.topic === 'tech_solar_ai' && clsAi.silverImpact > 0, 'China AI & BYD EV headline must map to mining_supply & tech_solar_ai');
+const clsWorld = classifyHeadline({ title: 'Malaysia Johor YTL Power, ASML, and SK Hynix expand gigawatt AI data center and HBM semiconductor buildout' });
+assert.ok(clsWorld && clsWorld.driver === 'mining_supply' && clsWorld.topic === 'tech_solar_ai' && clsWorld.silverImpact > 0, 'Global EU/KR/MY AI data center headline must map to mining_supply & tech_solar_ai');
 
 const outAiSurge = buildOutlook({
   spotGold: 3610,
@@ -1452,8 +1494,72 @@ const outAiPause = buildOutlook({
   rawHeadlines: aiPauseNews.map((h) => ({ ...h, source: 'Reuters', publishedAt: new Date().toISOString() })),
   scenarioIds: ['ai_capex_pause'],
 });
-assert.ok(outAiSurge.aiDatacenter?.computeBasket?.live && outAiSurge.aiDatacenter?.chinaAiEvBasket?.live && outAiSurge.aiDatacenter?.powerBasket?.live, 'buildOutlook must attach all 3 live US/China/Power AI & EV baskets');
+assert.ok(outAiSurge.aiDatacenter?.computeBasket?.live && outAiSurge.aiDatacenter?.chinaAiEvBasket?.live && outAiSurge.aiDatacenter?.worldAiBasket?.live && outAiSurge.aiDatacenter?.powerBasket?.live, 'buildOutlook must attach all 4 live US/China/World/Power AI & EV baskets');
 assert.ok(outAiSurge.silver.horizon30d.expectedPct > outAiPause.silver.horizon30d.expectedPct, 'AI/EV CapEx Surge must lift Silver 30-day forecast clearly above CapEx Pause');
 assert.ok(outAiSurge.gold.horizon30d.expectedPct > outAiPause.gold.horizon30d.expectedPct, 'AI/EV CapEx Surge must provide measured Gold 30-day support over CapEx Pause');
 
-console.log('All 31 Bullion Pulse suites (v56 Global US+China AI, SpaceX, Tesla, Anthropic, OpenAI & BYD EV Metal Race, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt + 20-Feed Multi-Subject News & Global Events Calendar, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');
+// 32. v58 News Polarity Accuracy (6 Financial Negation/Inversion Traps) & 100-Article Balanced Retention
+const pFedRuleOut = classifyHeadline({ title: 'Fed rules out rate cut as US dollar surges to fresh high' });
+assert.equal(pFedRuleOut?.sentiment, 'bearish', 'Negated rate cut + surging USD must be bearish for Gold & Silver');
+assert.ok(pFedRuleOut.goldImpact < 0 && pFedRuleOut.silverImpact < 0);
+
+const pCeasefire = classifyHeadline({ title: 'Middle East ceasefire deal eases war tensions across region' });
+assert.equal(pCeasefire?.sentiment, 'bearish', 'War ceasefire / easing tensions must be bearish for safe-haven Gold');
+assert.ok(pCeasefire.goldImpact < 0);
+
+const pPbocPause = classifyHeadline({ title: 'PBOC pauses gold reserve buying for third straight month' });
+assert.equal(pPbocPause?.sentiment, 'bearish', 'Central bank pausing gold buying must be bearish');
+assert.ok(pPbocPause.goldImpact < 0);
+
+const pAiDelay = classifyHeadline({ title: 'NVIDIA and Anthropic delay 500MW AI data center buildout' });
+assert.equal(pAiDelay?.sentiment, 'bearish', 'Delayed AI data center buildout must be bearish, never cancelled to neutral');
+assert.ok(pAiDelay.silverImpact < 0 && pAiDelay.goldImpact < 0);
+
+const pBydDrop = classifyHeadline({ title: 'BYD EV sales drop sharply amid China auto slowdown' });
+assert.equal(pBydDrop?.sentiment, 'bearish', 'EV sales drop must be bearish for industrial Silver');
+assert.ok(pBydDrop.silverImpact < 0);
+
+const pMineGlut = classifyHeadline({ title: 'Newmont reports record output and lower mining costs across mines' });
+assert.equal(pMineGlut?.sentiment, 'bearish', 'Record mine output (supply expansion) must be bearish for metal prices');
+assert.ok(pMineGlut.goldImpact < 0);
+
+const pAiInvest = classifyHeadline({ title: 'Google and OpenAI invest $50 billion in gigawatt AI data centers' });
+assert.equal(pAiInvest?.sentiment, 'bullish', 'Multi-billion gigawatt AI investment must be bullish');
+assert.ok(pAiInvest.silverImpact > pAiInvest.goldImpact && pAiInvest.goldImpact > 0, 'AI buildout must lift Silver stronger than Gold');
+
+const pRecessionCrash = classifyHeadline({ title: 'Global stock market crashes on severe recession fears' });
+assert.ok(pRecessionCrash && pRecessionCrash.goldImpact > 0 && pRecessionCrash.silverImpact < 0, 'Recession stock crash must lift safe-haven Gold while weighing on industrial Silver');
+
+const pNeutralTech = classifyHeadline({ title: 'NVIDIA CEO speaks at annual AI chip developer conference' });
+assert.equal(pNeutralTech?.sentiment, 'neutral', 'Informational tech headline without expansion or cut must stay neutral');
+assert.equal(pNeutralTech.goldImpact, 0);
+assert.equal(pNeutralTech.silverImpact, 0);
+
+// 100-article balanced retention across all 7 subjects (125 distinct non-duplicate titles)
+const entitiesA = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa', 'Lambda', 'Mu', 'Nu', 'Xi', 'Omicron', 'Pi', 'Rho', 'Sigma', 'Tau', 'Upsilon'];
+const citiesB = ['Zurich', 'London', 'Tokyo', 'Seoul', 'Johor', 'Toronto', 'SaoPaulo', 'Mumbai', 'Frankfurt', 'Paris', 'Beijing', 'Shanghai', 'Shenzhen', 'Austin', 'Phoenix', 'Dublin', 'Singapore', 'Sydney', 'Warsaw', 'Istanbul'];
+const projectsC = ['Orion', 'Helios', 'Titan', 'Vanguard', 'Vertex', 'Nova', 'Apex', 'Pulse', 'Horizon', 'Summit', 'Atlas', 'Aegis', 'Quantum', 'Nexus', 'Solaris', 'Stratos', 'Pinnacle', 'Meridian', 'Catalyst', 'Eclipse'];
+const templates125 = [
+  (k) => `Central bank ${entitiesA[k % 20]} in ${citiesB[(k * 3) % 20]} buys gold reserves via ${projectsC[(k * 7) % 20]} vault`,
+  (k) => `BYD ${entitiesA[k % 20]} and ${citiesB[(k * 3) % 20]} YTL Power build gigawatt AI data center ${projectsC[(k * 7) % 20]}`,
+  (k) => `COMEX ${entitiesA[k % 20]} registered silver vault drops at ${citiesB[(k * 3) % 20]} depot ${projectsC[(k * 7) % 20]}`,
+  (k) => `Shanghai ${entitiesA[k % 20]} and ${citiesB[(k * 3) % 20]} India bullion demand surges for ${projectsC[(k * 7) % 20]}`,
+  (k) => `NOAA ${entitiesA[k % 20]} solar flare warns ${citiesB[(k * 3) % 20]} grid operators near ${projectsC[(k * 7) % 20]}`,
+  (k) => `Fed ${entitiesA[k % 20]} signals rate cut as ${citiesB[(k * 3) % 20]} bond yields fall on ${projectsC[(k * 7) % 20]}`,
+  (k) => `Newmont ${entitiesA[k % 20]} mine strike halts ${citiesB[(k * 3) % 20]} smelter output at ${projectsC[(k * 7) % 20]}`,
+];
+const raw125 = Array.from({ length: 125 }, (_, i) => {
+  const u = `tag${i}x item${i}y sector${i}z hub${i}w ref${i}v`;
+  return {
+    title: `${templates125[i % templates125.length](Math.floor(i / 7))} ${u}`,
+    source: i % 2 === 0 ? 'Reuters' : 'Bloomberg',
+    publishedAt: new Date(Date.now() - i * 1800000).toISOString(),
+  };
+});
+const out100 = buildOutlook({ spotGold: 3620, spotSilver: 43.2, rawHeadlines: raw125 });
+assert.equal(out100.headlines.length, 100, `buildOutlook must retain up to 100 balanced articles (got ${out100.headlines.length})`);
+const retainedTopics = new Set(out100.headlines.map((h) => h.topic));
+assert.equal(retainedTopics.size, 7, `All 7 topics must be represented inside the 100 retained articles (got ${retainedTopics.size})`);
+assert.equal(selectBalancedHeadlines(out100.headlines, 100).length, 100);
+
+console.log('All 32 Bullion Pulse suites (v58 100-Article Global News Engine + Precision Polarity/Negation Guards, v57 Planetary 6-Continent AI/Space/EV Metal Race across 36 tickers & 22 feeds, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');

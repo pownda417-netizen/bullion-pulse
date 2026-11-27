@@ -2360,7 +2360,13 @@
     'Global AI, Space & EV Metal Race': ['ศึกโลหะ AI อวกาศ และรถ EV ทั่วโลก (สหรัฐฯ-จีน)', 'ສຶກໂລຫະ AI ອະວະກາດ ແລະ ລົດ EV ທົ່ວໂລກ', 'Carrera Global de Metales IA, Espacio y EV', '全球AI、太空与电动车金属竞赛（中美）', '世界AI・宇宙・EV金属需要レース（米中）', 'वैश्विक AI, अंतरिक्ष व EV धातु दौड़'],
     'US AI, Tesla & Silicon': ['AI สหรัฐฯ, Tesla และกลุ่มชิป', 'AI ສະຫະລັດ, Tesla ແລະ ຊິບ', 'IA EE.UU., Tesla y Silicio', '美国AI、特斯拉与芯片', '米国AI・テスラ・半導体', 'US AI, Tesla और सिलिकॉन'],
     'China AI & EV Giants (BYD/Alibaba)': ['ยักษ์ใหญ่ AI และรถ EV จีน (BYD/Alibaba)', 'ຍັກໃຫຍ່ AI ແລະ ລົດ EV ຈີນ (BYD/Alibaba)', 'Gigantes Chinos de IA y EV (BYD/Alibaba)', '中国AI与电动车巨头（比亚迪/阿里）', '中国AI・EV大手（BYD・アリババ等）', 'चीन AI व EV दिग्गज (BYD/Alibaba)'],
+    'World Tech: EU, Japan, Korea, Malaysia, Canada & LatAm': ['เทคยักษ์ใหญ่โลก: ยุโรป ญี่ปุ่น เกาหลี มาเลเซีย แคนาดา และละตินอเมริกา', 'ເທັກໂນໂລຢີໂລກ: ຢຸໂຣບ ຍີ່ປຸ່ນ ເກົາຫຼີ ມາເລເຊຍ ການາດາ ແລະ ອາເມລິກາໃຕ້', 'Gigantes Globales: Europa, Japón, Corea, Malasia, Canadá y LatAm', '全球科技巨头：欧洲、日本、韩国、马来西亚、加拿大与拉美', '世界テック大手：欧州・日本・韓国・マレーシア・カナダ・中南米', 'वैश्विक टेक दिग्गज: यूरोप, जापान, कोरिया, मलेशिया, कनाडा व लैटिन अमेरिका'],
     'Silver · Primary AI, EV & Space Metal': ['เงิน (Silver) · โลหะหลัก AI รถ EV และอวกาศ', 'ເງິນ · ໂລຫະຫຼັກ AI ລົດ EV ແລະ ອະວະກາດ', 'Plata · Metal Clave de IA, EV y Espacio', '白银 · AI、电动车与太空核心金属', '銀 · AI・EV・宇宙の主力金属', 'चांदी · प्रमुख AI, EV व अंतरिक्ष धातु'],
     'Gold · Supporting AI & EV Tech Metal': ['ทองคำ (Gold) · โลหะเสริมชิป AI และรถ EV', 'ຄຳ · ໂລຫະເສີມຊິບ AI ແລະ ລົດ EV', 'Oro · Metal Tecnológico de Apoyo IA y EV', '黄金 · AI与电动车芯片辅助金属', '金 · AI・EV向け高信頼補助金属', 'सोना · सहायक AI व EV टेक धातु'],
+    'Show +25 More': ['แสดงเพิ่ม +25 ข่าว', 'ສະແດງເພີ່ມ +25 ຂ່າວ', 'Mostrar +25 Más', '再加载 +25 篇', 'さらに25件表示', '+25 और दिखाएँ'],
+    'Show Top 25': ['ย่อเหลือ 25 ข่าวแรก', 'ຫຍໍ້ເຫຼືອ 25 ຂ່າວ', 'Mostrar Top 25', '收起至前25篇', '上位25件に折りたたむ', 'शीर्ष 25 दिखाएँ'],
+    'Clear': ['ล้าง', 'ລ້າງ', 'Limpiar', '清除', 'クリア', 'साफ़ करें'],
+    'News': ['ข่าวสาร', 'ຂ່າວສານ', 'Noticias', '新闻情报', 'ニュース', 'समाचार'],
+    'Odds': ['โอกาส & ทดสอบ', 'ໂອກາດ', 'Probabilidades', '概率与复盘', '確率・検証', 'संभावनाएँ'],
   });
 })();

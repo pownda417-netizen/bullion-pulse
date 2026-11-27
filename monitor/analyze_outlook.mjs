@@ -138,6 +138,14 @@ const RSS_FEEDS = [
     name: 'Global & China EV Metal Demand (BYD/Tesla/CATL/Xiaomi/XPeng/Li Auto)',
     url: 'https://news.google.com/rss/search?q=(BYD+OR+Tesla+OR+CATL+OR+Xiaomi+OR+XPeng+OR+"Li+Auto"+OR+NIO)+(EV+OR+"electric+vehicle"+OR+"solid-state+battery"+OR+"silver+demand"+OR+Megapack+OR+charging)+when:5d&hl=en-US&gl=US&ceid=US:en',
   },
+  {
+    name: 'Japan, South Korea & Malaysia AI, Chips & Data Centers',
+    url: 'https://news.google.com/rss/search?q=(Samsung+OR+"SK+Hynix"+OR+SoftBank+OR+"Tokyo+Electron"+OR+Toyota+OR+"YTL+Power"+OR+Johor+OR+Malaysia+OR+Inari)+("AI+data+center"+OR+HBM+OR+semiconductor+OR+"solid-state+battery"+OR+gigawatt+OR+"wire+bonding")+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
+  {
+    name: 'Europe, Canada, South America & India AI Data Centers & Grid',
+    url: 'https://news.google.com/rss/search?q=(ASML+OR+"Schneider+Electric"+OR+Siemens+OR+Infineon+OR+Mistral+OR+Celestica+OR+Brookfield+OR+WEG+OR+MercadoLibre+OR+Reliance)+("AI+data+center"+OR+switchgear+OR+transformer+OR+"power+grid"+OR+gigawatt+OR+semiconductor)+when:5d&hl=en-US&gl=US&ceid=US:en',
+  },
 ];
 
 const YAHOO_SYMBOLS = {
@@ -189,6 +197,24 @@ const YAHOO_SYMBOLS = {
   xiaomi: '1810.HK',
   li: 'LI',
   xpev: 'XPEV',
+  // World Tech Giants: Europe, Japan, South Korea, Malaysia, Canada, South America & India
+  asml: 'ASML',
+  schneider: 'SU.PA',
+  siemens: 'SIE.DE',
+  infineon: 'IFX.DE',
+  softbank: '9984.T',
+  tokyoelec: '8035.T',
+  advantest: '6857.T',
+  toyota: '7203.T',
+  samsung: '005930.KS',
+  skhynix: '000660.KS',
+  ytlpower: '6742.KL',
+  inari: '0166.KL',
+  celestica: 'CLS',
+  brookfield: 'BIP',
+  weg: 'WEGE3.SA',
+  meli: 'MELI',
+  reliance: 'RELIANCE.NS',
 };
 
 /* ---------- Lightweight Zero-Dependency XML RSS Parser ---------- */
@@ -211,7 +237,7 @@ export function parseRssItems(xmlText, fallbackSource = 'News') {
   const items = [];
   const itemMatches = safeXml.match(/<item\b[\s\S]*?<\/item>/gi) || [];
 
-  for (const block of itemMatches.slice(0, 18)) {
+  for (const block of itemMatches.slice(0, 22)) {
     const pick = (tag) => {
       const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
       return m ? decodeXmlEntities(m[1]) : '';

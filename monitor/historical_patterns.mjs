@@ -363,6 +363,7 @@ const DRIVER_RULES = [
     bearish: [
       /\b(ceasefire|peace deal|truce|de-escalat|peace talk|diplomatic breakthrough)\b/i,
       /\b(tariff|sanction).*\b(lift|ease|pause|roll back|dropped)\b/i,
+      /\b(tensions?|war fears?|conflict fears?|geopolitical risk)\b.*\b(ease|easing|cool|fade|recede|subside|calm)/i,
     ],
   },
   {
@@ -377,7 +378,9 @@ const DRIVER_RULES = [
       /\b(rate hike|hike rates|hawkish|higher for longer|tightening)\b/i,
       /\b(dollar|usd|dxy)\b.*\b(surge|rally|jump|strengthen|rise|climb|strong)/i,
       /\b(yield|treasury)\b.*\b(surge|jump|spike|climb|rise|higher)/i,
-      /\bfed\b.*\b(hawkish|delay cut|hold high|hike)/i,
+      /\bfed\b.*\b(hawkish|delay cut|hold high|hike|rules? out|push(?:es|ing)? back)/i,
+      /\b(no|rules? out|push(?:es|ing)? back|delay(?:s|ed|ing)?|dash(?:es|ed)?|fade|trim|fewer|less likely|unlikely|reduces? odds|postpone)\b.*\b(rate cut|cut rates|easing|pivot)/i,
+      /\b(rate cut|cut rates)\b.*\b(unlikely|delayed|postponed|fades?|fading|ruled out|pushed back|off the table)/i,
     ],
   },
   {
@@ -396,9 +399,10 @@ const DRIVER_RULES = [
     bullish: [
       /\b(mine|mining|miner|smelter|san dimas|newmont|barrick|first majestic|pan american|hecla|agnico|wheaton)\b.*\b(strike|labor dispute|halt|shut|disrupt|suspend|protest|shortage|deficit|decline|fall|lower output|aisc.*rise|aisc.*jump|cost.*rise)/i,
       /\b(silver|gold)\b.*\b(deficit|shortage|tight supply|vault drain|inventory drop|record demand|squeeze|sixth straight)/i,
-      /\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ev|electrification|charging|electronics|semiconductor|ai data center|ai server|antimicrobial)\b.*\b(silver|demand|grow|surge|boom|rise|record|battery|adoption)/i,
-      /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|tesla|megapack|spacex|starlink|xai|stargate|tsmc|broadcom|vertiv|eaton|hyperscaler)\b.*\b(data center|ai capex|ai infrastructure|gigawatt|megawatt|switchgear|busbar|grid upgrade|wire bonding|blackwell|rubin|tpu|power deal|satellite|ev|deliveries|billion|buildout|expand|surge)/i,
-      /\b(alibaba|qwen|tencent|hunyuan|baidu|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio)\b.*\b(ai data center|ai capex|ai chip|cloud|semiconductor|ev|electric vehicle|solid[- ]?state|battery|charging|megawatt|gigawatt|deliveries|record|expand|billion|boom|surge)/i,
+      /\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ev|electrification|charging|electronics|semiconductor|ai data center|ai server|antimicrobial)\b.*\b(demand|grow|surge|boom|rise|record|adoption|shortage|boost)/i,
+      /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|tesla|megapack|spacex|starlink|xai|stargate|tsmc|broadcom|vertiv|eaton|hyperscaler)\b.*\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|power deal|grid upgrade|switchgear|busbar|launch|record|deliveries|raise.*capex|boost.*demand)/i,
+      /\b(alibaba|qwen|tencent|hunyuan|baidu|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio)\b.*\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|solid[- ]?state|deliveries|record|sales jump|ramp|boost)/i,
+      /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b.*\b(gigawatt|megawatt|buildout|expand|surge|boom|invest|billion|switchgear|transformer|power grid|solid[- ]?state|hbm|wire bonding|record|order|deal)/i,
       /\b(space economy|satellite constellation|orbital solar|aerospace|lunar base|starship|nasa|spacex|satellite launch)\b.*\b(demand|launch|build|solar|silver|boom|record|contract|expand)/i,
       /\b(us mint|royal mint|perth mint|bullion coin|silver eagle|costco gold)\b.*\b(shortage|sell out|sold out|surge|demand|premium|record|backlog)/i,
       /\bexport (ban|curb|restriction|licensing|control)\b.*\b(silver|gold|metal|mineral)/i,
@@ -407,7 +411,7 @@ const DRIVER_RULES = [
     bearish: [
       /\b(mine|mining|newmont|barrick|first majestic|pan american|hecla|loulo)\b.*\b(record output|production surge|ramps?[- ]?up|supply glut|oversupply|reopen|restart|lower.*cost|cut.*cost)/i,
       /\b(silver|gold)\b.*\b(surplus|oversupply|weak industrial demand|thrifting|substitution|narrow)/i,
-      /\b(nvidia|google|microsoft|meta|amazon|tesla|openai|anthropic|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|hyperscaler|data center|ai capex)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|bubble burst|slump|sales drop)/i,
+      /\b(nvidia|google|microsoft|meta|amazon|tesla|openai|anthropic|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai capex)\b.*\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|bubble burst|slump|sales drop|sales fall|halt|pullback)/i,
     ],
   },
   {
@@ -420,7 +424,8 @@ const DRIVER_RULES = [
       /\bde-?dollariz/i,
     ],
     bearish: [
-      /\bcentral bank\b.*\b(sell|selling|pause buying|halt gold|dump)\b/i,
+      /\b(central bank|china|pboc|india|rbi|poland|turkey)\b.*\b(sell|selling|pause[sd]? buying|pause[sd]? gold|halt[sed]* gold|stop[ped]* buying|dump|zero gold|ends? buying)\b/i,
+      /\b(pboc|china|central bank)\b.*\b(gold buying|gold reserve).*\b(pause|halt|zero|stop|ended|slow)/i,
       /\b(gold|silver) (etf|etp)\b.*\b(outflow|redemption|selling|trim)/i,
     ],
   },
@@ -461,7 +466,7 @@ export function classifyHeadlineTopic(text = '', driver = '') {
   if (/\b(solar flare|geomagnetic|space weather|noaa|satellite|aerospace|spacex|nasa|orbital|war|missile|airstrike|sanction|tariff|strait of hormuz|red sea|geopolit|conflict|ceasefire)\b/i.test(text)) {
     return { topic: 'geo_space', topicLabel: NEWS_TOPICS.geo_space };
   }
-  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ai capex|ai infrastructure|hyperscal|gigawatt|switchgear|busbar|wire bonding|nvidia|tesla|megapack|anthropic|openai|stargate|alibaba|qwen|tencent|baidu|deepseek|huawei|smic|byd|catl|xiaomi|xpeng|li auto|nio|vertiv|eaton|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
+  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ai capex|ai infrastructure|hyperscal|gigawatt|switchgear|busbar|wire bonding|nvidia|tesla|megapack|anthropic|openai|stargate|alibaba|qwen|tencent|baidu|deepseek|huawei|smic|byd|catl|xiaomi|xpeng|li auto|nio|asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|celestica|brookfield|weg|mercadolibre|reliance|vertiv|eaton|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
     return { topic: 'tech_solar_ai', topicLabel: NEWS_TOPICS.tech_solar_ai };
   }
   if (/\b(central bank|brics|pboc|rbi|nbp|repatriat|de-?dollariz|sovereign.*reserve|basel iii|paxg|xaut|tether gold|tokenized gold|gld|slv|pslv|etf)\b/i.test(text)) {
@@ -500,7 +505,19 @@ export function classifyHeadline(headline) {
     const total = bullHits + bearHits;
     if (total === 0) continue;
 
-    const polarity = bullHits === bearHits ? 0 : bullHits > bearHits ? 1 : -1;
+    let polarity = bullHits === bearHits ? 0 : bullHits > bearHits ? 1 : -1;
+    // Negation & reversal precision guards so "ceasefire eases war", "Fed rules out rate cut",
+    // "PBOC pauses gold buying", or "NVIDIA delays data center" NEVER flip positive!
+    if (rule.driver === 'rates_usd' && bearHits > 0 && /\b(no|rules? out|push(?:es|ing)? back|delay(?:s|ed|ing)?|dash(?:es|ed)?|unlikely|postpone|off the table|fewer)\b.*\b(rate cut|cut rates|easing|pivot)|\b(rate cut|cut rates)\b.*\b(unlikely|delayed|postponed|fades?|fading|ruled out|pushed back|off the table)/i.test(text)) {
+      polarity = -1;
+    } else if (rule.driver === 'geopolitics' && bearHits > 0 && !/\b(collapse|breaks? down|fails?|shatter|violat)\b/i.test(text)) {
+      polarity = -1;
+    } else if (rule.driver === 'central_banks' && bearHits > 0 && /\b(pause[sd]?|pausing|halt(?:s|ed|ing)?|stop(?:s|ped|ping)?|sell(?:s|ing)?|sold|outflow|redemption|dump(?:s|ed|ing)?|zero gold)\b/i.test(text)) {
+      polarity = -1;
+    } else if (rule.driver === 'mining_supply' && bearHits > 0 && !/\b(mine strike|labor dispute|shortage|deficit|vault drain)\b/i.test(text)) {
+      polarity = -1;
+    }
+
     const strength = Math.min(1, 0.45 + total * 0.22);
     if (!bestMatch || total > bestMatch.hits) {
       bestMatch = {
@@ -512,7 +529,37 @@ export function classifyHeadline(headline) {
     }
   }
 
+  if (!bestMatch) {
+    // Broad fallback for global US/China/EU/JP/KR/MY/CA/LatAm/IN AI, SpaceX, Grid & EV Metal Race stories
+    const hasGlobalTechGiant = /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|tesla|megapack|spacex|starlink|starship|openai|stargate|anthropic|claude|xai|tsmc|broadcom|vertiv|eaton|alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|celestica|brookfield|weg|mercadolibre|reliance|jio)\b/i.test(text);
+    const hasInfraOrMetalContext = /\b(ai|data center|hyperscal|gigawatt|megawatt|chip|semiconductor|hbm|switchgear|busbar|transformer|power grid|grid|ev|electric vehicle|solid[- ]?state|battery|charging|satellite|orbital|wire bonding|silver|gold|server|capex|cloud|foundry|wafer)\b/i.test(text);
+    if (hasGlobalTechGiant && hasInfraOrMetalContext) {
+      const isBearTech = /\b(cut|cancel|delay|pause|slowdown|slump|drop|fall|shrink|bubble|pullback|halt|decline|weak|warning)\b/i.test(text);
+      const isBullTech = /\b(expand|buildout|surge|boom|invest|billion|gigawatt|megawatt|record|launch|deal|order|demand|upgrade|factory|plant|growth|deliveries|ramp|accelerat|partner)\b/i.test(text);
+      const pol = isBearTech ? -1 : isBullTech ? 1 : 0;
+      bestMatch = {
+        driver: 'mining_supply',
+        polarity: pol,
+        strength: pol === 0 ? 0 : 0.56,
+        hits: 1,
+      };
+    }
+  }
+
   if (!bestMatch) return null;
+
+  // Direct bullion price-action check when driver polarity is ambiguous (0)
+  if (bestMatch.polarity === 0) {
+    if (/\b(gold|silver|bullion)\b.*\b(plunge|tumble|slide|drop|sink|fall|slump|retreat|selloff|profit[- ]taking)\b/i.test(text)) {
+      bestMatch.polarity = -1;
+      bestMatch.strength = Math.max(bestMatch.strength, 0.45);
+    } else if (/\b(gold|silver|bullion)\b.*\b(surge|soar|rally|jump|record high|all[- ]time high|breakout|climb)\b/i.test(text)) {
+      bestMatch.polarity = 1;
+      bestMatch.strength = Math.max(bestMatch.strength, 0.45);
+    }
+  }
+
+  const topicInfo = classifyHeadlineTopic(text, bestMatch.driver);
 
   // Mentioning silver specifically boosts silver sensitivity; gold boosts gold
   const mentionsSilver = /\b(silver|xag|comex silver|solar)\b/i.test(text);
@@ -521,24 +568,30 @@ export function classifyHeadline(headline) {
   let goldImpact = bestMatch.polarity * bestMatch.strength;
   let silverImpact = bestMatch.polarity * bestMatch.strength;
 
-  if (bestMatch.driver === 'mining_supply') {
+  if (topicInfo.topic === 'tech_solar_ai') {
+    // AI data centers, EVs, switchgear & solar drive Silver strongly and Gold as a supporting tech layer
+    silverImpact *= 1.20;
+    goldImpact *= 0.42;
+  } else if (bestMatch.driver === 'mining_supply') {
     silverImpact *= 1.25;
     goldImpact *= 0.65;
   } else if (bestMatch.driver === 'geopolitics' || bestMatch.driver === 'central_banks') {
     goldImpact *= 1.15;
     silverImpact *= 0.75;
   } else if (bestMatch.driver === 'equities' && bestMatch.polarity > 0) {
-    // Stock selloffs help gold more reliably than industrial silver
+    // Stock crash / recession helps safe-haven Gold, while recession fears slightly weigh on industrial Silver
     goldImpact *= 1.05;
-    silverImpact *= 0.35;
+    if (/\b(recession|crash|rout|plunge)\b/i.test(text) && !/\b(banking crisis|bank failure|fed)\b/i.test(text)) {
+      silverImpact *= -0.22;
+    } else {
+      silverImpact *= 0.35;
+    }
   }
 
   if (mentionsSilver && !mentionsGold) {
     silverImpact *= 1.2;
     goldImpact *= 0.7;
   }
-
-  const topicInfo = classifyHeadlineTopic(text, bestMatch.driver);
 
   return {
     title: headline.title,
@@ -611,7 +664,7 @@ export function classifyHeadlines(rawHeadlines = [], nowMs = Date.now()) {
 
     const tokens = titleTokens(enriched.title);
     const match = clusters.find(
-      (c) => c.item.driver === enriched.driver && jaccardSimilarity(c.tokens, tokens) >= 0.5
+      (c) => c.item.driver === enriched.driver && jaccardSimilarity(c.tokens, tokens) >= 0.58
     );
 
     if (match) {
@@ -630,6 +683,53 @@ export function classifyHeadlines(rawHeadlines = [], nowMs = Date.now()) {
   return clusters
     .map((c) => c.item)
     .sort((a, b) => b.weight - a.weight);
+}
+
+/**
+ * Selects up to maxCount (default 100) deduplicated headlines using balanced round-robin
+ * across all 7 Gold/Silver/AI/Global topics so no single topic crowds out global coverage.
+ */
+export function selectBalancedHeadlines(scoredHeadlines = [], maxCount = 100) {
+  if (!Array.isArray(scoredHeadlines) || scoredHeadlines.length <= maxCount) {
+    return Array.isArray(scoredHeadlines) ? [...scoredHeadlines] : [];
+  }
+  const byTopic = new Map();
+  for (const h of scoredHeadlines) {
+    const k = h.topic || 'macro_debt';
+    if (!byTopic.has(k)) byTopic.set(k, []);
+    byTopic.get(k).push(h);
+  }
+  const picked = [];
+  const seen = new Set();
+  const topicLists = [...byTopic.values()];
+  let round = 0;
+  while (picked.length < maxCount && round < 16) {
+    let addedAny = false;
+    for (const list of topicLists) {
+      if (round < list.length && picked.length < maxCount) {
+        const item = list[round];
+        if (!seen.has(item)) {
+          seen.add(item);
+          picked.push(item);
+          addedAny = true;
+        }
+      }
+    }
+    if (!addedAny) break;
+    round++;
+  }
+  for (const h of scoredHeadlines) {
+    if (picked.length >= maxCount) break;
+    if (!seen.has(h)) {
+      seen.add(h);
+      picked.push(h);
+    }
+  }
+  return picked.sort(
+    (a, b) =>
+      Math.max(Math.abs(b.goldImpact), Math.abs(b.silverImpact), 0.15) * (b.weight || 1) -
+      Math.max(Math.abs(a.goldImpact), Math.abs(a.silverImpact), 0.15) * (a.weight || 1)
+  );
 }
 
 /* ---------- Quantitative Historical Series Helpers ---------- */
@@ -2717,7 +2817,7 @@ export function buildOutlook({
     accuracy,
     matchedAnalogs,
     topicCoverage,
-    headlines: scoredHeadlines.slice(0, 28),
+    headlines: selectBalancedHeadlines(scoredHeadlines, 100),
   };
 }
 

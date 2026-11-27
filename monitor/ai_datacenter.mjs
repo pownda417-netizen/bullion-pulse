@@ -1,29 +1,21 @@
 /**
- * Bullion Pulse — Global US & China AI Data Center, SpaceX & EV Metal Race Engine (v56)
+ * Bullion Pulse — Planetary AI, Space, Grid & EV Metal Race Engine (v57)
  * Zero-dependency ES module, strictly causal (no look-ahead).
  *
- * Models how the global AI, Space, and EV electrification race drives physical Silver & Gold demand:
- *
- *  1. US Frontier AI, Autonomous EVs & Space Compute:
- *      * Public tickers: NVDA, GOOGL, MSFT, META, AMZN, TSLA (Dojo/Megapack/EVs), TSM, AVGO
- *      * Private labs tracked via live news: OpenAI (Stargate), Anthropic (Claude/Rainier), SpaceX / Starlink, xAI
- *  2. China AI Hyperscalers, Chips & Silver-Heavy EV Giants:
- *      * Public tickers: BABA (Alibaba Qwen/Cloud), 0700.HK (Tencent Hunyuan), BIDU (Baidu Ernie),
- *        0981.HK (SMIC Foundry), 1211.HK (BYD #1 EVs/Solid-State), 1810.HK (Xiaomi EV/AI),
- *        LI (Li Auto), XPEV (XPeng)
- *      * Private/A-share giants tracked via live news: DeepSeek, Huawei (Ascend), CATL (EV & solid-state batteries), ByteDance, NIO
- *  3. Data Center Power Room, Switchgear & Grid Builders:
- *      * Public tickers: VRT (Vertiv), ETN (Eaton), CEG (Constellation Energy) + Copper (HG=F)
- *
- * Physical Metal Economics:
- *  - SILVER (Primary Industrial Beneficiary):
- *      * Non-thriftable in 50–500MW+ data center switchgear, busbars, circuit breakers, relays & grid (~20–42 Moz/yr)
- *      * Heavy EV & charging draw (BYD, Tesla, Xiaomi, XPeng, Li Auto: ~25–50g Ag per EV + Megapack inverters + solid-state Ag-C batteries)
- *      * SpaceX/Starlink orbital solar arrays & aerospace electronics
- *      * Compounds a 6-year structural silver deficit + 70–80% byproduct mining inelasticity
- *  - GOLD (Measured Supporting Industrial Layer):
- *      * Corrosion-proof wire bonding, edge connectors, memory modules, EV ADAS sensors & satellite contacts
- *      * Realistic ~36% relative AI/EV sensitivity vs. Silver (monetary & central-bank flows stay Gold's primary driver)
+ * Tracks 36 live public tickers + 7 frontier private labs across 6 continents:
+ *  1. US Frontier AI, Tesla EVs & Silicon: NVDA, GOOGL, MSFT, META, AMZN, TSLA, TSM, AVGO
+ *  2. China AI Hyperscalers & EV Giants: BABA, 0700.HK (Tencent), BIDU, 0981.HK (SMIC),
+ *     1211.HK (BYD), 1810.HK (Xiaomi), LI, XPEV
+ *  3. World Tech Giants (Europe, Japan, South Korea, Malaysia, Canada, South America & India):
+ *     - Europe: ASML (NL), SU.PA (Schneider Electric, FR), SIE.DE (Siemens, DE), IFX.DE (Infineon, DE)
+ *     - Japan: 9984.T (SoftBank), 8035.T (Tokyo Electron), 6857.T (Advantest), 7203.T (Toyota Solid-State/EV)
+ *     - South Korea: 005930.KS (Samsung), 000660.KS (SK Hynix HBM)
+ *     - Malaysia: 6742.KL (YTL Power Johor AI DCs), 0166.KL (Inari Amertron OSAT/Wire-Bonding)
+ *     - Canada: CLS (Celestica AI Servers), BIP (Brookfield Global Data Centers)
+ *     - South America: WEGE3.SA (WEG Power Transformers/Grid, BR), MELI (MercadoLibre Cloud/AI)
+ *     - India: RELIANCE.NS (Jio GW AI Data Centers & Solar)
+ *  4. Power Room, Switchgear & Grid Builders: VRT (Vertiv), ETN (Eaton), CEG (Constellation) + Copper
+ *  5. Frontier Private Labs & Hubs (Live News): OpenAI, Anthropic, SpaceX, DeepSeek, Huawei AI, CATL, Mistral EU
  */
 
 function clamp(v, lo, hi) {
@@ -31,31 +23,51 @@ function clamp(v, lo, hi) {
 }
 
 export const AI_COMPUTE_META = [
-  { key: 'nvda', ticker: 'NVDA', name: 'NVIDIA', role: 'AI GPUs & Interconnects' },
-  { key: 'googl', ticker: 'GOOGL', name: 'Google', role: 'TPU Hyperscale & Power' },
-  { key: 'msft', ticker: 'MSFT', name: 'Microsoft', role: 'Azure AI Campuses' },
-  { key: 'meta', ticker: 'META', name: 'Meta', role: 'AI Training Clusters' },
-  { key: 'amzn', ticker: 'AMZN', name: 'Amazon', role: 'AWS Cloud Buildout' },
-  { key: 'tsla', ticker: 'TSLA', name: 'Tesla', role: 'EVs, Dojo AI & Megapacks' },
-  { key: 'tsm', ticker: 'TSM', name: 'TSMC', role: 'Wafer & Wire Bonding' },
-  { key: 'avgo', ticker: 'AVGO', name: 'Broadcom', role: 'AI Silicon & Networking' },
+  { key: 'nvda', ticker: 'NVDA', name: 'NVIDIA', region: 'US', role: 'AI GPUs & Interconnects' },
+  { key: 'googl', ticker: 'GOOGL', name: 'Google', region: 'US', role: 'TPU Hyperscale & Power' },
+  { key: 'msft', ticker: 'MSFT', name: 'Microsoft', region: 'US', role: 'Azure AI Campuses' },
+  { key: 'meta', ticker: 'META', name: 'Meta', region: 'US', role: 'AI Training Clusters' },
+  { key: 'amzn', ticker: 'AMZN', name: 'Amazon', region: 'US', role: 'AWS Cloud Buildout' },
+  { key: 'tsla', ticker: 'TSLA', name: 'Tesla', region: 'US', role: 'EVs, Dojo AI & Megapacks' },
+  { key: 'tsm', ticker: 'TSM', name: 'TSMC', region: 'TW', role: 'Wafer & Wire Bonding' },
+  { key: 'avgo', ticker: 'AVGO', name: 'Broadcom', region: 'US', role: 'AI Silicon & Networking' },
 ];
 
 export const CHINA_AI_EV_META = [
-  { key: 'baba', ticker: 'BABA', name: 'Alibaba', role: 'Qwen AI & Cloud CapEx' },
-  { key: 'tencent', ticker: '0700.HK', name: 'Tencent', role: 'Hunyuan AI & Clusters' },
-  { key: 'bidu', ticker: 'BIDU', name: 'Baidu', role: 'Ernie AI & Robotaxis' },
-  { key: 'smic', ticker: '0981.HK', name: 'SMIC', role: 'China Chip Foundry' },
-  { key: 'byd', ticker: '1211.HK', name: 'BYD', role: '#1 EVs & Solid-State Batteries' },
-  { key: 'xiaomi', ticker: '1810.HK', name: 'Xiaomi', role: 'SU7 EVs & AI Hardware' },
-  { key: 'li', ticker: 'LI', name: 'Li Auto', role: 'High-Voltage EVs' },
-  { key: 'xpev', ticker: 'XPEV', name: 'XPeng', role: 'AI Smart EVs & Robotics' },
+  { key: 'baba', ticker: 'BABA', name: 'Alibaba', region: 'CN', role: 'Qwen AI & Cloud CapEx' },
+  { key: 'tencent', ticker: '0700.HK', name: 'Tencent', region: 'CN', role: 'Hunyuan AI & Clusters' },
+  { key: 'bidu', ticker: 'BIDU', name: 'Baidu', region: 'CN', role: 'Ernie AI & Robotaxis' },
+  { key: 'smic', ticker: '0981.HK', name: 'SMIC', region: 'CN', role: 'China Chip Foundry' },
+  { key: 'byd', ticker: '1211.HK', name: 'BYD', region: 'CN', role: '#1 EVs & Solid-State Batteries' },
+  { key: 'xiaomi', ticker: '1810.HK', name: 'Xiaomi', region: 'CN', role: 'SU7 EVs & AI Hardware' },
+  { key: 'li', ticker: 'LI', name: 'Li Auto', region: 'CN', role: 'High-Voltage EVs' },
+  { key: 'xpev', ticker: 'XPEV', name: 'XPeng', region: 'CN', role: 'AI Smart EVs & Robotics' },
+];
+
+export const WORLD_AI_TECH_META = [
+  { key: 'asml', ticker: 'ASML', name: 'ASML', region: 'EU', role: 'EUV Lithography (Netherlands)' },
+  { key: 'schneider', ticker: 'SU.PA', name: 'Schneider', region: 'EU', role: 'DC Switchgear & Busbars (France)' },
+  { key: 'siemens', ticker: 'SIE.DE', name: 'Siemens', region: 'EU', role: 'Grid & AI Substations (Germany)' },
+  { key: 'infineon', ticker: 'IFX.DE', name: 'Infineon', region: 'EU', role: 'AI Power & EV Chips (Germany)' },
+  { key: 'softbank', ticker: '9984.T', name: 'SoftBank', region: 'JP', role: 'Stargate & Japan AI DCs (Japan)' },
+  { key: 'tokyoelec', ticker: '8035.T', name: 'Tokyo Elec', region: 'JP', role: 'AI Wafer Equipment (Japan)' },
+  { key: 'advantest', ticker: '6857.T', name: 'Advantest', region: 'JP', role: 'AI GPU/HBM Test Systems (Japan)' },
+  { key: 'toyota', ticker: '7203.T', name: 'Toyota', region: 'JP', role: 'EVs & Solid-State Ag-C (Japan)' },
+  { key: 'samsung', ticker: '005930.KS', name: 'Samsung', region: 'KR', role: 'HBM, Foundry & Solid-State (Korea)' },
+  { key: 'skhynix', ticker: '000660.KS', name: 'SK Hynix', region: 'KR', role: '#1 AI HBM Memory (Korea)' },
+  { key: 'ytlpower', ticker: '6742.KL', name: 'YTL Power', region: 'MY', role: 'Johor Green AI Data Centers (Malaysia)' },
+  { key: 'inari', ticker: '0166.KL', name: 'Inari', region: 'MY', role: 'Chip Packaging & Wire Bonding (Malaysia)' },
+  { key: 'celestica', ticker: 'CLS', name: 'Celestica', region: 'CA', role: 'Hyperscale AI Servers & 800G (Canada)' },
+  { key: 'brookfield', ticker: 'BIP', name: 'Brookfield', region: 'CA', role: 'Global Multi-GW Data Centers (Canada)' },
+  { key: 'weg', ticker: 'WEGE3.SA', name: 'WEG', region: 'SA', role: 'Grid Transformers & EV Motors (Brazil)' },
+  { key: 'meli', ticker: 'MELI', name: 'MercadoLibre', region: 'SA', role: 'LatAm Cloud & AI Tech (South America)' },
+  { key: 'reliance', ticker: 'RELIANCE.NS', name: 'Reliance', region: 'IN', role: 'Jio GW AI Data Centers & Solar (India)' },
 ];
 
 export const AI_POWER_META = [
-  { key: 'vrt', ticker: 'VRT', name: 'Vertiv', role: 'Switchgear, Busbars & UPS' },
-  { key: 'etn', ticker: 'ETN', name: 'Eaton', role: 'Breakers, Relays & Grid' },
-  { key: 'ceg', ticker: 'CEG', name: 'Constellation', role: '24/7 Hyperscale Power' },
+  { key: 'vrt', ticker: 'VRT', name: 'Vertiv', region: 'US', role: 'Switchgear, Busbars & UPS' },
+  { key: 'etn', ticker: 'ETN', name: 'Eaton', region: 'US', role: 'Breakers, Relays & Grid' },
+  { key: 'ceg', ticker: 'CEG', name: 'Constellation', region: 'US', role: '24/7 Hyperscale Power' },
 ];
 
 export const PRIVATE_AI_SPACE_LABS = [
@@ -65,17 +77,19 @@ export const PRIVATE_AI_SPACE_LABS = [
   { id: 'deepseek', name: 'DeepSeek', rx: /\b(deepseek)\b/i },
   { id: 'huawei', name: 'Huawei AI', rx: /\b(huawei|ascend)\b/i },
   { id: 'catl', name: 'CATL', rx: /\b(catl)\b/i },
+  { id: 'mistral', name: 'Mistral EU', rx: /\b(mistral)\b/i },
 ];
 
 const BULL_AI_CAPEX_PATTERNS = [
-  /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(data center|ai infrastructure|ai capex|capex|gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|server|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries)/i,
-  /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b.*\b(ai data center|ai capex|ai chip|cloud|semiconductor|ev|electric vehicle|solid[- ]?state|battery|charging|megawatt|gigawatt|deliveries|sales surge|record|expand|billion|boom|factory)/i,
+  /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries|raise.*capex|invest|order|deal)/i,
+  /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b.*\b(solid[- ]?state|megawatt|gigawatt|deliveries|sales surge|sales jump|record|expand|billion|boom|buildout|invest|ramp|factory|surge)/i,
+  /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b.*\b(hbm|switchgear|transformer|power grid|solid[- ]?state|gigawatt|megawatt|chip plant|wire bonding|billion|expand|buildout|surge|record|invest|order|deal)/i,
   /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding|solid[- ]?state battery)\b.*\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
-  /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|ev demand)/i,
+  /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|samsung|toyota|ev demand)\b.*\b(surge|boom|jump|rise|demand|boost|tight|shortage|deficit)/i,
 ];
 
 const BEAR_AI_CAPEX_PATTERNS = [
-  /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|ev slump)/i,
+  /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|sales fall|ev slump)/i,
   /\b(ai data center|ai capex|ai chip|server demand|ev sales)\b.*\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble|slump)/i,
 ];
 
@@ -121,6 +135,7 @@ function summarizeBasket(metaList, series = {}, fallbackSnapshot = null) {
       key: m.key,
       ticker: m.ticker,
       name: m.name,
+      region: m.region || 'GLB',
       role: m.role,
       price: price != null && Number.isFinite(price) ? +price.toFixed(2) : null,
       pct5d: p5 != null ? +p5.toFixed(2) : null,
@@ -168,7 +183,7 @@ export function scoreAiDatacenterHeadlines(headlines = []) {
     bullHits,
     bearHits,
     net,
-    newsScore: +clamp(net * 0.25, -0.85, 0.90).toFixed(3),
+    newsScore: +clamp(net * 0.24, -0.85, 0.90).toFixed(3),
     labMentions,
     matchedTitles,
   };
@@ -186,6 +201,7 @@ export function computeAiDatacenterSignal({
 } = {}) {
   const computeBasket = summarizeBasket(AI_COMPUTE_META, series, fallbackTickers);
   const chinaAiEvBasket = summarizeBasket(CHINA_AI_EV_META, series, fallbackTickers);
+  const worldAiBasket = summarizeBasket(WORLD_AI_TECH_META, series, fallbackTickers);
   const powerBasket = summarizeBasket(AI_POWER_META, series, fallbackTickers);
   const news = scoreAiDatacenterHeadlines(headlines);
 
@@ -194,12 +210,15 @@ export function computeAiDatacenterSignal({
       ? Number(copper5dPct)
       : (pctChange(series?.copper, 5) ?? 0);
 
-  // Combine short (5d) + structural trend (20d) across US AI/Tesla, China AI/EVs, and Power/Grid
+  // Combine short (5d) + structural trend (20d) across US, China, World ex-US/CN, and Power/Grid
   const computeMom = computeBasket.live
     ? clamp((computeBasket.avg5dPct * 0.55 + computeBasket.avg20dPct * 0.28) / 7.5, -1, 1)
     : 0.12;
   const chinaAiEvMom = chinaAiEvBasket.live
     ? clamp((chinaAiEvBasket.avg5dPct * 0.55 + chinaAiEvBasket.avg20dPct * 0.28) / 8.5, -1, 1)
+    : 0.10;
+  const worldAiMom = worldAiBasket.live
+    ? clamp((worldAiBasket.avg5dPct * 0.55 + worldAiBasket.avg20dPct * 0.28) / 7.5, -1, 1)
     : 0.10;
   const powerMom = powerBasket.live
     ? clamp((powerBasket.avg5dPct * 0.52 + powerBasket.avg20dPct * 0.30 + cu5 * 0.18) / 8.0, -1, 1)
@@ -208,12 +227,13 @@ export function computeAiDatacenterSignal({
   const scenarioShift =
     scenarioMode === 'surge' ? 24 : scenarioMode === 'pause' ? -28 : 0;
 
-  // Structural baseline = 56 (+165% DC power by 2030, global EV/BYD/Tesla ramp & 6-yr silver deficit)
+  // Structural baseline = 56 (+165% DC power by 2030, worldwide EV/AI/HBM ramp & 6-yr silver deficit)
   const rawIndex =
     56 +
-    computeMom * 14 +
-    chinaAiEvMom * 13 +
-    powerMom * 16 +
+    computeMom * 11 +
+    chinaAiEvMom * 10 +
+    worldAiMom * 11 +
+    powerMom * 13 +
     news.newsScore * 16 +
     scenarioShift;
   const raceIndex = Math.round(clamp(rawIndex, 6, 98));
@@ -240,29 +260,28 @@ export function computeAiDatacenterSignal({
   const goldSignal = +clamp(silverSignal * 0.36, -0.28, 0.38).toFixed(3);
   const goldBoost = +clamp(goldSignal * 0.105, -0.022, 0.042).toFixed(4);
 
-  // Estimated annualized AI DC + grid silver run-rate within documented 20–42 Moz/yr band
   const estSilverMozYr = Math.round(clamp(20 + ((raceIndex - 20) / 78) * 24, 18, 46));
 
-  let status = 'Steady AI & EV Expansion';
+  let status = 'Steady Global AI & EV';
   let tone = 'neutral';
   if (raceIndex >= 74) {
-    status = 'Hyperscale & EV Surge ↑';
+    status = 'Global AI & EV Surge ↑';
     tone = 'bullish';
   } else if (raceIndex >= 58) {
-    status = 'Active AI & EV Buildout ↑';
+    status = 'Active Global Buildout ↑';
     tone = 'bullish';
   } else if (raceIndex <= 34) {
-    status = 'CapEx & EV Slowdown ↓';
+    status = 'Global CapEx Slowdown ↓';
     tone = 'bearish';
   }
 
-  let summary = `Global US & China AI/EV race index at ${raceIndex}/100 (${status.replace(/[↑↓]/g, '').trim()}). `;
+  let summary = `Planetary AI/Space/EV race index at ${raceIndex}/100 (${status.replace(/[↑↓]/g, '').trim()}). `;
   if (tone === 'bullish') {
-    summary += `US hyperscalers & labs (Google, NVIDIA, Tesla, SpaceX, OpenAI, Anthropic) plus China AI & EV leaders (Alibaba, Tencent, Baidu, DeepSeek, BYD, CATL, Xiaomi) compound non-thriftable silver demand (~${estSilverMozYr} Moz/yr DC/grid + EV inverters/solid-state batteries) onto a 6-year deficit with 70–80% byproduct inelasticity, plus supporting gold wire-bonding & EV connector demand.`;
+    summary += `Worldwide buildouts across the US (NVIDIA/Google/Tesla/SpaceX/OpenAI/Anthropic), China (BYD/Alibaba/Tencent/DeepSeek), Europe (ASML/Schneider/Siemens), Japan/Korea (SoftBank/Samsung/SK Hynix/Toyota), Malaysia (YTL Power/Inari), Canada (Celestica/Brookfield), South America (WEG/MercadoLibre) & India (Reliance) tighten non-thriftable silver (~${estSilverMozYr} Moz/yr DC/grid + EVs) on a 6-yr deficit, plus supporting gold wire-bonding demand.`;
   } else if (tone === 'bearish') {
-    summary += `Global AI CapEx & EV stocks cooled recently — easing near-term industrial momentum, though long-term 2025–2030 data center power (+165%) and EV electrification demand remain intact.`;
+    summary += `Global AI CapEx, semiconductor & EV equities cooled recently — easing near-term industrial momentum, while multi-year 2025–2030 grid power (+165%) and EV demand remain intact.`;
   } else {
-    summary += `Steady US & China AI data centers, SpaceX orbital builds, and BYD/Tesla EV production underpin ~${estSilverMozYr} Moz/yr of non-thriftable silver hardware draw and supporting gold connector demand.`;
+    summary += `Steady global AI data centers, chip fabs, and EV buildouts across 6 continents underpin ~${estSilverMozYr} Moz/yr of non-thriftable silver draw and supporting gold connector demand.`;
   }
 
   return {
@@ -276,6 +295,7 @@ export function computeAiDatacenterSignal({
     supplyTightMult: +supplyTightMult.toFixed(2),
     computeBasket,
     chinaAiEvBasket,
+    worldAiBasket,
     powerBasket,
     privateLabs: PRIVATE_AI_SPACE_LABS.map((l) => ({
       id: l.id,
@@ -287,13 +307,13 @@ export function computeAiDatacenterSignal({
       signal: silverSignal,
       predictionBoost: silverBoost,
       pts: Math.round(silverBoost * 100),
-      role: 'Primary AI, EV & Space Metal (Switchgear, Busbars, BYD/Tesla EVs, Starlink Solar — Non-Thriftable)',
+      role: 'Primary AI, EV & Space Metal (Global Switchgear, BYD/Tesla/Toyota EVs, Samsung Ag-C & Starlink Solar)',
     },
     gold: {
       signal: goldSignal,
       predictionBoost: goldBoost,
       pts: Math.round(goldBoost * 100),
-      role: 'Supporting High-Reliability Metal (Wire Bonding, EV/Server Connectors & Satellite Contacts)',
+      role: 'Supporting High-Reliability Metal (TSMC/Inari Wire Bonding, HBM/Server Connectors & Satellite Contacts)',
     },
     summary,
   };

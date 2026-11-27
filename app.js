@@ -271,6 +271,8 @@ const state = {
   accuracyHoverIdx: null,
   accuracyGeom: null,
   hiddenAlphaMetal: 'gold',
+  newsVisibleLimit: 25,
+  newsSearchQuery: '',
   swapCalc: {
     dir: 'g2s',
     oz: 1,
@@ -354,7 +356,7 @@ const ALLOWED_NEURAL_VOICE_IDS = new Set([
   'en_GB-alba-medium',
 ]);
 const ALLOWED_SUBVIEWS = {
-  markets: new Set(['live', 'global', 'charts', 'macro']),
+  markets: new Set(['live', 'global', 'charts', 'news']),
   outlook: new Set(['forecast', 'drivers', 'vaults', 'sim']),
   trade: new Set(['swap', 'ladder', 'grader']),
   stack: new Set(['overview', 'goals', 'lots']),
@@ -5068,7 +5070,7 @@ function classifyClientHeadlineTopic(h) {
   if (/\b(solar flare|geomagnetic|space weather|noaa|satellite|aerospace|spacex|nasa|orbital|war|missile|airstrike|sanction|tariff|strait of hormuz|red sea|geopolit|conflict|ceasefire)\b/i.test(text)) {
     return { topic: 'geo_space', topicLabel: CLIENT_NEWS_TOPICS.geo_space };
   }
-  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
+  if (/\b(solar|photovoltaic|topcon|hjt|silver paste|solid[- ]?state battery|ai data center|ai server|ai capex|ai infrastructure|hyperscal|gigawatt|switchgear|busbar|wire bonding|nvidia|tesla|megapack|anthropic|openai|stargate|alibaba|qwen|tencent|baidu|deepseek|huawei|smic|byd|catl|xiaomi|xpeng|li auto|nio|asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|celestica|brookfield|weg|mercadolibre|reliance|vertiv|eaton|ev |semiconductor|electrification|antimicrobial)\b/i.test(text)) {
     return { topic: 'tech_solar_ai', topicLabel: CLIENT_NEWS_TOPICS.tech_solar_ai };
   }
   if (/\b(central bank|brics|pboc|rbi|nbp|repatriat|de-?dollariz|sovereign.*reserve|basel iii|paxg|xaut|tether gold|tokenized gold|gld|slv|pslv|etf)\b/i.test(text)) {
@@ -5888,20 +5890,40 @@ const CLIENT_AI_COMPUTE_META = [
 ];
 
 const CLIENT_CHINA_AI_EV_META = [
-  { key: 'baba', ticker: 'BABA', name: 'Alibaba', role: 'Qwen AI & Cloud CapEx' },
-  { key: 'tencent', ticker: '0700.HK', name: 'Tencent', role: 'Hunyuan AI & Clusters' },
-  { key: 'bidu', ticker: 'BIDU', name: 'Baidu', role: 'Ernie AI & Robotaxis' },
-  { key: 'smic', ticker: '0981.HK', name: 'SMIC', role: 'China Chip Foundry' },
-  { key: 'byd', ticker: '1211.HK', name: 'BYD', role: '#1 EVs & Solid-State Batteries' },
-  { key: 'xiaomi', ticker: '1810.HK', name: 'Xiaomi', role: 'SU7 EVs & AI Hardware' },
-  { key: 'li', ticker: 'LI', name: 'Li Auto', role: 'High-Voltage EVs' },
-  { key: 'xpev', ticker: 'XPEV', name: 'XPeng', role: 'AI Smart EVs & Robotics' },
+  { key: 'baba', ticker: 'BABA', name: 'Alibaba', region: 'CN', role: 'Qwen AI & Cloud CapEx' },
+  { key: 'tencent', ticker: '0700.HK', name: 'Tencent', region: 'CN', role: 'Hunyuan AI & Clusters' },
+  { key: 'bidu', ticker: 'BIDU', name: 'Baidu', region: 'CN', role: 'Ernie AI & Robotaxis' },
+  { key: 'smic', ticker: '0981.HK', name: 'SMIC', region: 'CN', role: 'China Chip Foundry' },
+  { key: 'byd', ticker: '1211.HK', name: 'BYD', region: 'CN', role: '#1 EVs & Solid-State Batteries' },
+  { key: 'xiaomi', ticker: '1810.HK', name: 'Xiaomi', region: 'CN', role: 'SU7 EVs & AI Hardware' },
+  { key: 'li', ticker: 'LI', name: 'Li Auto', region: 'CN', role: 'High-Voltage EVs' },
+  { key: 'xpev', ticker: 'XPEV', name: 'XPeng', region: 'CN', role: 'AI Smart EVs & Robotics' },
+];
+
+const CLIENT_WORLD_AI_TECH_META = [
+  { key: 'asml', ticker: 'ASML', name: 'ASML', region: 'EU', role: 'EUV Lithography (Netherlands)' },
+  { key: 'schneider', ticker: 'SU.PA', name: 'Schneider', region: 'EU', role: 'DC Switchgear & Busbars (France)' },
+  { key: 'siemens', ticker: 'SIE.DE', name: 'Siemens', region: 'EU', role: 'Grid & AI Substations (Germany)' },
+  { key: 'infineon', ticker: 'IFX.DE', name: 'Infineon', region: 'EU', role: 'AI Power & EV Chips (Germany)' },
+  { key: 'softbank', ticker: '9984.T', name: 'SoftBank', region: 'JP', role: 'Stargate & Japan AI DCs (Japan)' },
+  { key: 'tokyoelec', ticker: '8035.T', name: 'Tokyo Elec', region: 'JP', role: 'AI Wafer Equipment (Japan)' },
+  { key: 'advantest', ticker: '6857.T', name: 'Advantest', region: 'JP', role: 'AI GPU/HBM Test Systems (Japan)' },
+  { key: 'toyota', ticker: '7203.T', name: 'Toyota', region: 'JP', role: 'EVs & Solid-State Ag-C (Japan)' },
+  { key: 'samsung', ticker: '005930.KS', name: 'Samsung', region: 'KR', role: 'HBM, Foundry & Solid-State (Korea)' },
+  { key: 'skhynix', ticker: '000660.KS', name: 'SK Hynix', region: 'KR', role: '#1 AI HBM Memory (Korea)' },
+  { key: 'ytlpower', ticker: '6742.KL', name: 'YTL Power', region: 'MY', role: 'Johor Green AI Data Centers (Malaysia)' },
+  { key: 'inari', ticker: '0166.KL', name: 'Inari', region: 'MY', role: 'Chip Packaging & Wire Bonding (Malaysia)' },
+  { key: 'celestica', ticker: 'CLS', name: 'Celestica', region: 'CA', role: 'Hyperscale AI Servers & 800G (Canada)' },
+  { key: 'brookfield', ticker: 'BIP', name: 'Brookfield', region: 'CA', role: 'Global Multi-GW Data Centers (Canada)' },
+  { key: 'weg', ticker: 'WEGE3.SA', name: 'WEG', region: 'SA', role: 'Grid Transformers & EV Motors (Brazil)' },
+  { key: 'meli', ticker: 'MELI', name: 'MercadoLibre', region: 'SA', role: 'LatAm Cloud & AI Tech (South America)' },
+  { key: 'reliance', ticker: 'RELIANCE.NS', name: 'Reliance', region: 'IN', role: 'Jio GW AI Data Centers & Solar (India)' },
 ];
 
 const CLIENT_AI_POWER_META = [
-  { key: 'vrt', ticker: 'VRT', name: 'Vertiv', role: 'Switchgear, Busbars & UPS' },
-  { key: 'etn', ticker: 'ETN', name: 'Eaton', role: 'Breakers, Relays & Grid' },
-  { key: 'ceg', ticker: 'CEG', name: 'Constellation', role: '24/7 Hyperscale Power' },
+  { key: 'vrt', ticker: 'VRT', name: 'Vertiv', region: 'US', role: 'Switchgear, Busbars & UPS' },
+  { key: 'etn', ticker: 'ETN', name: 'Eaton', region: 'US', role: 'Breakers, Relays & Grid' },
+  { key: 'ceg', ticker: 'CEG', name: 'Constellation', region: 'US', role: '24/7 Hyperscale Power' },
 ];
 
 const CLIENT_PRIVATE_AI_LABS = [
@@ -5911,6 +5933,7 @@ const CLIENT_PRIVATE_AI_LABS = [
   { id: 'deepseek', name: 'DeepSeek', rx: /\b(deepseek)\b/i },
   { id: 'huawei', name: 'Huawei AI', rx: /\b(huawei|ascend)\b/i },
   { id: 'catl', name: 'CATL', rx: /\b(catl)\b/i },
+  { id: 'mistral', name: 'Mistral EU', rx: /\b(mistral)\b/i },
 ];
 
 function computeClientAiDatacenter({
@@ -5961,16 +5984,18 @@ function computeClientAiDatacenter({
 
   const computeBasket = hydrateBasket(CLIENT_AI_COMPUTE_META, srv?.computeBasket);
   const chinaAiEvBasket = hydrateBasket(CLIENT_CHINA_AI_EV_META, srv?.chinaAiEvBasket);
+  const worldAiBasket = hydrateBasket(CLIENT_WORLD_AI_TECH_META, srv?.worldAiBasket);
   const powerBasket = hydrateBasket(CLIENT_AI_POWER_META, srv?.powerBasket);
 
   const bullRx = [
-    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(data center|ai infrastructure|ai capex|capex|gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|server|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries)/i,
-    /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b.*\b(ai data center|ai capex|ai chip|cloud|semiconductor|ev|electric vehicle|solid[- ]?state|battery|charging|megawatt|gigawatt|deliveries|sales surge|record|expand|billion|boom|factory)/i,
+    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|claude|spacex|starlink|tesla|megapack|xai|oracle|tsmc|broadcom|vertiv|eaton|stargate|hyperscaler)\b.*\b(gigawatt|megawatt|power deal|nuclear|substation|switchgear|busbar|grid upgrade|blackwell|rubin|tpu|satellite|launch|dojo|cortex|billion|expand|buildout|surge|boom|record|deliveries|raise.*capex|invest|order|deal)/i,
+    /\b(alibaba|qwen|tencent|hunyuan|baidu|ernie|deepseek|huawei|ascend|bytedance|smic|byd|catl|xiaomi|xpeng|li auto|nio|geely)\b.*\b(solid[- ]?state|megawatt|gigawatt|deliveries|sales surge|sales jump|record|expand|billion|boom|buildout|invest|ramp|factory|surge)/i,
+    /\b(asml|schneider electric|siemens|infineon|mistral|softbank|tokyo electron|advantest|toyota|samsung|sk hynix|ytl power|inari|johor|malaysia|celestica|brookfield|weg|mercadolibre|reliance|jio)\b.*\b(hbm|switchgear|transformer|power grid|solid[- ]?state|gigawatt|megawatt|chip plant|wire bonding|billion|expand|buildout|surge|record|invest|order|deal)/i,
     /\b(ai data center|hyperscale data center|ai power demand|data center power|power grid upgrade|switchgear|busbar|wire bonding|solid[- ]?state battery)\b.*\b(surge|boom|jump|soar|expand|gw|gigawatt|record|shortage|silver|gold|demand|strain|tight)/i,
-    /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|ev demand)/i,
+    /\b(silver|gold)\b.*\b(ai data center|ai server|ai chip|switchgear|busbar|semiconductor|wire bonding|hyperscale|byd|tesla|starlink|samsung|toyota|ev demand)\b.*\b(surge|boom|jump|rise|demand|boost|tight|shortage|deficit)/i,
   ];
   const bearRx = [
-    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|ev slump)/i,
+    /\b(nvidia|google|alphabet|microsoft|meta|amazon|aws|openai|anthropic|tesla|spacex|alibaba|tencent|baidu|byd|catl|xiaomi|xpeng|li auto|nio|asml|siemens|samsung|sk hynix|softbank|toyota|hyperscaler|data center|ai infrastructure)\b.*\b(capex cut|cut spending|cuts? capex|cancel|delay|pause|slowdown|pullback|bubble burst|halt|slump|oversupply|excess capacity|sales drop|sales fall|ev slump)/i,
     /\b(ai data center|ai capex|ai chip|server demand|ev sales)\b.*\b(cool|slow|drop|fall|shrink|cut|cancel|delay|bubble|slump)/i,
   ];
   let bullHits = 0;
@@ -5988,7 +6013,7 @@ function computeClientAiDatacenter({
     if (isBull && !isBear) bullHits++;
     else if (isBear) bearHits++;
   }
-  const newsScore = clampNum((bullHits - bearHits) * 0.25, -0.85, 0.90);
+  const newsScore = clampNum((bullHits - bearHits) * 0.24, -0.85, 0.90);
 
   const computeMom = computeBasket.live
     ? clampNum((computeBasket.avg5dPct * 0.55 + computeBasket.avg20dPct * 0.28) / 7.5, -1, 1)
@@ -5996,12 +6021,15 @@ function computeClientAiDatacenter({
   const chinaAiEvMom = chinaAiEvBasket.live
     ? clampNum((chinaAiEvBasket.avg5dPct * 0.55 + chinaAiEvBasket.avg20dPct * 0.28) / 8.5, -1, 1)
     : 0.10;
+  const worldAiMom = worldAiBasket.live
+    ? clampNum((worldAiBasket.avg5dPct * 0.55 + worldAiBasket.avg20dPct * 0.28) / 7.5, -1, 1)
+    : 0.10;
   const powerMom = powerBasket.live
     ? clampNum((powerBasket.avg5dPct * 0.52 + powerBasket.avg20dPct * 0.30 + cu5 * 0.18) / 8.0, -1, 1)
     : clampNum(0.14 + cu5 / 18, -0.6, 0.8);
   const scenarioShift = scenarioMode === 'surge' ? 24 : scenarioMode === 'pause' ? -28 : 0;
 
-  const raceIndex = Math.round(clampNum(56 + computeMom * 14 + chinaAiEvMom * 13 + powerMom * 16 + newsScore * 16 + scenarioShift, 6, 98));
+  const raceIndex = Math.round(clampNum(56 + computeMom * 11 + chinaAiEvMom * 10 + worldAiMom * 11 + powerMom * 13 + newsScore * 16 + scenarioShift, 6, 98));
   const agComexRatio = Number(liveComex?.silver?.paperToRegisteredRatio);
   const agBackw = Boolean(futures?.silver?.isBackwardation || (futures?.silver?.basisUsd ?? 1) < 0);
   const agPremHot = physicalPremiums?.silver?.tone === 'bullish';
@@ -6053,6 +6081,7 @@ function computeClientAiDatacenter({
     supplyTightMult: +supplyTightMult.toFixed(2),
     computeBasket,
     chinaAiEvBasket,
+    worldAiBasket,
     powerBasket,
     privateLabs: CLIENT_PRIVATE_AI_LABS.map((l) => ({
       id: l.id,
@@ -8639,7 +8668,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=56', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=58', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -10005,12 +10034,13 @@ function renderAiDatacenter(res) {
     const cls = b.avg5dPct >= 0.05 ? 'up' : b.avg5dPct <= -0.05 ? 'down' : '';
     return `<span class="aidc-basket-avg ${cls}">5d ${b.avg5dPct >= 0 ? '+' : '−'}${Math.abs(b.avg5dPct).toFixed(1)}% (${b.risingCount}/${b.trackedCount} ↑)</span>`;
   };
-  const renderPills = (b) =>
+  const renderPills = (b, showRegion = false) =>
     b.members
-      .map(
-        (m) =>
-          `<span class="aidc-ticker-pill" title="${escapeHtml(`${m.name}: ${m.role}`)}"><strong>${escapeHtml(m.ticker)}</strong>${fmtChg(m.pct5d)}</span>`
-      )
+      .map((m) => {
+        const reg = showRegion && m.region ? `<span class="aidc-reg-tag">${escapeHtml(m.region)}</span>` : '';
+        const lbl = showRegion ? m.name : m.ticker;
+        return `<span class="aidc-ticker-pill" title="${escapeHtml(`${m.name} (${m.ticker}): ${m.role}`)}">${reg}<strong>${escapeHtml(lbl)}</strong>${fmtChg(m.pct5d)}</span>`;
+      })
       .join('');
 
   const sPts = ai.silver?.pts || 0;
@@ -10039,7 +10069,7 @@ function renderAiDatacenter(res) {
       </div>
     </div>
 
-    <div class="aidc-baskets-grid aidc-baskets-3">
+    <div class="aidc-baskets-grid aidc-baskets-4">
       <div class="aidc-basket-card">
         <div class="aidc-basket-head">
           <span>US AI, Tesla &amp; Silicon</span>
@@ -10053,6 +10083,13 @@ function renderAiDatacenter(res) {
           ${basketAvgHtml(ai.chinaAiEvBasket)}
         </div>
         <div class="aidc-tickers">${renderPills(ai.chinaAiEvBasket)}</div>
+      </div>
+      <div class="aidc-basket-card aidc-world-card">
+        <div class="aidc-basket-head">
+          <span>World Tech: EU, Japan, Korea, Malaysia, Canada &amp; LatAm</span>
+          ${basketAvgHtml(ai.worldAiBasket)}
+        </div>
+        <div class="aidc-tickers">${renderPills(ai.worldAiBasket, true)}</div>
       </div>
       <div class="aidc-basket-card">
         <div class="aidc-basket-head">
@@ -10473,8 +10510,8 @@ function renderOutlook() {
   if (updatedEl && res.base.generatedAt) {
     const dt = new Date(res.base.generatedAt);
     updatedEl.textContent = Number.isNaN(dt.getTime())
-      ? '16 global feeds across central banks, vaults, solar/AI silver, retail demand, geopolitics & space'
-      : `Updated ${dt.toLocaleDateString()} · 16 Gold & Silver global feeds scored for real signal vs. hype`;
+      ? '22 global feeds across US/China/EU/JP/KR/MY/CA/LatAm AI & EVs, central banks, vaults, solar silver, retail demand, geopolitics & space'
+      : `Updated ${dt.toLocaleDateString()} · 22 global Gold, Silver, AI & EV feeds scored for real signal vs. hype`;
   }
   const activeNewsFilter = state.settings.newsFilter || 'all';
   const activeNewsTopic = state.settings.newsTopic || 'all';
@@ -10490,7 +10527,7 @@ function renderOutlook() {
     if (/(reuters|bloomberg|wsj|wall street|financial times|cnbc|marketwatch|kitco|mining\.com|world gold council|silver institute|federal reserve|bls|cme|comex|lbma|noaa|ecb|bank of japan)/i.test(src + ' ' + title)) {
       score += 18;
     }
-    if (/(fed|fomc|cpi|pce|inflation|payroll|central bank|pboc|rbi|brics|repatriat|sge|shanghai|comex|lbma|lease rate|vault|inventory|deficit|import|tariff|treasury|yield|production|aisc|strike|rate cut|rate hike|etf|solar|topcon|solid-state|ai data center|geomagnetic|solar flare|paxg|xaut|swiss|dubai)/i.test(lower)) {
+    if (/(fed|fomc|cpi|pce|inflation|payroll|central bank|pboc|rbi|brics|repatriat|sge|shanghai|comex|lbma|lease rate|vault|inventory|deficit|import|tariff|treasury|yield|production|aisc|strike|rate cut|rate hike|etf|solar|topcon|solid-state|ai data center|geomagnetic|solar flare|paxg|xaut|swiss|dubai|nvidia|tesla|spacex|starlink|openai|anthropic|byd|alibaba|tencent|deepseek|huawei|catl|asml|schneider|siemens|infineon|softbank|samsung|sk hynix|toyota|ytl power|inari|johor|celestica|brookfield|weg|mercadolibre|reliance|switchgear|hbm|gigawatt)/i.test(lower)) {
       score += 18;
     }
     if (Number(h?.clusterCount) > 1) score += 10;
@@ -10530,22 +10567,44 @@ function renderOutlook() {
 
     const signalCount = rawItems.filter((h) => h._q.tier === 'signal').length;
     const hypeCount = rawItems.filter((h) => h._q.tier === 'hype').length;
+    const bullCount = rawItems.filter((h) => h.sentiment === 'bullish').length;
+    const bearCount = rawItems.filter((h) => h.sentiment === 'bearish').length;
     const activeSubjectsCount = Object.keys(topicCounts).length;
+    const searchQ = (state.newsSearchQuery || '').trim().toLowerCase();
+    const clearSearchBtn = document.getElementById('btn-news-search-clear');
+    if (clearSearchBtn) clearSearchBtn.hidden = !searchQ;
+
     const filtered = rawItems.filter((h) => {
       if (activeNewsTopic !== 'all' && h._topic.topic !== activeNewsTopic) return false;
-      if (activeNewsFilter === 'signal') return h._q.tier === 'signal';
-      if (activeNewsFilter === 'nohype') return h._q.tier !== 'hype';
+      if (activeNewsFilter === 'signal' && h._q.tier !== 'signal') return false;
+      if (activeNewsFilter === 'nohype' && h._q.tier === 'hype') return false;
+      if (searchQ) {
+        const hay = `${h.title || ''} ${h.source || ''} ${h.driverLabel || ''} ${h._topic?.topicLabel || ''}`.toLowerCase();
+        if (!hay.includes(searchQ)) return false;
+      }
       return true;
     });
+
+    const maxCap = Math.min(100, filtered.length);
+    const showCount = Math.min(maxCap, Math.max(25, state.newsVisibleLimit || 25));
+
     if (filterSummaryEl) {
       filterSummaryEl.textContent =
         rawItems.length
-          ? `${rawItems.length} stories across ${activeSubjectsCount} subjects · ${signalCount} Real Signal · ${hypeCount} Hype filtered`
+          ? `${rawItems.length} stories (up to 100) across ${activeSubjectsCount} subjects · ${bullCount} Positive ↑ · ${bearCount} Negative ↓ · ${signalCount} Real Signal · ${hypeCount} Hype filtered`
           : 'Waiting for headlines…';
     }
+    const fmtMetalDir = (v) => {
+      const n = Number(v) || 0;
+      if (n >= 0.45) return '++';
+      if (n > 0.04) return '+';
+      if (n <= -0.45) return '−−';
+      if (n < -0.04) return '−';
+      return '·';
+    };
     newsEl.innerHTML = filtered.length
       ? filtered
-          .slice(0, 24)
+          .slice(0, showCount)
           .map((h) => {
             const safeUrl = sanitizeHttpUrl(h.url);
             const titleHtml = safeUrl
@@ -10556,6 +10615,17 @@ function renderOutlook() {
             const sentCls = h.sentiment === 'bullish' || h.sentiment === 'bearish' || h.sentiment === 'neutral' ? h.sentiment : '';
             const moodWord = sentCls === 'bullish' ? 'Positive' : sentCls === 'bearish' ? 'Negative' : 'Neutral';
             const qCls = h._q.tier === 'signal' ? 'sig-real' : h._q.tier === 'hype' ? 'sig-hype' : 'sig-note';
+            const gImp = Number(h.goldImpact) || 0;
+            const sImp = Number(h.silverImpact) || 0;
+            const impCls =
+              gImp > 0.04 && sImp > 0.04
+                ? 'up'
+                : gImp < -0.04 && sImp < -0.04
+                  ? 'down'
+                  : Math.abs(gImp) > 0.04 || Math.abs(sImp) > 0.04
+                    ? 'mixed'
+                    : '';
+            const impTxt = `Au ${fmtMetalDir(gImp)} · Ag ${fmtMetalDir(sImp)}`;
             return `
               <li class="news-item">
                 ${titleHtml}
@@ -10563,6 +10633,7 @@ function renderOutlook() {
                   <span>${escapeHtml(h.source || 'News')} · ${escapeHtml(h.driverLabel || 'Market')}${clusterBadge}</span>
                   <div class="news-pills-wrap">
                     <span class="news-topic-pill">${escapeHtml(h._topic.topicLabel)}</span>
+                    <span class="news-impact-pill ${impCls}" title="Forecast price impact on Gold (Au) and Silver (Ag)">${escapeHtml(impTxt)}</span>
                     <span class="news-sig-badge ${qCls}">${escapeHtml(h._q.label)}</span>
                     <span class="news-pill ${sentCls}">${escapeHtml(moodWord)}</span>
                   </div>
@@ -10570,7 +10641,25 @@ function renderOutlook() {
               </li>`;
           })
           .join('')
-      : '<li class="empty-state">No headlines match this subject/filter right now. Tap "All Topics" or "All" to see everything.</li>';
+      : '<li class="empty-state">No headlines match this search/filter right now. Clear search or tap "All Topics" to see everything.</li>';
+
+    const pagerRow = document.getElementById('news-pager-row');
+    const pagerInfo = document.getElementById('news-pager-info');
+    const moreBtn = document.getElementById('btn-news-more');
+    const allBtn = document.getElementById('btn-news-all');
+    const collapseBtn = document.getElementById('btn-news-collapse');
+    if (pagerRow) {
+      pagerRow.hidden = maxCap === 0;
+      if (pagerInfo) {
+        pagerInfo.textContent = `Showing 1–${Math.min(showCount, maxCap)} of ${maxCap} matching articles (cap 100)`;
+      }
+      if (moreBtn) moreBtn.hidden = showCount >= maxCap;
+      if (allBtn) {
+        allBtn.hidden = showCount >= maxCap;
+        allBtn.textContent = `Show All (${maxCap})`;
+      }
+      if (collapseBtn) collapseBtn.hidden = showCount <= 25 || maxCap <= 25;
+    }
   }
 
   renderAccuracyReplayChart(res);
@@ -12520,7 +12609,8 @@ function applySubView(viewName, subName) {
   const validSubs = nav
     ? Array.from(nav.querySelectorAll('.sub-tab-btn')).map((b) => b.dataset.subTarget)
     : [];
-  const target = validSubs.includes(subName) ? subName : validSubs[0] || fallback;
+  const normalizedSub = viewName === 'markets' && subName === 'macro' ? 'charts' : subName;
+  const target = validSubs.includes(normalizedSub) ? normalizedSub : validSubs[0] || fallback;
   if (!state.settings.subViews) state.settings.subViews = { ...DEFAULT_SETTINGS.subViews };
   state.settings.subViews[viewName] = target;
 
@@ -12568,11 +12658,12 @@ function switchSubView(viewName, subName) {
       renderShanghai();
       window.BullionIntel?.renderGlobalSub?.();
     } else if (subName === 'charts') {
-      requestAnimationFrame(() => window.BullionIntel?.renderDeepChartsSub?.());
-    } else if (subName === 'macro') {
       renderMacroStrip();
       renderFeedHealth();
       window.BullionIntel?.renderTickTrust?.();
+      requestAnimationFrame(() => window.BullionIntel?.renderDeepChartsSub?.());
+    } else if (subName === 'news') {
+      renderOutlook();
     }
   } else if (viewName === 'outlook') {
     renderOutlook();
@@ -13071,8 +13162,33 @@ function wireEvents() {
     const btn = e.target.closest('.news-topic-chip');
     if (!btn) return;
     state.settings.newsTopic = btn.dataset.topic || 'all';
+    state.newsVisibleLimit = 25;
     renderOutlook();
     savePersistedState();
+  });
+  document.getElementById('news-search-input')?.addEventListener('input', (e) => {
+    state.newsSearchQuery = e.target.value || '';
+    state.newsVisibleLimit = 25;
+    renderOutlook();
+  });
+  document.getElementById('btn-news-search-clear')?.addEventListener('click', () => {
+    state.newsSearchQuery = '';
+    state.newsVisibleLimit = 25;
+    const inp = document.getElementById('news-search-input');
+    if (inp) inp.value = '';
+    renderOutlook();
+  });
+  document.getElementById('btn-news-more')?.addEventListener('click', () => {
+    state.newsVisibleLimit = Math.min(100, (state.newsVisibleLimit || 25) + 25);
+    renderOutlook();
+  });
+  document.getElementById('btn-news-all')?.addEventListener('click', () => {
+    state.newsVisibleLimit = 100;
+    renderOutlook();
+  });
+  document.getElementById('btn-news-collapse')?.addEventListener('click', () => {
+    state.newsVisibleLimit = 25;
+    renderOutlook();
   });
   document.getElementById('phys-grid')?.addEventListener('click', (e) => {
     const applyBtn = e.target.closest('[data-phys-apply]');
@@ -13634,7 +13750,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 56,
+      version: 58,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
