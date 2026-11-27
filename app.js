@@ -8668,7 +8668,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=58', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=59', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -9862,7 +9862,7 @@ function renderWorldSpacePulse(res) {
   const sPts = Math.round((wsp.silverDynamicBoost || 0) * 100);
   const fmtPts = (p) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p)} pts`;
   const ev = wsp.nextEvent;
-  const evVal = ev ? `${ev.daysUntil}d · ${ev.title.slice(0, 20)}` : 'Normal Calendar';
+  const evVal = ev ? `${ev.daysUntil}d · ${ev.title}` : 'Normal Calendar';
   const evSub = ev ? `${ev.date} · High-volatility event proximity` : 'No imminent Fed/CPI/COMEX shock today';
 
   const liveMoveStr = `Au ${wsp.liveGoldPct >= 0 ? '+' : '−'}${Math.abs(wsp.liveGoldPct).toFixed(2)}% · Ag ${wsp.liveSilverPct >= 0 ? '+' : '−'}${Math.abs(wsp.liveSilverPct).toFixed(2)}%`;
@@ -10630,7 +10630,7 @@ function renderOutlook() {
               <li class="news-item">
                 ${titleHtml}
                 <div class="news-meta">
-                  <span>${escapeHtml(h.source || 'News')} · ${escapeHtml(h.driverLabel || 'Market')}${clusterBadge}</span>
+                  <span>${escapeHtml(h.source || 'News')} · <span class="news-driver-tag">${escapeHtml(h.driverLabel || 'Market')}</span>${clusterBadge ? `<span class="news-cluster-tag">${escapeHtml(clusterBadge)}</span>` : ''}</span>
                   <div class="news-pills-wrap">
                     <span class="news-topic-pill">${escapeHtml(h._topic.topicLabel)}</span>
                     <span class="news-impact-pill ${impCls}" title="Forecast price impact on Gold (Au) and Silver (Ag)">${escapeHtml(impTxt)}</span>
@@ -13750,7 +13750,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 58,
+      version: 59,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),

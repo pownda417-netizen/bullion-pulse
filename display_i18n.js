@@ -124,7 +124,8 @@
   function showToast(msg) {
     const el = document.getElementById('display-toast');
     if (!el) return;
-    el.textContent = msg;
+    const lang = B()?.state?.settings?.language || 'en';
+    el.textContent = lang === 'en' ? msg : translateString(msg, lang);
     el.hidden = false;
     el.classList.add('show');
     if (ui.toastTimer) clearTimeout(ui.toastTimer);

@@ -1330,7 +1330,19 @@
     [
       /^(?:(.+?) · )?Open ([^·]+) · High ([^·]+) · Low ([^·]+)(?: · Close ([^·]+))?(?: · Move ([^·]+))?(?: · Swing (.+))?$/,
       (m, l) => {
-        const pre = m[1] ? `${m[1]} · ` : '';
+        const WD = {
+          Mon: { th: 'จ.', lo: 'ຈັນ', es: 'Lun', zh: '周一', ja: '月', hi: 'सोम' },
+          Tue: { th: 'อ.', lo: 'ອັງຄານ', es: 'Mar', zh: '周二', ja: '火', hi: 'मंगल' },
+          Wed: { th: 'พ.', lo: 'ພຸດ', es: 'Mié', zh: '周三', ja: '水', hi: 'बुध' },
+          Thu: { th: 'พฤ.', lo: 'ພະຫັດ', es: 'Jue', zh: '周四', ja: '木', hi: 'गुरु' },
+          Fri: { th: 'ศ.', lo: 'ສຸກ', es: 'Vie', zh: '周五', ja: '金', hi: 'शुक्र' },
+          Sat: { th: 'ส.', lo: 'ເສົາ', es: 'Sáb', zh: '周六', ja: '土', hi: 'शनि' },
+          Sun: { th: 'อา.', lo: 'ອາທິດ', es: 'Dom', zh: '周日', ja: '日', hi: 'रवि' },
+        };
+        const preTxt = m[1]
+          ? m[1].replace(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/, (w) => WD[w]?.[l] || w)
+          : '';
+        const pre = preTxt ? `${preTxt} · ` : '';
         const cl = m[5]
           ? ({
               th: ` · ปิด ${m[5]}`, lo: ` · ປິດ ${m[5]}`, es: ` · Cierre ${m[5]}`,
@@ -1728,12 +1740,12 @@
     [
       /^Right now, Gold looks (.+?) and Silver looks (.+?) across (\d+) recent news stories\. Biggest factors today: (.+?) and (.+?)\./,
       (m, l) => ({
-        th: `ตอนนี้ทองคำมีแนวโน้ม${ex(m[1], l)} และเงินมีแนวโน้ม${ex(m[2], l)} จากข่าวล่าสุด ${m[3]} ข่าว ปัจจัยหลักวันนี้คือ ${ex(m[4], l)} และ ${ex(m[5], l)} — ดูรายละเอียดตัวเลขด้านล่างได้เลย`,
-        lo: `ຕອນນີ້ຄຳມີແນວໂນ້ມ${ex(m[1], l)} ແລະ ເງິນມີແນວໂນ້ມ${ex(m[2], l)} ຈາກຂ່າວຫຼ້າສຸດ ${m[3]} ຂ່າວ ປັດໄຈຫຼັກມື້ນີ້ແມ່ນ ${ex(m[4], l)} ແລະ ${ex(m[5], l)}`,
+        th: `ตอนนี้ทองคำมีแนวโน้ม ${ex(m[1], l)} และเงินมีแนวโน้ม ${ex(m[2], l)} จากข่าวล่าสุด ${m[3]} ข่าว ปัจจัยหลักวันนี้คือ ${ex(m[4], l)} และ ${ex(m[5], l)} — ดูรายละเอียดตัวเลขด้านล่างได้เลย`,
+        lo: `ຕອນນີ້ຄຳມີແນວໂນ້ມ ${ex(m[1], l)} ແລະ ເງິນມີແນວໂນ້ມ ${ex(m[2], l)} ຈາກຂ່າວຫຼ້າສຸດ ${m[3]} ຂ່າວ ປັດໄຈຫຼັກມື້ນີ້ແມ່ນ ${ex(m[4], l)} ແລະ ${ex(m[5], l)}`,
         es: `Ahora el oro se ve ${ex(m[1], l)} y la plata ${ex(m[2], l)} según ${m[3]} noticias recientes. Factores clave hoy: ${ex(m[4], l)} y ${ex(m[5], l)}.`,
-        zh: `综合近期 ${m[3]} 条市场资讯，当前黄金整体偏${ex(m[1], l)}、白银整体偏${ex(m[2], l)}。今日核心影响因素：${ex(m[4], l)}与${ex(m[5], l)}。`,
-        ja: `直近${m[3]}件のニュースから、現在は金・銀ともに${ex(m[1], l)}基調です。本日の主因は「${ex(m[4], l)}」と「${ex(m[5], l)}」です。`,
-        hi: `ताज़ा ${m[3]} खबरों के आधार पर अभी सोना और चांदी ${ex(m[1], l)} दिख रहे हैं। आज के मुख्य कारक: ${ex(m[4], l)} और ${ex(m[5], l)}।`,
+        zh: `综合近期 ${m[3]} 条市场资讯，当前黄金整体${ex(m[1], l)}、白银整体${ex(m[2], l)}。今日核心影响因素：${ex(m[4], l)}与${ex(m[5], l)}。`,
+        ja: `直近${m[3]}件のニュースから、現在は金が${ex(m[1], l)}、銀が${ex(m[2], l)}基調です。本日の主因は「${ex(m[4], l)}」と「${ex(m[5], l)}」です。`,
+        hi: `ताज़ा ${m[3]} खबरों के आधार पर अभी सोना ${ex(m[1], l)} और चांदी ${ex(m[2], l)} दिख रही है। आज के मुख्य कारक: ${ex(m[4], l)} और ${ex(m[5], l)}।`,
       })[l],
     ],
 
@@ -1795,10 +1807,10 @@
       },
     ],
     [
-      /^Watch · (\d+d)$/,
+      /^Watch · (\d+)d$/,
       (m, l) => ({
-        th: `จับตา · อีก ${m[1]}`, lo: `ຈັບຕາ · ອີກ ${m[1]}`, es: `Atento · ${m[1]}`,
-        zh: `关注 · ${m[1]}后`, ja: `注目・あと${m[1]}`, hi: `नज़र रखें · ${m[1]}`,
+        th: `จับตา · อีก ${m[1]} วัน`, lo: `ຈັບຕາ · ອີກ ${m[1]} ມື້`, es: `Atento · ${m[1]}d`,
+        zh: `关注 · ${m[1]}天后`, ja: `注目・あと${m[1]}日`, hi: `नज़र रखें · ${m[1]} दिन`,
       })[l],
     ],
     [
@@ -1869,10 +1881,17 @@
     ],
     [
       /^Copper (.+) · (.+)$/,
-      (m, l) => ({
-        th: `ทองแดง ${m[1]} · ${m[2]}`, lo: `ທອງແດງ ${m[1]} · ${m[2]}`, es: `Cobre ${m[1]} · ${m[2]}`,
-        zh: `铜 ${m[1]} · ${m[2]}`, ja: `銅 ${m[1]}・${m[2]}`, hi: `तांबा ${m[1]} · ${m[2]}`,
-      })[l],
+      (m, l) => {
+        const p2 = m[2].replace(/^Platinum\b/, {
+          th: 'แพลทินัม', lo: 'ແພລທິນຳ', es: 'Platino', zh: '铂金', ja: 'プラチナ', hi: 'प्लैटिनम',
+        }[l] || 'Platinum').replace(/^Yen\b/, {
+          th: 'เยน', lo: 'ເຢນ', es: 'Yen', zh: '日元', ja: '円', hi: 'येन',
+        }[l] || 'Yen');
+        return ({
+          th: `ทองแดง ${m[1]} · ${p2}`, lo: `ທອງແດງ ${m[1]} · ${p2}`, es: `Cobre ${m[1]} · ${p2}`,
+          zh: `铜 ${m[1]} · ${p2}`, ja: `銅 ${m[1]}・${p2}`, hi: `तांबा ${m[1]} · ${p2}`,
+        })[l];
+      },
     ],
     // Outlook Self-Check & News Filter counters
     [
@@ -2349,8 +2368,8 @@
     'AI Data Center CapEx Slowdown': ['บิ๊กเทคชะลอลงทุนศูนย์ข้อมูล AI', 'ບິກເທັກຊະລໍລົງທຶນສູນຂໍ້ມູນ AI', 'Desaceleración CapEx Centros IA', 'AI数据中心投资放缓', 'AIデータセンター投資減速', 'AI डेटा सेंटर CapEx मंदी'],
     'Big Tech AI Compute & Silicon': ['กลุ่มชิปและศูนย์ข้อมูล AI (บิ๊กเทค)', 'ກຸ່ມຊິບ ແລະ ສູນຂໍ້ມູນ AI', 'Cómputo y Silicio IA Big Tech', '科技巨头AI算力与芯片', 'ビッグテックAI半導体・計算基盤', 'बिग टेक AI कंप्यूट व सिलिकॉन'],
     'Power Room, Switchgear & Grid': ['ระบบไฟฟ้า สวิตช์เกียร์ และกริดพลังงาน', 'ລະບົບໄຟຟ້າ ສະວິດເກຍ ແລະ ກຣິດ', 'Energía, Tableros y Red Eléctrica', '机房配电、开关柜与电网建设', '電源設備・スイッチギア・送電網', 'पावर रूम, स्विचगियर व ग्रिड'],
-    'Silver · Primary AI Power Metal': ['เงิน (Silver) · โลหะหลักระบบไฟฟ้า AI', 'ເງິນ · ໂລຫະຫຼັກລະບົບໄຟຟ້າ AI', 'Plata · Metal Principal de Energía IA', '白银 · AI电力与散热核心金属', '銀 · AI電力インフラの主力金属', 'चांदी · प्रमुख AI पावर धातु'],
-    'Gold · Supporting AI Tech Metal': ['ทองคำ (Gold) · โลหะเสริมชิปและคอนเนกเตอร์ AI', 'ຄຳ · ໂລຫະເສີມຊິບ AI', 'Oro · Metal Tecnológico de Apoyo IA', '黄金 · AI芯片键合与连接器辅助金属', '金 · AIチップ配線・端子向け補助金属', 'सोना · सहायक AI टेक धातु'],
+    'Silver · Primary AI Power Metal': ['เงิน · โลหะหลักระบบไฟฟ้า AI', 'ເງິນ · ໂລຫະຫຼັກລະບົບໄຟຟ້າ AI', 'Plata · Metal Principal de Energía IA', '白银 · AI电力与散热核心金属', '銀 · AI電力インフラの主力金属', 'चांदी · प्रमुख AI पावर धातु'],
+    'Gold · Supporting AI Tech Metal': ['ทองคำ · โลหะเสริมชิปและคอนเนกเตอร์ AI', 'ຄຳ · ໂລຫະເສີມຊິບ AI', 'Oro · Metal Tecnológico de Apoyo IA', '黄金 · AI芯片键合与连接器辅助金属', '金 · AIチップ配線・端子向け補助金属', 'सोना · सहायक AI टेक धातु'],
     'Live Signal': ['สัญญาณสด', 'ສັນຍານສົດ', 'Señal en Vivo', '实时信号', 'ライブ信号', 'लाइव संकेत'],
     'Simulate +GW Surge': ['จำลองเร่งสร้าง +GW', 'ຈຳລອງເລັ່ງສ້າງ +GW', 'Simular Auge +GW', '模拟+GW暴增', '+GW急増を試算', '+GW उछाल सिमुलेट'],
     'Simulate CapEx Pause': ['จำลองชะลอลงทุน', 'ຈຳລອງຊະລໍລົງທຶນ', 'Simular Pausa CapEx', '模拟投资放缓', '投資減速を試算', 'CapEx विराम सिमुलेट'],
@@ -2361,12 +2380,1089 @@
     'US AI, Tesla & Silicon': ['AI สหรัฐฯ, Tesla และกลุ่มชิป', 'AI ສະຫະລັດ, Tesla ແລະ ຊິບ', 'IA EE.UU., Tesla y Silicio', '美国AI、特斯拉与芯片', '米国AI・テスラ・半導体', 'US AI, Tesla और सिलिकॉन'],
     'China AI & EV Giants (BYD/Alibaba)': ['ยักษ์ใหญ่ AI และรถ EV จีน (BYD/Alibaba)', 'ຍັກໃຫຍ່ AI ແລະ ລົດ EV ຈີນ (BYD/Alibaba)', 'Gigantes Chinos de IA y EV (BYD/Alibaba)', '中国AI与电动车巨头（比亚迪/阿里）', '中国AI・EV大手（BYD・アリババ等）', 'चीन AI व EV दिग्गज (BYD/Alibaba)'],
     'World Tech: EU, Japan, Korea, Malaysia, Canada & LatAm': ['เทคยักษ์ใหญ่โลก: ยุโรป ญี่ปุ่น เกาหลี มาเลเซีย แคนาดา และละตินอเมริกา', 'ເທັກໂນໂລຢີໂລກ: ຢຸໂຣບ ຍີ່ປຸ່ນ ເກົາຫຼີ ມາເລເຊຍ ການາດາ ແລະ ອາເມລິກາໃຕ້', 'Gigantes Globales: Europa, Japón, Corea, Malasia, Canadá y LatAm', '全球科技巨头：欧洲、日本、韩国、马来西亚、加拿大与拉美', '世界テック大手：欧州・日本・韓国・マレーシア・カナダ・中南米', 'वैश्विक टेक दिग्गज: यूरोप, जापान, कोरिया, मलेशिया, कनाडा व लैटिन अमेरिका'],
-    'Silver · Primary AI, EV & Space Metal': ['เงิน (Silver) · โลหะหลัก AI รถ EV และอวกาศ', 'ເງິນ · ໂລຫະຫຼັກ AI ລົດ EV ແລະ ອະວະກາດ', 'Plata · Metal Clave de IA, EV y Espacio', '白银 · AI、电动车与太空核心金属', '銀 · AI・EV・宇宙の主力金属', 'चांदी · प्रमुख AI, EV व अंतरिक्ष धातु'],
-    'Gold · Supporting AI & EV Tech Metal': ['ทองคำ (Gold) · โลหะเสริมชิป AI และรถ EV', 'ຄຳ · ໂລຫະເສີມຊິບ AI ແລະ ລົດ EV', 'Oro · Metal Tecnológico de Apoyo IA y EV', '黄金 · AI与电动车芯片辅助金属', '金 · AI・EV向け高信頼補助金属', 'सोना · सहायक AI व EV टेक धातु'],
+    'Silver · Primary AI, EV & Space Metal': ['เงิน · โลหะหลัก AI รถ EV และอวกาศ', 'ເງິນ · ໂລຫະຫຼັກ AI ລົດ EV ແລະ ອະວະກາດ', 'Plata · Metal Clave de IA, EV y Espacio', '白银 · AI、电动车与太空核心金属', '銀 · AI・EV・宇宙の主力金属', 'चांदी · प्रमुख AI, EV व अंतरिक्ष धातु'],
+    'Gold · Supporting AI & EV Tech Metal': ['ทองคำ · โลหะเสริมชิป AI และรถ EV', 'ຄຳ · ໂລຫະເສີມຊິບ AI ແລະ ລົດ EV', 'Oro · Metal Tecnológico de Apoyo IA y EV', '黄金 · AI与电动车芯片辅助金属', '金 · AI・EV向け高信頼補助金属', 'सोना · सहायक AI व EV टेक धातु'],
     'Show +25 More': ['แสดงเพิ่ม +25 ข่าว', 'ສະແດງເພີ່ມ +25 ຂ່າວ', 'Mostrar +25 Más', '再加载 +25 篇', 'さらに25件表示', '+25 और दिखाएँ'],
     'Show Top 25': ['ย่อเหลือ 25 ข่าวแรก', 'ຫຍໍ້ເຫຼືອ 25 ຂ່າວ', 'Mostrar Top 25', '收起至前25篇', '上位25件に折りたたむ', 'शीर्ष 25 दिखाएँ'],
     'Clear': ['ล้าง', 'ລ້າງ', 'Limpiar', '清除', 'クリア', 'साफ़ करें'],
     'News': ['ข่าวสาร', 'ຂ່າວສານ', 'Noticias', '新闻情报', 'ニュース', 'समाचार'],
-    'Odds': ['โอกาส & ทดสอบ', 'ໂອກາດ', 'Probabilidades', '概率与复盘', '確率・検証', 'संभावनाएँ'],
+    'Odds': ['โอกาส', 'ໂອກາດ', 'Probabilidades', '概率', '確率', 'संभावनाएँ'],
+    // v59 Complete 7-Language Polish (Static HTML, Futures Strip, 30D Roadmap, World & Space Pulse,
+    // Physical Premiums, Hidden Market Edges 6 Signals, Planetary AI/EV Race, 100-Article News & Accuracy)
+    'Futures': ['ฟิวเจอร์ส', 'ຟິວເຈີ', 'Futuros', '期货', '先物', 'फ्यूचर्स'],
+    'vs Spot —': ['เทียบสปอต —', 'ທຽບສະປອດ —', 'vs Spot —', '对比现货 —', '現物比 —', 'स्पॉट बनाम —'],
+    'Tight Supply ↑': ['ของเริ่มขาด ↑', 'ສິນຄ້າຂາດ ↑', 'Oferta Ajustada ↑', '供应偏紧 ↑', '供給逼迫 ↑', 'आपूर्ति तंग ↑'],
+    'Plentiful Supply': ['อุปทานเพียงพอ', 'ອຸປະທານພຽງພໍ', 'Oferta Abundante', '供应充足', '供給潤沢', 'पर्याप्त आपूर्ति'],
+    '30-Day Model': ['โมเดล 30 วัน', 'ໂມເດວ 30 ມື້', 'Modelo 30 Días', '30天模型', '30日モデル', '30-दिन मॉडल'],
+    'Live Pulse': ['ชีพจรสด', 'ຊີບພະຈອນສົດ', 'Pulso en Vivo', '实时脉搏', 'ライブ脈拍', 'लाइव पल्स'],
+    'Dealer Spreads': ['ส่วนต่างร้านค้า', 'ສ່ວນຕ່າງຮ້ານຄ້າ', 'Primas de Distribuidor', '零售溢价', 'ディーラー価格差', 'डीलर स्प्रेड'],
+    'Show All': ['แสดงทั้งหมด', 'ສະແດງທັງໝົດ', 'Mostrar Todo', '显示全部', 'すべて表示', 'सभी दिखाएँ'],
+    '30D': ['30 วัน', '30 ມື້', '30D', '30天', '30日', '30दिन'],
+    'Daily': ['รายวัน', 'ລາຍວັນ', 'Diario', '每日', '日次', 'दैनिक'],
+    '7D': ['7 วัน', '7 ມື້', '7D', '7天', '7日', '7दिन'],
+    'Share': ['แชร์', 'ແຊຣ໌', 'Compartir', '分享', '共有', 'शेयर'],
+    'iPhone (Safari)': ['iPhone (Safari)', 'iPhone (Safari)', 'iPhone (Safari)', 'iPhone（Safari）', 'iPhone（Safari）', 'iPhone (Safari)'],
+    'Android (Chrome)': ['Android (Chrome)', 'Android (Chrome)', 'Android (Chrome)', 'Android（Chrome）', 'Android（Chrome）', 'Android (Chrome)'],
+    'Settings → Secrets and variables → Actions': ['Settings → Secrets and variables → Actions', 'Settings → Secrets and variables → Actions', 'Settings → Secrets and variables → Actions', '设置 → Secrets and variables → Actions', '設定 → Secrets and variables → Actions', 'Settings → Secrets and variables → Actions'],
+    ', add (and optionally for AI-written daily briefings):': [' จากนั้นเพิ่มค่า (และเพิ่มคีย์ AI สำหรับสรุปข่าวรายวันได้ถ้าต้องการ):', ' ແລ້ວເພີ່ມຄ່າ (ແລະ ຄີ AI ຖ້າຕ້ອງການ):', ', añade (y opcionalmente para resúmenes diarios con IA):', '，添加以下变量（可选填 AI 每日播报密钥）：', ' で以下を追加（AI日報生成キーは任意）：', ', ये जोड़ें (और AI दैनिक ब्रीफिंग हेतु वैकल्पिक कुंजी):'],
+    'Spot prices, Futures, the live Precision Chart & key ratios stay open on the left while you browse Global & Maps, Deep Charts, Outlook, Trade, or Stack on this side.': ['ราคาสปอต ฟิวเจอร์ส กราฟคาดการณ์แม่นยำ และอัตราส่วนสำคัญจะตรึงอยู่ด้านซ้าย ขณะที่คุณเปิดดูตลาดโลก กราฟเชิงลึก แนวโน้ม ซื้อขาย หรือคลังในฝั่งนี้', 'ລາຄາສະປອດ ຟິວເຈີ ກຣາຟ ແລະ ອັດຕາສ່ວນສຳຄັນຈະຕຶງຢູ່ດ້ານຊ້າຍ ຂະນະທີ່ເບິ່ງໜ້າອື່ນໃນຝັ່ງນີ້', 'Los precios spot, futuros, el gráfico de precisión y ratios permanecen fijos a la izquierda mientras exploras mapas, pronósticos o cartera aquí.', '左侧栏将持续固定现货、期货、精准预测图表与核心比率，右侧可自由浏览全球地图、深度图表、展望、交易或持仓。', '左ペインにスポット・先物・高精度予測チャートと主要比率を固定したまま、右ペインで世界マップ・見通し・取引・保有資産を閲覧できます。', 'स्पॉट, फ्यूचर्स, प्रिसिज़न चार्ट और मुख्य अनुपात बाईं ओर पिन रहते हैं जबकि आप दाईं ओर मैप्स, आउटलुक, ट्रेड या स्टैक देख सकते हैं।'],
+    '22 global feeds across US/China/EU/JP/KR/MY/CA/LatAm AI & EVs, central banks, vaults, solar silver, retail demand, geopolitics & space': ['22 แหล่งข่าวทั่วโลก: AI และรถ EV (สหรัฐฯ/จีน/ยุโรป/ญี่ปุ่น/เกาหลี/มาเลเซีย/แคนาดา/ละตินอเมริกา) ธนาคารกลาง คลังโลหะ โซลาร์ รายย่อย ภูมิรัฐศาสตร์ และอวกาศ', '22 ແຫຼ່ງຂ່າວທົ່ວໂລກ: AI ແລະ ລົດ EV ທະນາຄານກາງ ຄັງໂລຫະ ໂຊລາ ພູມລັດຖະສາດ ແລະ ອະວະກາດ', '22 fuentes globales: IA y EV (EE.UU./China/UE/Japón/Corea/Malasia/Canadá/LatAm), bancos centrales, bóvedas, plata solar, geopolítica y espacio', '汇总22路全球情报源：中美欧日韩马加拉美AI与电动车、央行、金库、光伏用银、零售需求、地缘与太空', '米中欧日韓馬加中南米AI・EV、中央銀行、金庫、太陽光銀、小売需要、地政学・宇宙を網羅する22国際フィード', 'US/चीन/EU/जापान/कोरिया/मलेशिया/कनाडा/लैटिन अमेरिका AI व EV, केंद्रीय बैंक, वॉल्ट, सोलर चांदी, भू-राजनीति व अंतरिक्ष के 22 वैश्विक फ़ीड'],
+    '36 live global tech/EV/grid giants across US, China, Europe, Japan, South Korea, Malaysia, Canada, South America & India + OpenAI, Anthropic, SpaceX & Mistral news': ['36 ยักษ์ใหญ่เทค/รถ EV/โครงข่ายไฟฟ้าสดทั่วโลก (สหรัฐฯ จีน ยุโรป ญี่ปุ่น เกาหลี มาเลเซีย แคนาดา อเมริกาใต้ อินเดีย) + ข่าว OpenAI, Anthropic, SpaceX และ Mistral', '36 ບໍລິສັດເທັກ/EV/ໄຟຟ້າທົ່ວໂລກ + ຂ່າວ OpenAI, Anthropic, SpaceX ແລະ Mistral', '36 gigantes globales de IA/EV/redes (EE.UU., China, Europa, Japón, Corea, Malasia, Canadá, Sudamérica e India) + noticias de OpenAI, Anthropic, SpaceX y Mistral', '追踪美中欧日韩马加南美印度36家AI/电动车/电网巨头实时行情 + OpenAI、Anthropic、SpaceX与Mistral动态', '米中欧日韓馬加南米インドの36社のAI・EV・電力大手＋OpenAI・Anthropic・SpaceX・Mistralニュースを追跡', 'US, चीन, यूरोप, जापान, कोरिया, मलेशिया, कनाडा, दक्षिण अमेरिका व भारत के 36 लाइव टेक/EV/ग्रिड दिग्गज + OpenAI, Anthropic, SpaceX व Mistral समाचार'],
+    'Search up to 100 articles (Tesla, BYD, SpaceX, OpenAI, Anthropic, Malaysia, Samsung, Fed…)': ['ค้นหาได้สูงสุด 100 ข่าว (Tesla, BYD, SpaceX, OpenAI, Anthropic, Malaysia, Samsung, Fed…)', 'ຄົ້ນຫາໄດ້ສູງສຸດ 100 ຂ່າວ (Tesla, BYD, SpaceX, OpenAI, Anthropic, Malaysia, Samsung, Fed…)', 'Buscar en hasta 100 artículos (Tesla, BYD, SpaceX, OpenAI, Anthropic, Malasia, Samsung, Fed…)', '搜索最多100篇文章（Tesla、BYD、SpaceX、OpenAI、Anthropic、马来西亚、三星、美联储…）', '最大100件の記事を検索（Tesla、BYD、SpaceX、OpenAI、Anthropic、マレーシア、Samsung、FRB…）', '100 लेखों में खोजें (Tesla, BYD, SpaceX, OpenAI, Anthropic, Malaysia, Samsung, Fed…)'],
+    'Checking live NOAA solar/geomagnetic weather and breaking global news velocity…': ['กำลังตรวจสภาพอากาศอวกาศจาก NOAA และความเร็วข่าวด่วนทั่วโลก…', 'ກຳລັງກວດສະພາບອາກາດອະວະກາດ NOAA ແລະ ຂ່າວດ່ວນທົ່ວໂລກ…', 'Comprobando clima espacial NOAA y velocidad de noticias globales…', '正在检测 NOAA 实时太阳风暴与全球突发新闻速率…', 'NOAA宇宙天気と世界の速報ニュース速度を確認中…', 'लाइव NOAA सौर मौसम और वैश्विक ब्रेकिंग न्यूज़ गति जाँची जा रही है…'],
+    'Scanning recent sessions for price gaps…': ['กำลังสแกนช่วงตลาดล่าสุดเพื่อหาช่องว่างราคา (Gap)…', 'ກຳລັງສະແກນຫາຊ່ອງຫວ່າງລາຄາ (Gap)…', 'Escaneando sesiones recientes en busca de brechas de precio…', '正在扫描近期交易时段的价格缺口…', '直近セッションの価格ギャップをスキャン中…', 'प्राइस गैप के लिए हालिया सत्र स्कैन किए जा रहे हैं…'],
+    'Gap Zone —': ['โซน Gap —', 'ໂຊນ Gap —', 'Zona Gap —', '缺口区间 —', 'ギャップ帯 —', 'गैप ज़ोन —'],
+    'No open gap right now — price is trading smoothly without an unfilled gap magnet.': ['ไม่มีช่องว่างราคาค้างอยู่ตอนนี้ — ราคาเคลื่อนไหวต่อเนื่องโดยไม่มีแรงดึงปิด Gap', 'ບໍ່ມີຊ່ອງຫວ່າງລາຄາຄ້າງຢູ່ຕອນນີ້ — ລາຄາເຄື່ອນໄຫວປົກກະຕິ', 'Sin brechas abiertas ahora — el precio opera de forma fluida sin imán de relleno.', '当前无未回补缺口——价格运行平稳，暂无缺口回补引力。', '現在未埋めのギャップはありません — 価格は滑らかに推移しています。', 'अभी कोई खुला गैप नहीं है — कीमत बिना गैप मैग्नेट के सुचारु चल रही है।'],
+    'Scanning 6 exclusive market-edge signals…': ['กำลังสแกนสัญญาณลับจับทิศตลาดทั้ง 6 เครื่องมือ…', 'ກຳລັງສະແກນ 6 ສັນຍານລັບຈັບທິດຕະຫຼາດ…', 'Escaneando 6 señales exclusivas del mercado…', '正在扫描6大独家市场优势信号…', '6つの独自市場エッジシグナルをスキャン中…', '6 विशेष बाज़ार-एज संकेत स्कैन किए जा रहे हैं…'],
+    'Tracking hyperscale AI CapEx, power-room switchgear & structural silver/gold supply tightness…': ['กำลังติดตามงบลงทุน AI ยักษ์ใหญ่ ระบบไฟฟ้าสวิตช์เกียร์ และภาวะอุปทานเงิน/ทองตึงตัว…', 'ກຳລັງຕິດຕາມງົບລົງທຶນ AI ລະບົບໄຟຟ້າ ແລະ ຄວາມຕຶງຕົວຂອງເງິນ/ຄຳ…', 'Siguiendo CapEx de IA hiperescala, tableros eléctricos y escasez estructural de plata y oro…', '正在追踪超大规模AI资本开支、机房开关柜及白银/黄金结构性供应紧缺…', 'ハイパースケールAI投資・電源スイッチギア・銀/金の構造的逼迫を追跡中…', 'हाइपरस्केल AI CapEx, पावर स्विचगियर व चांदी/सोना आपूर्ति तंगी ट्रैक की जा रही है…'],
+    'S&P 500 / Gold': ['หุ้น S&P 500 / ทองคำ', 'S&P 500 / ຄຳ', 'S&P 500 / Oro', '标普500 / 黄金', 'S&P 500 / 金', 'S&P 500 / सोना'],
+    '— oz Gold': ['— ออนซ์ทองคำ', '— ອອນສ໌ຄຳ', '— oz Oro', '— 盎司黄金', '— oz 金', '— औंस सोना'],
+    '— pure oz': ['— ออนซ์บริสุทธิ์', '— ອອນສ໌ບໍລິສຸດ', '— oz puras', '— 纯盎司', '— 純oz', '— शुद्ध औंस'],
+    '— oz': ['— ออนซ์', '— ອອນສ໌', '— oz', '— 盎司', '— oz', '— औंस'],
+    // 30-Day Forecast Roadmap labels
+    'Gold · 30-Day Path': ['ทองคำ · เส้นทาง 30 วัน', 'ຄຳ · ເສັ້ນທາງ 30 ມື້', 'Oro · Ruta 30 Días', '黄金 · 30天路径', '金 · 30日軌道', 'सोना · 30-दिन पथ'],
+    'Silver · 30-Day Path': ['เงิน · เส้นทาง 30 วัน', 'ເງິນ · ເສັ້ນທາງ 30 ມື້', 'Plata · Ruta 30 Días', '白银 · 30天路径', '銀 · 30日軌道', 'चांदी · 30-दिन पथ'],
+    '4-Model Votes': ['ผลโหวต 4 โมเดล', 'ຜົນໂຫວດ 4 ໂມເດວ', 'Votos 4 Modelos', '4模型投票', '4モデル投票', '4-मॉडल वोट'],
+    'Macro & Vaults': ['มหภาคและคลัง', 'ມະຫາພາກ ແລະ ຄັງ', 'Macro y Bóvedas', '宏观与金库', 'マクロ・在庫', 'मैक्रो व वॉल्ट'],
+    'Lead-Lag': ['สัญญาณนำ', 'ສັນຍານນຳ', 'Adelanto', '领先指标', '先行指標', 'लीड-लैग'],
+    'Hurst & RSI': ['Hurst และ RSI', 'Hurst & RSI', 'Hurst y RSI', 'Hurst与RSI', 'Hurst・RSI', 'Hurst व RSI'],
+    'Seasonal & Twins': ['ฤดูกาลและคู่แฝดอดีต', 'ລະດູການ ແລະ ຄູ່ແຝດ', 'Estacional y Gemelos', '季节与历史相似', '季節性・類似期', 'मौसमी व इतिहास'],
+    'Day 7': ['วันที่ 7', 'ມື້ທີ 7', 'Día 7', '第7天', '7日目', 'दिन 7'],
+    'Day 14': ['วันที่ 14', 'ມື້ທີ 14', 'Día 14', '第14天', '14日目', 'दिन 14'],
+    'Day 21': ['วันที่ 21', 'ມື້ທີ 21', 'Día 21', '第21天', '21日目', 'दिन 21'],
+    'Day 30': ['วันที่ 30', 'ມື້ທີ 30', 'Día 30', '第30天', '30日目', 'दिन 30'],
+    'Strong Trend': ['เทรนด์แข็งแกร่ง', 'ເທຣນແຂງແກ່ງ', 'Tendencia Fuerte', '强趋势', '強いトレンド', 'मजबूत ट्रेंड'],
+    'Trending': ['มีเทรนด์ชัด', 'ມີເທຣນຊັດ', 'En Tendencia', '趋势延续', 'トレンド相場', 'ट्रेंडिंग'],
+    'Strong Snap-Back': ['ดีดกลับแรง', 'ດີດກັບແຮງ', 'Rebote Fuerte', '强均值回归', '強い自律反発', 'मजबूत वापसी'],
+    'Mean-Reverting': ['แกว่งกลับค่าเฉลี่ย', 'ກັບສູ່ຄ່າສະເລ່ຍ', 'Reversión a la Media', '均值回归', '平均回帰', 'मीन-रिवर्टिंग'],
+    'Lead Signals Bullish ↑': ['สัญญาณนำเป็นบวก ↑', 'ສັນຍານນຳເປັນບວກ ↑', 'Señales Líderes Alcistas ↑', '领先指标看涨 ↑', '先行指標は強気 ↑', 'लीड संकेत तेज़ी ↑'],
+    'Lead Signals Soft ↓': ['สัญญาณนำอ่อนแรง ↓', 'ສັນຍານນຳອ່ອນແຮງ ↓', 'Señales Líderes Débiles ↓', '领先指标偏弱 ↓', '先行指標は弱気 ↓', 'लीड संकेत नरम ↓'],
+    'Lead Signals Balanced': ['สัญญาณนำสมดุล', 'ສັນຍານນຳສົມດຸນ', 'Señales Líderes Equilibradas', '领先指标均衡', '先行指標は中立', 'लीड संकेत संतुलित'],
+    'State:': ['สภาวะตลาด:', 'ສະພາວະ:', 'Estado:', '状态：', '状態：', 'स्थिति:'],
+    'Lead-Lag:': ['สัญญาณนำ:', 'ສັນຍານນຳ:', 'Adelanto:', '领先信号：', '先行指標：', 'लीड-लैग:'],
+    // World & Space Pulse labels
+    'NOAA Space Weather': ['สภาพอากาศอวกาศ NOAA', 'ສະພາບອາກາດອະວະກາດ NOAA', 'Clima Espacial NOAA', 'NOAA 太空天气', 'NOAA 宇宙天気', 'NOAA अंतरिक्ष मौसम'],
+    'World News Velocity': ['ความเร็วข่าวโลก', 'ຄວາມໄວຂ່າວໂລກ', 'Velocidad Noticias Mundiales', '全球新闻速率', '世界ニュース速度', 'विश्व समाचार गति'],
+    'Next Global Event': ['อีเวนต์โลกถัดไป', 'ເຫດການໂລກຖັດໄປ', 'Próximo Evento Global', '下个全球事件', '次の重要イベント', 'अगला वैश्विक इवेंट'],
+    'Live Forecast Shift': ['แรงขยับคาดการณ์สด', 'ແຮງຂະຫຍັບຄາດຄະເນສົດ', 'Cambio Pronóstico Vivo', '实时预测偏移', 'ライブ予測シフト', 'लाइव पूर्वानुमान बदलाव'],
+    'Quiet (G0)': ['สงบ (G0)', 'ສະຫງົບ (G0)', 'Tranquilo (G0)', '平静 (G0)', '静穏 (G0)', 'शांत (G0)'],
+    'Normal Calendar': ['ปฏิทินปกติ', 'ປະຕິທິນປົກກະຕິ', 'Calendario Normal', '常规日程', '通常カレンダー', 'सामान्य कैलेंडर'],
+    'No imminent Fed/CPI/COMEX shock today': ['ไม่มีนัดประชุมเฟด/CPI/COMEX เร่งด่วนวันนี้', 'ບໍ່ມີເຫດການ Fed/CPI/COMEX ດ່ວນມື້ນີ້', 'Sin choques inminentes de Fed/CPI/COMEX hoy', '今日无紧迫的美联储/CPI/COMEX事件冲击', '本日直近のFRB/CPI/COMEXショックなし', 'आज कोई तत्काल Fed/CPI/COMEX झटका नहीं'],
+    'Monitoring global macro & space feeds': ['กำลังติดตามข่าวเศรษฐกิจโลกและอวกาศ', 'ກຳລັງຕິດຕາມຂ່າວໂລກ ແລະ ອະວະກາດ', 'Monitoreando noticias macro y espaciales', '正在监测全球宏观与太空情报源', '世界マクロ・宇宙フィードを監視中', 'वैश्विक मैक्रो और अंतरिक्ष फ़ीड की निगरानी'],
+    'Calm / Quiet': ['สงบ', 'ສະຫງົບ', 'Calma', '平静', '静穏', 'शांत'],
+    'Active Catalysts': ['มีปัจจัยขับเคลื่อน', 'ມີປັດໄຈຂັບເຄື່ອນ', 'Catalizadores Activos', '催化活跃', '材料活発', 'सक्रिय उत्प्रेरक'],
+    'High-Alert Pulse': ['สัญญาณเฝ้าระวังสูง', 'ສັນຍານເຝົ້າລະວັງສູງ', 'Pulso de Alerta Alta', '高警戒脉冲', '高警戒パルス', 'हाई-अलर्ट पल्स'],
+    'Extreme Catalyst Surge': ['ข่าวแรงและพายุสุริยะพุ่งสูง', 'ຂ່າວແຮງ ແລະ ພາຍຸສຸລິຍະສູງ', 'Auge Extremo de Catalizadores', '极端催化飙升', '極端な材料急増', 'अत्यधिक उत्प्रेरक उछाल'],
+    // Physical Premiums vs Spot & Melt labels
+    'Gold Physical vs. Melt': ['ทองคำจริง เทียบราคาหลอม', 'ຄຳຈິງ ທຽບລາຄາຫຼອມ', 'Oro Físico vs. Fundición', '实物黄金 vs. 熔化价', '現物金 vs 溶解価値', 'भौतिक सोना बनाम मेल्ट'],
+    'Silver Physical vs. Melt': ['เงินจริง เทียบราคาหลอม', 'ເງິນຈິງ ທຽບລາຄາຫຼອມ', 'Plata Física vs. Fundición', '实物白银 vs. 熔化价', '現物銀 vs 溶解価値', 'भौतिक चांदी बनाम मेल्ट'],
+    'Spot / Pure Melt:': ['สปอต / ราคาหลอมบริสุทธิ์:', 'ສະປອດ / ລາຄາຫຼອມ:', 'Spot / Fundición Pura:', '现货 / 纯熔化价：', 'スポット / 純地金：', 'स्पॉट / शुद्ध मेल्ट:'],
+    'Avg Markup:': ['พรีเมียมเฉลี่ย:', 'ພຣີມຽມສະເລ່ຍ:', 'Sobreprecio Prom.:', '平均溢价：', '平均プレミアム：', 'औसत मार्कअप:'],
+    'Squeeze Zone ↑': ['โซนของขาด ↑', 'ໂຊນສິນຄ້າຂາດ ↑', 'Zona de Escasez ↑', '逼空紧缺区 ↑', '逼迫ゾーン ↑', 'किल्लत ज़ोन ↑'],
+    '1 oz Gold Eagle': ['เหรียญทองคำ Gold Eagle 1 ออนซ์', 'ຫຼຽນຄຳ Gold Eagle 1 ອອນສ໌', 'Águila de Oro 1 oz', '1盎司鹰扬金币', '1oz ゴールドイーグル金貨', '1 औंस गोल्ड ईगल सिक्का'],
+    '1 oz Gold Buffalo': ['เหรียญทองคำ Gold Buffalo 1 ออนซ์', 'ຫຼຽນຄຳ Gold Buffalo 1 ອອນສ໌', 'Búfalo de Oro 1 oz', '1盎司水牛金币', '1oz ゴールドバッファロー金貨', '1 औंस गोल्ड बफ़ेलो सिक्का'],
+    '1 oz Gold Bar': ['ทองคำแท่ง 1 ออนซ์', 'ຄຳແທ່ງ 1 ອອນສ໌', 'Lingote de Oro 1 oz', '1盎司金条', '1oz ゴールドバー', '1 औंस गोल्ड बार'],
+    '1 oz Silver Eagle': ['เหรียญเงิน Silver Eagle 1 ออนซ์', 'ຫຼຽນເງິນ Silver Eagle 1 ອອນສ໌', 'Águila de Plata 1 oz', '1盎司鹰扬银币', '1oz シルバーイーグル銀貨', '1 औंस सिल्वर ईगल सिक्का'],
+    '10 oz Silver Bar': ['เงินแท่ง 10 ออนซ์', 'ເງິນແທ່ງ 10 ອອນສ໌', 'Lingote de Plata 10 oz', '10盎司银条', '10oz シルバーバー', '10 औंस सिल्वर बार'],
+    '1 oz Generic Round': ['เหรียญเงินกลมทั่วไป 1 ออนซ์', 'ຫຼຽນເງິນທົ່ວໄປ 1 ອອນສ໌', 'Medalla de Plata 1 oz', '1盎司通用银章', '1oz 汎用銀ラウンド', '1 औंस जेनेरिक सिल्वर राउंड'],
+    'Normal Retail Spread': ['พรีเมียมร้านค้าปกติ', 'ພຣີມຽມຮ້ານຄ້າປົກກະຕິ', 'Prima Minorista Normal', '零售溢价正常', '通常小売スプレッド', 'सामान्य खुदरा स्प्रेड'],
+    'Elevated Demand ↑': ['ความต้องการของจริงสูง ↑', 'ຄວາມຕ້ອງການຂອງຈິງສູງ ↑', 'Demanda Elevada ↑', '实物需求偏高 ↑', '現物需要上昇 ↑', 'उच्च खुदरा मांग ↑'],
+    'Retail Squeeze ↑': ['ของจริงขาดตลาด ↑', 'ຂອງຈິງຂາດຕະຫຼາດ ↑', 'Escasez Minorista ↑', '零售实物紧缺 ↑', '小売現物逼迫 ↑', 'खुदरा किल्लत ↑'],
+    'Paper-Physical Disconnect ↑': ['ราคาจริงแยกตัวจากกระดาษ ↑', 'ລາຄາຈິງແຍກຈາກກະດາດ ↑', 'Desconexión Papel-Físico ↑', '纸面与实物脱节 ↑', '紙と現物の乖離 ↑', 'पेपर-भौतिक विचलन ↑'],
+    'Compressed · Best Buyer Value': ['พรีเมียมต่ำ · จังหวะซื้อคุ้มสุด', 'ພຣີມຽມຕ່ຳ · ຈັງຫວະຊື້ຄຸ້ມ', 'Prima Baja · Mejor Compra', '低溢价 · 绝佳买点', '低プレミアム・買い好機', 'कम मार्कअप · सर्वोत्तम खरीद'],
+    'Low Markup · Buyer Window': ['พรีเมียมต่ำ · จังหวะสะสม', 'ພຣີມຽມຕ່ຳ · ຈັງຫວະສະສົມ', 'Bajo Sobreprecio · Ventana Compra', '低溢价 · 逢低吸纳窗口', '低プレミアム・仕込み好機', 'कम मार्कअप · खरीद अवसर'],
+    'Silver Physical Squeeze ↑': ['เงินจริงขาดตลาด ↑', 'ເງິນຈິງຂາດຕະຫຼາດ ↑', 'Escasez Física de Plata ↑', '实物白银紧缺 ↑', '現物銀逼迫 ↑', 'चांदी भौतिक किल्लत ↑'],
+    'Gold Physical Tightness ↑': ['ทองคำจริงตึงตัว ↑', 'ຄຳຈິງຕຶງຕົວ ↑', 'Tensión Física en Oro ↑', '实物黄金偏紧 ↑', '現物金逼迫 ↑', 'सोना भौतिक तंगी ↑'],
+    'Forecast impact: Neutral (0 pts — normal dealer shelves)': ['ผลต่อคาดการณ์: เป็นกลาง (0 คะแนน — สินค้าร้านค้าปกติ)', 'ຜົນຕໍ່ຄາດຄະເນ: ເປັນກາງ (0 ຄະແນນ)', 'Impacto pronóstico: Neutral (0 pts — inventario normal)', '预测影响：中性（0分 — 零售商库存充足）', '予測影響：中立（0pt — 店頭在庫正常）', 'पूर्वानुमान प्रभाव: तटस्थ (0 अंक — सामान्य स्टॉक)'],
+    // Hidden Market Edges (6 Exclusive Signals) labels
+    'East Accumulating / West Paper Dip ↑': ['ตะวันออกเก็บของจริง / ตะวันตกทุบกระดาษ ↑', 'ຕາເວັນອອກເກັບຂອງ / ຕາເວັນຕົກຂາຍ ↑', 'Este Acumulando / Caída Papel Oeste ↑', '东方吸筹 / 西方纸面砸盘 ↑', '東洋現物買い / 西洋紙売り ↑', 'पूर्व खरीद / पश्चिम पेपर गिरावट ↑'],
+    'NY Paper Chase / Asia Selling ↓': ['นิวยอร์กไล่ราคา / เอเชียขายทำกำไร ↓', 'ນິວຢອກໄລ່ຊື້ / ອາຊີຂາຍ ↓', 'NY Persigue / Asia Vende ↓', '纽约追高 / 亚洲逢高派发 ↓', 'NY追い買い / アジア売り ↓', 'NY पीछा / एशिया बिकवाली ↓'],
+    'Synchronized Global Buying ↑': ['แรงซื้อพร้อมกันทั่วโลก ↑', 'ແຮງຊື້ພ້ອມກັນທົ່ວໂລກ ↑', 'Compra Global Sincronizada ↑', '全球同步买入 ↑', '世界同時買い ↑', 'वैश्विक समन्वित खरीदारी ↑'],
+    'Broad Global Distribution ↓': ['แรงขายกระจายทั่วโลก ↓', 'ແຮງຂາຍທົ່ວໂລກ ↓', 'Distribución Global Amplia ↓', '全球普遍派发 ↓', '世界的な売り圧力 ↓', 'व्यापक वैश्विक बिकवाली ↓'],
+    'Balanced Global Flow': ['กระแสซื้อขายทั่วโลกสมดุล', 'ກະແສຊື້ຂາຍສົມດຸນ', 'Flujo Global Equilibrado', '全球资金流均衡', '世界フロー均衡', 'संतुलित वैश्विक प्रवाह'],
+    'Balanced FX Breadth': ['สกุลเงินโลกสมดุล', 'ສະກຸນເງິນໂລກສົມດຸນ', 'Amplitud Divisas Equilibrada', '全球货币广度均衡', '世界通貨幅は中立', 'संतुलित मुद्रा विस्तार'],
+    'Stealth Global Breakout ↑': ['เบรกเอาต์ลับสกุลเงินโลก ↑', 'ເບຣກເອົາລັບສະກຸນເງິນໂລກ ↑', 'Ruptura Global Sigilosa ↑', '全球货币隐形突破 ↑', '世界通貨ステルス突破 ↑', 'स्टील्थ वैश्विक ब्रेकआउट ↑'],
+    'Universal Global Highs ↑': ['ทำนิวไฮพร้อมกันทั่วโลก ↑', 'ທຳສະຖິຕິສູງທົ່ວໂລກ ↑', 'Máximos Globales Universales ↑', '全球货币齐创新高 ↑', '世界主要通貨で高値更新 ↑', 'सार्वभौमिक वैश्विक उच्च ↑'],
+    'Broad FX Pullback ↓': ['ย่อตัวพร้อมกันหลายสกุลเงิน ↓', 'ຍໍ່ຕົວຫຼາຍສະກຸນເງິນ ↓', 'Retroceso Amplio en Divisas ↓', '多币种普遍回落 ↓', '主要通貨で一斉反落 ↓', 'व्यापक मुद्रा गिरावट ↓'],
+    'World currencies are breaking out ahead of USD — classic hidden global demand signal.': ['สกุลเงินหลักทั่วโลกทะลุจุดสูงสุดนำหน้าดอลลาร์สหรัฐ — สัญญาณแรงซื้อซ่อนเร้นระดับโลก', 'ສະກຸນເງິນທົ່ວໂລກທະລຸຈຸດສູງກ່ອນ USD — ສັນຍານຄວາມຕ້ອງການທົ່ວໂລກ', 'Las divisas mundiales rompen máximos antes que el USD: señal clásica de demanda global oculta.', '全球多国货币领先美元创出新高——典型的全球隐形买盘信号。', '世界通貨が米ドルに先駆けて高値突破 — 隠れた世界的需要の典型シグナル。', 'विश्व मुद्राएं USD से पहले ब्रेकआउट कर रही हैं — छिपी वैश्विक मांग का संकेत।'],
+    'Compares local metal highs across major world currencies to spot stealth rallies.': ['เทียบราคาจุดสูงสุดในสกุลเงินหลักทั่วโลก เพื่อจับสัญญาณขาขึ้นที่ซ่อนอยู่', 'ທຽບລາຄາສູງສຸດໃນສະກຸນເງິນໂລກ ເພື່ອຈັບສັນຍານຂາຂຶ້ນ', 'Compara máximos locales en las principales divisas para detectar repuntes ocultos.', '对比全球主要货币计价的高位，提前捕捉被强美元掩盖的隐形涨势。', '主要通貨建ての現地高値を比較し、水面下の上昇を捉えます。', 'छिपी तेजी पहचानने हेतु प्रमुख विश्व मुद्राओं में स्थानीय उच्च की तुलना करता है।'],
+    'Normal Range Energy': ['พลังงานกรอบราคาปกติ', 'ພະລັງງານກອບລາຄາປົກກະຕິ', 'Energía de Rango Normal', '正常波动能量', '通常レンジエネルギー', 'सामान्य रेंज ऊर्जा'],
+    'Tightening Coil · Watch Breakout': ['สปริงกำลังบีบตัว · เฝ้ารอเบรกเอาต์', 'ສະປຣິງກຳລັງອັດຕົວ · ລໍຖ້າເບຣກເອົາ', 'Resorte Comprimiéndose · Atento a Ruptura', '波动收窄蓄势 · 关注突破', 'レンジ収縮中・ブレイク注意', 'संकुचित कॉइल · ब्रेकआउट नज़र'],
+    'Coiled Spring · Breakout Imminent ⚡': ['สปริงอัดแน่น · ใกล้ระเบิดทิศทาง ⚡', 'ສະປຣິງອັດແໜ້ນ · ໃກ້ລະເບີດ ⚡', 'Resorte Tenso · Ruptura Inminente ⚡', '弹簧极度压缩 · 突破在即 ⚡', 'スプリング圧縮限界・急変動間近 ⚡', 'कसी स्प्रिंग · बड़ा ब्रेकआउट निकट ⚡'],
+    'Expanded / Post-Breakout': ['ผันผวนขยายตัวแล้ว / หลังเบรกเอาต์', 'ຜັນຜວນຂະຫຍາຍຕົວແລ້ວ', 'Expandido / Post-Ruptura', '波动已释放 / 突破后消化', 'ボラ拡大済・ブレイク後', 'विस्तारित / पोस्ट-ब्रेकआउट'],
+    'Balanced Cross-Asset Flow': ['กระแสข้ามสินทรัพย์สมดุล', 'ກະແສຂ້າມສິນຊັບສົມດຸນ', 'Flujo Multi-Activo Equilibrado', '跨资产资金流均衡', 'クロスアセット均衡', 'संतुलित क्रॉस-एसेट प्रवाह'],
+    'Global Fiat Debasement Wave ↑': ['กระแสเงินเฟ้อลดค่าเงินเฟียตทั่วโลก ↑', 'ກະແສຫຼຸດຄ່າເງິນທົ່ວໂລກ ↑', 'Ola Global de Devaluación Fiduciaria ↑', '全球法币贬值浪潮 ↑', '世界法定通貨価値希薄化の波 ↑', 'वैश्विक मुद्रा अवमूल्यन लहर ↑'],
+    'Pure Safe-Haven Flight ↑': ['เงินไหลเข้าสินทรัพย์ปลอดภัยแท้จริง ↑', 'ເງິນໄຫຼເຂົ້າສິນຊັບປອດໄພ ↑', 'Vuelo Puro a Refugio Seguro ↑', '纯粹避险资金涌入 ↑', '純粋な安全資産逃避 ↑', 'शुद्ध सेफ़-हेवन पलायन ↑'],
+    'Broad Liquidity Tightening ↓': ['สภาพคล่องโลกตึงตัว ↓', 'ສະພາບຄ່ອງໂລກຕຶງຕົວ ↓', 'Ajuste Amplio de Liquidez ↓', '全球流动性收紧 ↓', '世界的な流動性引き締め ↓', 'व्यापक तरलता सख्ती ↓'],
+    'Strong Miner Margin Tailwind ↑': ['กำไรเหมืองแข็งแกร่งหนุนราคา ↑', 'ກຳໄລບໍ່ແຮ່ແຂງແກ່ງ ↑', 'Fuerte Margen Minero a Favor ↑', '矿企能源利润率强劲顺风 ↑', '鉱山マージン追い風 ↑', 'मजबूत खदान मार्जिन सहारा ↑'],
+    'Tracks Gold vs. Bitcoin debasement, Gold/Oil miner profit margins & Copper/Platinum confirmation.': ['ติดตามทองเทียบ Bitcoin อัตราส่วนทอง/น้ำมัน (กำไรเหมือง) และการยืนยันจากทองแดง/แพลตินัม', 'ຕິດຕາມຄຳທຽບ Bitcoin, ຄຳ/ນ້ຳມັນ ແລະ ທອງແດງ/ແພລຕິນຳ', 'Sigue Oro vs. Bitcoin, margen minero Oro/Petróleo y confirmación de Cobre/Platino.', '追踪黄金/比特币法币贬值、金油比矿企利润率与铜/铂金工业共振。', '金/BTC通貨希薄化・金/原油鉱山採算・銅/プラチナ連動を追跡。', 'सोना बनाम बिटकॉइन, सोना/तेल खदान मार्जिन और तांबा/प्लैटिनम पुष्टि ट्रैक करता है।'],
+    'Healthy Positioning': ['สัดส่วนนักลงทุนสมดุลดี', 'ຕຳແໜ່ງນັກລົງທຶນສົມດຸນ', 'Posicionamiento Saludable', '持仓与情绪健康', 'ポジション健全', 'स्वस्थ पोजिशनिंग'],
+    'Crowded Euphoria · Pullback Risk ↓': ['แห่ซื้อล้นตลาด · เสี่ยงย่อตัว ↓', 'ແຫ່ຊື້ລົ້ນຕະຫຼາດ · ສ່ຽງຍໍ່ຕົວ ↓', 'Euforia Saturada · Riesgo de Caída ↓', '情绪极度拥挤 · 回调风险 ↓', '過熱ユーフォリア・反落警戒 ↓', 'अत्यधिक उत्साह · गिरावट जोखिम ↓'],
+    'Panic Capitulation · Reversal Zone ↑': ['ขายตื่นตระหนกสุดขีด · โซนดีดกลับ ↑', 'ຂາຍຕື່ນຕົກໃຈ · ໂຊນດີດກັບ ↑', 'Capitulación de Pánico · Zona de Rebote ↑', '恐慌性抛售出清 · 反转反弹区 ↑', 'パニック投げ売り・反発圏 ↑', 'घबराहट बिकवाली · उछाल ज़ोन ↑'],
+    'Pin Active': ['แม่เหล็กทำงาน', 'ແມ່ເຫຼັກທຳງານ', 'Imán Activo', '磁力钉扎中', 'ピン有効', 'पिन सक्रिय'],
+    'Release ⚡': ['ปลดล็อก ⚡', 'ປົດລັອກ ⚡', 'Liberación ⚡', '释放加速 ⚡', '解放加速 ⚡', 'रिलीज़ ⚡'],
+    'Open': ['เปิดโล่ง', 'ເປີດໂລ່ງ', 'Abierto', '自由窗口', '自由推移', 'खुला'],
+    'Open Trend Window': ['ช่วงเทรนด์เปิดโล่ง', 'ຊ່ວງເທຣນເປີດໂລ່ງ', 'Ventana de Tendencia Libre', '自由趋势窗口', '自由トレンド期間', 'खुली ट्रेंड विंडो'],
+    'OpEx Pin Day (Magnet Active)': ['วันหมดอายุ OpEx (แรงดูดสูงสุด)', 'ວັນໝົດອາຍຸ OpEx (ແມ່ເຫຼັກທຳງານ)', 'Día OpEx (Imán Activo)', '期权到期日（磁力钉扎）', 'OP満期当日（マグネット発動）', 'OpEx पिन दिवस (मैग्नेट सक्रिय)'],
+    'Waiting for full 24h intraday bars across Asia, London & NY.': ['รอข้อมูลแท่งเทียนครบ 24 ชม. ทั้งเอเชีย ลอนดอน และนิวยอร์ก', 'ລໍຖ້າຂໍ້ມູນຄົບ 24 ຊົ່ວໂມງ ອາຊີ ລອນດອນ ແລະ ນິວຢອກ', 'Esperando barras completas de 24h en Asia, Londres y NY.', '等待亚洲、伦敦与纽约完整24小时日内K线数据。', 'アジア・ロンドン・NYの24時間足データ待機中。', 'एशिया, लंदन और NY के पूर्ण 24 घंटे के बार की प्रतीक्षा है।'],
+    'Asia, London & NY are all bidding higher together — clean global trend confirmation.': ['เอเชีย ลอนดอน และนิวยอร์กต่างเข้าซื้อพร้อมกัน — ยืนยันเทรนด์ขาขึ้นทั่วโลกชัดเจน', 'ອາຊີ ລອນດອນ ແລະ ນິວຢອກຊື້ພ້ອມກັນ — ຢືນຢັນຂາຂຶ້ນ', 'Asia, Londres y NY compran juntos: clara confirmación alcista global.', '亚洲、伦敦与纽约三大时段同步买进——全球趋势清晰共振。', 'アジア・ロンドン・NYが揃って買い — 明確な世界トレンド確認。', 'एशिया, लंदन और NY तीनों में खरीदारी — स्पष्ट वैश्विक तेजी पुष्टि।'],
+    'Selling pressure across both Eastern physical and Western futures sessions.': ['แรงขายกดดันทั้งฝั่งเอเชียและฝั่งฟิวเจอร์สตะวันตก', 'ແຮງຂາຍທັງຝັ່ງຕາເວັນອອກ ແລະ ຕາເວັນຕົກ', 'Presión vendedora tanto en Oriente físico como en futuros de Occidente.', '东方实物与西方期货时段均面临抛压。', '東洋現物・西洋先物の双方で売り圧力。', 'पूर्वी भौतिक और पश्चिमी फ्यूचर्स दोनों सत्रों में बिकवाली दबाव।'],
+    'Volatility sits near its 30-day average.': ['ความผันผวนอยู่ใกล้ค่าเฉลี่ย 30 วัน', 'ຄວາມຜັນຜວນໃກ້ຄ່າສະເລ່ຍ 30 ມື້', 'La volatilidad está cerca de su promedio de 30 días.', '波动率接近30日均值。', 'ボラティリティは30日平均付近。', 'अस्थिरता अपने 30-दिन के औसत के पास है।'],
+    // Planetary AI, Space & EV Metal Race labels
+    'Hyperscale AI Buildout & Power Intensity': ['ระดับความร้อนแรงการสร้างศูนย์ข้อมูล AI และพลังงานโลก', 'ຄວາມເຂັ້ມຂຸ້ນການສ້າງສູນຂໍ້ມູນ AI ແລະ ພະລັງງານ', 'Intensidad de Centros de Datos IA y Energía', '全球超大规模AI建设与电力强度', '世界のAIデータセンター・電力建設強度', 'हाइपरस्केल AI निर्माण व पावर तीव्रता'],
+    'Structural Baseline': ['ฐานข้อมูลเชิงโครงสร้าง', 'ຖານໂຄງສ້າງ', 'Base Estructural', '结构性基准', '構造ベースライン', 'संरचनात्मक आधार'],
+    'Track': ['ติดตาม', 'ຕິດຕາມ', 'Seguir', '追踪', '追跡', 'ट्रैक'],
+    'Frontier & Space News:': ['ข่าว AI ชั้นนำและอวกาศ:', 'ຂ່າວ AI ແລະ ອະວະກາດ:', 'Noticias IA y Espacio:', '前沿AI与太空动态：', '先端AI・宇宙ニュース：', 'फ्रंटियर व अंतरिक्ष समाचार:'],
+    '70–80% Byproduct Supply': ['70–80% เป็นผลพลอยได้จากเหมืองอื่น', '70–80% ຜົນພອຍໄດ້ບໍ່ແຮ່', '70–80% Suministro Subproducto', '70–80% 伴生矿供应', '70–80% 副産物供給', '70–80% उप-उत्पाद आपूर्ति'],
+    'Steady Global AI & EV': ['AI และรถ EV โลกโตต่อเนื่อง', 'AI ແລະ EV ໂລກໂຕຕໍ່ເນື່ອງ', 'IA y EV Global Estable', '全球AI与EV稳步扩张', '世界AI・EV安定拡大', 'स्थिर वैश्विक AI व EV'],
+    'Active Global Buildout ↑': ['เร่งสร้างศูนย์ข้อมูล AI และ EV ทั่วโลก ↑', 'ເລັ່ງສ້າງ AI ແລະ EV ທົ່ວໂລກ ↑', 'Expansión Global Activa ↑', '全球AI与EV加速建设 ↑', '世界AI・EV建設活発 ↑', 'सक्रिय वैश्विक निर्माण ↑'],
+    'Global AI & EV Surge ↑': ['ศึก AI และรถ EV โลกพุ่งแรง ↑', 'ສຶກ AI ແລະ EV ໂລກພຸ່ງແຮງ ↑', 'Auge Global de IA y EV ↑', '全球AI与EV资本狂飙 ↑', '世界AI・EV需要急増 ↑', 'वैश्विक AI व EV उछाल ↑'],
+    'Global CapEx Slowdown ↓': ['การลงทุน AI และ EV โลกชะลอตัว ↓', 'ການລົງທຶນ AI ແລະ EV ຊະລໍ ↓', 'Desaceleración Global CapEx ↓', '全球AI与EV资本放缓 ↓', '世界AI・EV投資減速 ↓', 'वैश्विक CapEx मंदी ↓'],
+    'Steady AI & EV Expansion': ['AI และ EV ขยายตัวต่อเนื่อง', 'AI ແລະ EV ຂະຫຍາຍຕົວ', 'Expansión Estable de IA y EV', 'AI与EV稳健扩张', 'AI・EV安定拡大', 'स्थिर AI व EV विस्तार'],
+    'Active AI & EV Buildout ↑': ['เร่งสร้างโครงสร้าง AI และ EV ↑', 'ເລັ່ງສ້າງ AI ແລະ EV ↑', 'Construcción Activa IA y EV ↑', 'AI与EV积极扩建 ↑', 'AI・EV積極建設 ↑', 'सक्रिय AI व EV निर्माण ↑'],
+    'Hyperscale & EV Surge ↑': ['ศูนย์ข้อมูลยักษ์และ EV พุ่งแรง ↑', 'ສູນຂໍ້ມູນ ແລະ EV ພຸ່ງແຮງ ↑', 'Auge Hiperescala y EV ↑', '超大规模与EV齐升 ↑', 'ハイパースケール・EV急伸 ↑', 'हाइपरस्केल व EV उछाल ↑'],
+    'CapEx & EV Slowdown ↓': ['งบ AI และยอด EV ชะลอตัว ↓', 'ງົບ AI ແລະ EV ຊະລໍ ↓', 'Freno de CapEx y EV ↓', '资本开支与EV放缓 ↓', '投資・EV減速 ↓', 'CapEx व EV मंदी ↓'],
+    'Switchgear, busbars, BYD/Tesla EVs (~25–50g/car), solid-state batteries & Starlink solar': ['สวิตช์เกียร์ บัสบาร์ รถ EV BYD/Tesla (~25–50 กรัม/คัน) แบตโซลิดสเตต และแผงโซลาร์ Starlink', 'ສະວິດເກຍ ບັສບາ ລົດ EV BYD/Tesla (~25–50g/ຄັນ) ແບັດໂຊລິດສເຕດ ແລະ Starlink', 'Tableros, barras, EVs BYD/Tesla (~25–50g/auto), baterías estado sólido y solar Starlink', '开关柜、母线排、比亚迪/特斯拉电动车（约25–50克/辆）、固态电池与星链太阳能', 'スイッチギア・バスバー・BYD/Tesla EV（1台25〜50g）・全固体電池・Starlink太陽光', 'स्विचगियर, बसबार, BYD/Tesla EV (~25–50g/कार), सॉलिड-स्टेट बैटरी व Starlink सोलर'],
+    'Highest electrical & thermal conductivity (~7% better heat transfer than copper). Non-thriftable in 50–500MW+ data centers & high-voltage EVs; fabricators compete for the exact same refined silver pool as bullion bars & coins.': ['นำไฟฟ้าและความร้อนดีที่สุดในบรรดาโลหะ (ระบายความร้อนดีกว่าทองแดง ~7%) ลดปริมาณไม่ได้ในศูนย์ข้อมูล 50–500MW+ และรถ EV แรงดันสูง ทำให้โรงงานแย่งซื้อเงินบริสุทธิ์จากแหล่งเดียวกับแท่งและเหรียญลงทุน', 'ນຳໄຟຟ້າ ແລະ ຄວາມຮ້ອນດີສຸດ (~7% ດີກວ່າທອງແດງ) ຫຼຸດບໍ່ໄດ້ໃນສູນຂໍ້ມູນ 50–500MW+ ແລະ ລົດ EV; ໂຮງງານແຍ່ງເງິນຈາກແຫຼ່ງດຽວກັບເງິນແທ່ງ', 'Máxima conductividad eléctrica y térmica (~7% más que el cobre). Insustituible en centros de 50–500MW+ y EVs; los fabricantes compiten por la misma plata refinada que los lingotes y monedas.', '拥有所有金属中最高的导电与导热率（散热比铜高约7%）。在50–500MW+零宕机数据中心和高压电动车中难以减量替代，工业厂商直接与金银条币争夺同一精炼白银池。', '全金属最高の電気・熱伝導率（銅より放熱約7%優位）。50〜500MW級データセンターや高圧EVでは削減不可で、工業需要が地金・コインと同じ精錬銀を奪い合います。', 'सभी धातुओं में उच्चतम विद्युत व तापीय चालकता (तांबे से ~7% बेहतर)। 50–500MW+ डेटा सेंटर व EV में इसे घटाया नहीं जा सकता; उद्योग बुलियन बार और सिक्कों वाले ही रिफाइंड सिल्वर पूल से प्रतिस्पर्धा करते हैं।'],
+    'Wire bonding, corrosion-proof EV/server connectors, memory pins & satellite contacts': ['ลวดเชื่อมชิป ขั้วต่อกันสนิมในรถ EV/เซิร์ฟเวอร์ ขาแรม และหน้าสัมผัสดาวเทียม', 'ລວດເຊື່ອມຊິບ ຂົ້ວຕໍ່ກັນສະໜິມໃນ EV/ເຊີເວີ ແລະ ດາວທຽມ', 'Unión por cable, conectores anticorrosión en EV/servidores, pines de memoria y satélites', '芯片金线键合、抗腐蚀EV/服务器连接器、内存金手指与卫星触点', 'ワイヤーボンディング・防食EV/サーバー端子・メモリピン・衛星接点', 'वायर बॉन्डिंग, संक्षारण-रोधी EV/सर्वर कनेक्टर, मेमोरी पिन व सैटेलाइट संपर्क'],
+    'Stays chemically stable in high-heat continuous servers, autonomous EV sensors & orbital hardware. Adds a steady supporting tech layer alongside Gold\'s primary monetary & central-bank drivers.': ['เสถียรทางเคมีไม่เป็นสนิมในเซิร์ฟเวอร์ความร้อนสูง เซนเซอร์รถ EV ไร้คนขับ และอุปกรณ์อวกาศ ช่วยเสริมแรงซื้อภาคเทคโนโลยีควบคู่กับแรงซื้อหลักจากธนาคารกลางและสินทรัพย์ปลอดภัย', 'ສະຖຽນບໍ່ເປັນສະໜິມໃນເຊີເວີຄວາມຮ້ອນສູງ ເຊັນເຊີ EV ແລະ ອະວະກາດ ຊ່ວຍເສີມຄຽງຄູ່ກັບທະນາຄານກາງ', 'Se mantiene químicamente estable en servidores calientes, sensores EV y satélites. Añade soporte industrial junto a los motores monetarios y de bancos centrales del oro.', '在高温连续运行的AI服务器、自动驾驶传感器与航天硬件中不氧化。作为稳健的科技辅助层，配合央行购金与货币避险等核心驱动力。', '高温稼働サーバー・自動運転EVセンサー・宇宙機器で酸化せず安定。中央銀行や通貨需要という主軸に加え、堅実なテック下支え層を形成します。', 'उच्च ताप वाले सर्वर, EV सेंसर व अंतरिक्ष उपकरणों में रासायनिक रूप से स्थिर रहता है। सोने के मुख्य मौद्रिक और केंद्रीय बैंक कारकों के साथ स्थिर तकनीकी सहारा जोड़ता है।'],
+    'No headlines match this search/filter right now. Clear search or tap "All Topics" to see everything.': ['ไม่พบข่าวที่ตรงกับคำค้นหา/ตัวกรองนี้ กดล้างคำค้นหาหรือเลือก "ทุกหัวข้อ" เพื่อดูทั้งหมด', 'ບໍ່ພົບຂ່າວທີ່ກົງກັບຄຳຄົ້ນຫານີ້ ກົດລ້າງ ຫຼື ເລືອກ "ທຸກຫົວຂໍ້"', 'Ningún titular coincide con esta búsqueda/filtro. Limpia la búsqueda o pulsa "Todos los Temas".', '暂无符合当前搜索/筛选的新闻。请清除搜索或点击“全部主题”查看全部。', '該当する記事はありません。検索をクリアするか「すべて」を押してください。', 'इस खोज/फ़िल्टर से कोई समाचार मेल नहीं खाता। खोज साफ़ करें या "सभी विषय" चुनें।'],
+    'Normal solar & geomagnetic conditions — no grid or satellite disruption premium.': ['สภาพสุริยะและสนามแม่เหล็กโลกปกติ — ไม่มีพรีเมียมความเสี่ยงระบบไฟฟ้าหรือดาวเทียม', 'ສະພາບສຸລິຍະປົກກະຕິ — ບໍ່ມີຄວາມສ່ຽງໄຟຟ້າ ຫຼື ດາວທຽມ', 'Condiciones solares y geomagnéticas normales — sin prima por riesgo de red o satélites.', '太阳与地磁活动正常——暂无电网或卫星中断避险溢价。', '太陽・地磁気活動は平穏 — 送電網や衛星障害プレミアムなし。', 'सामान्य सौर व भू-चुंबकीय स्थिति — ग्रिड या सैटेलाइट जोखिम प्रीमियम नहीं।'],
+    // v59 Live DOM Audit Complete Dynamic Coverage (Bias, News Tags, World/Space, Premiums, Setup Quality, Catalysts, Jump Diffusion, Self-Learn, Hidden Alpha)
+    'Strong Up': ['ขาขึ้นแรง', 'ຂາຂຶ້ນແຮງ', 'Fuerte Alza', '强势看涨', '強い上昇', 'मज़बूत तेज़ी'],
+    'Leaning Up': ['เอนเอียงขึ้น', 'ອ່ຽງຂຶ້ນ', 'Tendencia Alcista', '温和偏涨', 'やや上昇', 'ऊपर की ओर'],
+    'Strong Down': ['ขาลงแรง', 'ຂາລົງແຮງ', 'Fuerte Baja', '强势看跌', '強い下落', 'मज़बूत गिरावट'],
+    'Leaning Down': ['เอนเอียงลง', 'ອ່ຽງລົງ', 'Tendencia Bajista', '温和偏跌', 'やや下落', 'नीचे की ओर'],
+    'Balanced': ['สมดุล', 'ສົມດຸນ', 'Equilibrado', '多空均衡', '均衡', 'संतुलित'],
+    'strong up': ['ขาขึ้นแรง', 'ຂາຂຶ້ນແຮງ', 'fuertemente alcista', '强势看涨', '強い上昇', 'मज़बूत तेज़ी में'],
+    'leaning up': ['เอนเอียงขาขึ้น', 'ອ່ຽງຂາຂຶ້ນ', 'ligeramente alcista', '偏涨', 'やや上昇', 'हल्की तेज़ी में'],
+    'strong down': ['ขาลงแรง', 'ຂາລົງແຮງ', 'fuertemente bajista', '强势看跌', '強い下落', 'मज़बूत गिरावट में'],
+    'leaning down': ['เอนเอียงขาลง', 'ອ່ຽງຂາລົງ', 'ligeramente bajista', '偏跌', 'やや下落', 'हल्की गिरावट में'],
+    'balanced': ['สมดุล', 'ສົມດຸນ', 'equilibrado', '走势均衡', '均衡', 'संतुलित'],
+    'slightly up': ['ขยับขึ้นเล็กน้อย', 'ຂຶ້ນເລັກນ້ອຍ', 'ligeramente al alza', '微幅偏涨', '小幅上昇', 'थोड़ा ऊपर'],
+    'slightly down': ['อ่อนตัวเล็กน้อย', 'ລົງເລັກນ້ອຍ', 'ligeramente a la baja', '微幅偏跌', '小幅下落', 'थोड़ा नीचे'],
+    'neutral': ['เป็นกลาง', 'ເປັນກາງ', 'neutral', '中性', '中立', 'तटस्थ'],
+    // News subject pills & driver sub-category tags
+    'Macro, Debt & Banks': ['เศรษฐกิจมหภาค หนี้ และธนาคาร', 'ມະຫາພາກ ໜີ້ ແລະ ທະນາຄານ', 'Macro, Deuda y Bancos', '宏观、债务与银行', 'マクロ・債務・銀行', 'मैक्रो, ऋण व बैंक'],
+    'Solar, AI & EV Tech': ['โซลาร์ AI และรถ EV', 'ໂຊລາ AI ແລະ ລົດ EV', 'Solar, IA y Tecnología EV', '光伏、AI与电动车科技', '太陽光・AI・EV技術', 'सोलर, AI व EV टेक'],
+    'Central Banks & BRICS': ['ธนาคารกลางและ BRICS', 'ທະນາຄານກາງ ແລະ BRICS', 'Bancos Centrales y BRICS', '央行与金砖国家', '中央銀行・BRICS', 'केंद्रीय बैंक व BRICS'],
+    'Vaults & Lease Rates': ['คลังโลหะและอัตราเช่า', 'ຄັງໂລຫະ ແລະ ອັດຕາເຊົ່າ', 'Bóvedas y Tasas de Alquiler', '金库库存与租赁利率', '金庫・リース金利', 'वॉल्ट और लीज़ दरें'],
+    'India, China & Retail': ['อินเดีย จีน และรายย่อย', 'ອິນເດຍ ຈີນ ແລະ ລາຍຍ່ອຍ', 'India, China y Minoristas', '印度、中国与零售需求', 'インド・中国・小売', 'भारत, चीन व खुदरा'],
+    'World & Space': ['ข่าวโลกและอวกาศ', 'ຂ່າວໂລກ ແລະ ອະວະກາດ', 'Mundo y Espacio', '全球事件与太空', '世界・宇宙', 'विश्व और अंतरिक्ष'],
+    'Mines & Energy': ['เหมืองแร่และพลังงาน', 'ບໍ່ແຮ່ ແລະ ພະລັງງານ', 'Minas y Energía', '矿业与能源', '鉱山・エネルギー', 'खदानें और ऊर्जा'],
+    'Geopolitics': ['ภูมิรัฐศาสตร์', 'ພູມລັດຖະສາດ', 'Geopolítica', '地缘政治', '地政学', 'भू-राजनीति'],
+    'Mining / Supply': ['เหมืองแร่ / อุปทาน', 'ບໍ່ແຮ່ / ອຸປະທານ', 'Minería / Oferta', '矿业与供应', '鉱山・供給', 'खनन / आपूर्ति'],
+    'Equities': ['ตลาดหุ้น', 'ຕະຫຼາດຫຸ້ນ', 'Acciones', '股票市场', '株式市場', 'शेयर बाज़ार'],
+    'Inflation': ['เงินเฟ้อ', 'ເງິນເຟີ້', 'Inflación', '通胀', 'インフレ', 'मुद्रास्फीति'],
+    'Real Yields': ['ผลตอบแทนที่แท้จริง', 'ຜົນຕອບແທນແທ້ຈິງ', 'Rendimientos Reales', '实际收益率', '実質金利', 'वास्तविक यील्ड'],
+    'Rates / USD': ['ดอกเบี้ย / ดอลลาร์', 'ດອກເບ້ຍ / ໂດລາ', 'Tasas / USD', '利率与美元', '金利・米ドル', 'ब्याज दर / USD'],
+    'Central Banks': ['ธนาคารกลาง', 'ທະນາຄານກາງ', 'Bancos Centrales', '各国央行', '中央銀行', 'केंद्रीय बैंक'],
+    'Shanghai SGE': ['ตลาดเซี่ยงไฮ้ SGE', 'ຕະຫຼາດຊຽງໄຮ້ SGE', 'Shanghái SGE', '上海金交所 SGE', '上海SGE', 'शंघाई SGE'],
+    'COT / Miners': ['กองทุน COT / เหมือง', 'ກອງທຶນ COT / ບໍ່ແຮ່', 'COT / Mineras', 'COT持仓与矿股', 'COT・鉱山株', 'COT / खनन'],
+    'COMEX Paper': ['สัญญา COMEX', 'ສັນຍາ COMEX', 'Papel COMEX', 'COMEX纸盘', 'COMEX先物', 'COMEX पेपर'],
+    'Market': ['ตลาด', 'ຕະຫຼາດ', 'Mercado', '市场', '市場', 'बाज़ार'],
+    // 30-Day Model & Hurst labels
+    'Hurst Market State': ['สถานะตลาด (เฮิสต์)', 'ສະຖານະຕະຫຼາດ (ເຮີສຕ໌)', 'Estado de Mercado Hurst', '赫斯特市场状态', 'ハースト相場状態', 'हर्स्ट बाज़ार स्थिति'],
+    'Hurst & RSI': ['เฮิสต์ และ RSI', 'ເຮີສຕ໌ ແລະ RSI', 'Hurst y RSI', '赫斯特与RSI', 'ハースト・RSI', 'हर्स्ट व RSI'],
+    'Macro & Vaults': ['มหภาคและคลังโลหะ', 'ມະຫາພາກ ແລະ ຄັງ', 'Macro y Bóvedas', '宏观与金库', 'マクロ・在庫', 'मैक्रो व वॉल्ट'],
+    'Lead-Lag': ['สัญญาณนำตลาด', 'ສັນຍານນຳຕະຫຼາດ', 'Señal Adelantada', '领先滞后信号', '先行指標', 'अग्रणी संकेत'],
+    'Lead-Lag Alpha': ['อัลฟานำตลาด', 'ອັນຟານຳຕະຫຼາດ', 'Alfa Adelantado', '领先滞后超额', '先行アルファ', 'लीड-लैग अल्फा'],
+    'Seasonal & Twins': ['ฤดูกาลและคู่แฝดอดีต', 'ລະດູການ ແລະ ຄູ່ແຝດ', 'Estacional y Gemelos', '季节性与历史相似', '季節性・類似期', 'मौसमी व समानता'],
+    // World & Space Pulse regimes & NOAA SWPC summaries
+    'Steady Macro Pulse': ['ชีพจรมหภาคคงที่', 'ຊີບພະຈອນມະຫາພາກຄົງທີ່', 'Pulso Macro Estable', '宏观脉搏平稳', 'マクロ脈拍安定', 'स्थिर मैक्रो पल्स'],
+    'Active World & Space Flow': ['กระแสโลกและอวกาศคึกคัก', 'ກະແສໂລກ ແລະ ອະວະກາດຄຶກຄັກ', 'Flujo Global y Espacial Activo', '全球与太空催化活跃', '世界・宇宙フロー活発', 'सक्रिय विश्व व अंतरिक्ष प्रवाह'],
+    'High-Velocity Catalyst Surge': ['คลื่นปัจจัยเร่งความเร็วสูง', 'ຄື້ນປັດໄຈເລັ່ງແຮງ', 'Auge Acelerado de Catalizadores', '高动能催化剂激增', '高速度カタリスト急増', 'उच्च-गति उत्प्रेरक उछाल'],
+    'Normal Calendar': ['ปฏิทินปกติ', 'ປະຕິທິນປົກກະຕິ', 'Calendario Normal', '日程平稳', '通常スケジュール', 'सामान्य कैलेंडर'],
+    'No imminent Fed/CPI/COMEX shock today': ['ไม่มีเหตุการณ์ใหญ่ Fed/CPI/COMEX ใกล้ตัววันนี้', 'ບໍ່ມີເຫດການໃຫຍ່ Fed/CPI/COMEX ມື້ນີ້', 'Sin choque inminente de Fed/CPI/COMEX hoy', '今日无临近美联储/CPI/COMEX冲击事件', '本日は重要なFed/CPI/COMEXイベントなし', 'आज कोई निकटतम Fed/CPI/COMEX झटका नहीं'],
+    'Quiet (G0)': ['สงบ (G0)', 'ສະຫງົບ (G0)', 'Tranquilo (G0)', '平静 (G0)', '静穏 (G0)', 'शांत (G0)'],
+    'Normal solar & geomagnetic weather — no grid or satellite risk premium.': ['สภาพสุริยะและสนามแม่เหล็กโลกปกติ — ไม่มีพรีเมียมความเสี่ยงระบบไฟฟ้าหรือดาวเทียม', 'ສະພາບສຸລິຍະ ແລະ ສະໜາມແມ່ເຫຼັກປົກກະຕິ — ບໍ່ມີຄວາມສ່ຽງໄຟຟ້າ ຫຼື ດາວທຽມ', 'Clima solar y geomagnético normal — sin prima por riesgo eléctrico o satelital.', '太阳与地磁天气正常——无电网或卫星风险溢价。', '太陽・地磁気は通常状態 — 電力網・衛星リスクプレミアムなし。', 'सामान्य सौर और भू-चुंबकीय मौसम — कोई ग्रिड या सैटेलाइट जोखिम प्रीमियम नहीं।'],
+    'Severe NOAA solar storm elevates power-grid & satellite safe-haven Gold demand + Silver grid/solar demand.': ['พายุสุริยะระดับรุนแรงจาก NOAA หนุนแรงซื้อทองคำหลบภัยและเงินสำหรับโครงข่ายไฟฟ้า/โซลาร์', 'ພາຍຸສຸລິຍະຮຸນແຮງ NOAA ໜຸນແຮງຊື້ຄຳຫຼົບໄພ ແລະ ເງິນ', 'Tormenta solar severa NOAA impulsa oro refugio y plata para redes eléctricas/solares.', 'NOAA强烈太阳风暴推升电网/卫星避险黄金需求及白银电力光伏需求。', 'NOAAの激しい太陽嵐が送電網・衛星リスクの金逃避買いと銀需要を押上げ。', 'गंभीर NOAA सौर तूफान से सुरक्षित सोना और ग्रिड/सोलर चांदी मांग बढ़ी।'],
+    'Strong NOAA geomagnetic/solar storm lifts safe-haven Gold & solar/satellite Silver sensitivity.': ['พายุแม่เหล็กสุริยะแรงจาก NOAA กระตุ้นแรงซื้อทองคำหลบภัยและความไวต่อราคาเงิน', 'ພາຍຸແມ່ເຫຼັກ NOAA ແຮງ ໜຸນຄຳຫຼົບໄພ ແລະ ເງິນ', 'Fuerte tormenta geomagnética NOAA eleva el atractivo refugio del oro y sensibilidad en plata.', 'NOAA强地磁/太阳风暴提振避险黄金与光伏/卫星白银敏感度。', 'NOAAの強い地磁気嵐が金の安全需要と銀の感応度を上昇。', 'मज़बूत NOAA भू-चुंबकीय तूफान ने सुरक्षित सोना व चांदी संवेदनशीलता बढ़ाई।'],
+    'Moderate geomagnetic/radio activity — mild watch on orbital & grid infrastructure.': ['กิจกรรมสนามแม่เหล็ก/วิทยุระดับปานกลาง — เฝ้าระวังระบบดาวเทียมและโครงข่ายไฟฟ้าเล็กน้อย', 'ກິດຈະກຳສະໜາມແມ່ເຫຼັກລະດັບກາງ — ເຝົ້າລະວັງເລັກນ້ອຍ', 'Actividad geomagnética/radio moderada — vigilancia leve en red y satélites.', '中等地磁/无线电活动——轻度关注轨道与电网基础设施。', '中程度の地磁気・電波活動 — 衛星・送電網を軽く注視。', 'मध्यम भू-चुंबकीय/रेडियो गतिविधि — ग्रिड और उपग्रह पर हल्की निगरानी।'],
+    'Minor solar breeze (G1) — routine space weather with minimal bullion impact.': ['ลมสุริยะเบา (G1) — สภาพอวกาศทั่วไป กระทบราคาทองและเงินน้อยมาก', 'ລົມສຸລິຍະເບົາ (G1) — ກະທົບລາຄາຄຳ ແລະ ເງິນໜ້ອຍຫຼາຍ', 'Brisa solar menor (G1) — clima espacial rutinario con impacto mínimo en metales.', '轻微太阳风（G1）——常规太空天气，对贵金属影响极小。', '小規模太陽風（G1）— 通常の宇宙天気で貴金属への影響は軽微。', 'हल्की सौर हवा (G1) — सामान्य अंतरिक्ष मौसम, बुलियन पर न्यूनतम प्रभाव।'],
+    // Physical Premiums statuses & coin/bar names
+    'Paper-Physical Disconnect ↑↑': ['ราคาจริงแยกขาดจากกระดาษ ↑↑', 'ລາຄາຈິງແຍກຈາກກະດາດ ↑↑', 'Desconexión Papel-Físico ↑↑', '纸盘与实物严重背离 ↑↑', '先物・現物乖離 ↑↑', 'पेपर-भौतिक विचलन ↑↑'],
+    'Physical Squeeze ↑↑': ['แรงบีบซื้อของจริงพุ่ง ↑↑', 'ແຮງບີບຊື້ຂອງຈິງພຸ່ງ ↑↑', 'Estrangulamiento Físico ↑↑', '实物挤仓 ↑↑', '現物逼迫 ↑↑', 'भौतिक स्क्वीज़ ↑↑'],
+    'Physical Catch-Up Signal ↑': ['สัญญาณราคาสปอตจ่อตามของจริง ↑', 'ສັນຍານສະປອດຈໍ່ຕາມຂອງຈິງ ↑', 'Señal de Alcance Físico ↑', '现货补涨信号 ↑', '現物追随シグナル ↑', 'भौतिक कैच-अप संकेत ↑'],
+    'Elevated Retail Demand ↑': ['แรงซื้อรายย่อยสูงกว่าปกติ ↑', 'ແຮງຊື້ລາຍຍ່ອຍສູງ ↑', 'Demanda Minorista Elevada ↑', '零售实物需求偏高 ↑', '小売需要上昇 ↑', 'उच्च खुदरा मांग ↑'],
+    'Compressed · Best Buyer Value': ['พรีเมียมต่ำ · คุ้มค่าผู้ซื้อสุด', 'ພຣີມຽມຕ່ຳ · ຄຸ້ມຄ່າສຸດ', 'Comprimida · Mejor Valor', '溢价压缩 · 买方高性价比', '割安プレミアム・買い好機', 'कम मार्कअप · सर्वोत्तम मूल्य'],
+    'Normal Retail Spread': ['ส่วนต่างหน้าร้านปกติ', 'ສ່ວນຕ່າງຮ້ານຄ້າປົກກະຕິ', 'Prima Minorista Normal', '零售溢价正常', '通常小売スプレッド', 'सामान्य खुदरा स्प्रेड'],
+    'Physical Squeeze Active ↑': ['ภาวะของจริงขาดตลาดทำงาน ↑', 'ພາວະຂອງຈິງຂາດຕະຫຼາດ ↑', 'Escasez Física Activa ↑', '实物紧缺生效中 ↑', '現物逼迫発生中 ↑', 'भौतिक स्क्वीज़ सक्रिय ↑'],
+    'Silver Physical Squeeze ↑': ['ภาวะเงินจริงขาดตลาด ↑', 'ພາວະເງິນຈິງຂາດຕະຫຼາດ ↑', 'Escasez Física de Plata ↑', '白银实物紧缺 ↑', '銀現物逼迫 ↑', 'चांदी भौतिक स्क्वीज़ ↑'],
+    'Gold Physical Tightness ↑': ['ทองคำจริงเริ่มตึงตัว ↑', 'ຄຳຈິງເລີ່ມຕຶງຕົວ ↑', 'Tensión Física en Oro ↑', '黄金实物偏紧 ↑', '金現物タイト ↑', 'सोना भौतिक तंगी ↑'],
+    'Low Markup · Buyer Window': ['พรีเมียมถูก · จังหวะน่าเก็บ', 'ພຣີມຽມຖືກ · ຈັງຫວະຊື້', 'Prima Baja · Ventana de Compra', '低溢价 · 买入窗口', '低プレミアム・買い時', 'कम मार्कअप · खरीद अवसर'],
+    'Normal Dealer Spreads': ['ส่วนต่างร้านค้าปกติ', 'ສ່ວນຕ່າງຮ້ານຄ້າປົກກະຕິ', 'Primas Normales de Distribuidor', '经销商溢价正常', '通常ディーラー価格差', 'सामान्य डीलर स्प्रेड'],
+    '1 oz Gold Eagle': ['เหรียญทองคำอเมริกันอีเกิล 1 ออนซ์', 'ຫຼຽນຄຳ Gold Eagle 1 ອອນສ໌', 'Gold Eagle 1 oz', '1盎司美国鹰扬金币', '1oz ゴールドイーグル金貨', '1 औंस गोल्ड ईगल सिक्का'],
+    '1 oz Gold Buffalo': ['เหรียญทองคำบัฟฟาโล 1 ออนซ์', 'ຫຼຽນຄຳ Gold Buffalo 1 ອອນສ໌', 'Gold Buffalo 1 oz', '1盎司美国水牛金币', '1oz ゴールドバッファロー金貨', '1 औंस गोल्ड बफैलो सिक्का'],
+    '1 oz Gold Bar': ['ทองคำแท่ง 1 ออนซ์', 'ຄຳແທ່ງ 1 ອອນສ໌', 'Lingote de Oro 1 oz', '1盎司金条', '1oz ゴールドバー', '1 औंस सोना बार'],
+    '1 oz Silver Eagle': ['เหรียญเงินอเมริกันอีเกิล 1 ออนซ์', 'ຫຼຽນເງິນ Silver Eagle 1 ອອນສ໌', 'Silver Eagle 1 oz', '1盎司美国鹰扬银币', '1oz シルバーイーグル銀貨', '1 औंस सिल्वर ईगल सिक्का'],
+    '1 oz Silver Maple': ['เหรียญเงินเมเปิลแคนาดา 1 ออนซ์', 'ຫຼຽນເງິນ Silver Maple 1 ອອນສ໌', 'Silver Maple 1 oz', '1盎司加拿大枫叶银币', '1oz メイプルリーフ銀貨', '1 औंस सिल्वर मेपल सिक्का'],
+    '1 oz Generic Round': ['เหรียญเงินมาตรฐาน 1 ออนซ์', 'ຫຼຽນເງິນທົ່ວໄປ 1 ອອນສ໌', 'Medalla de Plata 1 oz', '1盎司通用银章', '1oz 汎用銀ラウンド', '1 औंस जेनेरिक सिल्वर राउंड'],
+    '10 oz Silver Bar': ['เงินแท่ง 10 ออนซ์', 'ເງິນແທ່ງ 10 ອອນສ໌', 'Lingote de Plata 10 oz', '10盎司银条', '10oz シルバーバー', '10 औंस चांदी बार'],
+    'Gold Eagle': ['เหรียญทองอีเกิล', 'ຫຼຽນຄຳອີເກິລ', 'Gold Eagle', '鹰扬金币', 'イーグル金貨', 'गोल्ड ईगल'],
+    'Gold Buffalo': ['เหรียญทองบัฟฟาโล', 'ຫຼຽນຄຳບັຟຟາໂລ', 'Gold Buffalo', '水牛金币', 'バッファロー金貨', 'गोल्ड बफैलो'],
+    'Silver Eagle': ['เหรียญเงินอีเกิล', 'ຫຼຽນເງິນອີເກິລ', 'Silver Eagle', '鹰扬银币', 'イーグル銀貨', 'सिल्वर ईगल'],
+    'Silver Maple': ['เหรียญเงินเมเปิล', 'ຫຼຽນເງິນເມເປິລ', 'Silver Maple', '枫叶银币', 'メイプル銀貨', 'सिल्वर मेपल'],
+    'Generic Round': ['เหรียญเงินมาตรฐาน', 'ຫຼຽນເງິນທົ່ວໄປ', 'Medalla Genérica', '通用银章', '汎用銀ラウンド', 'जेनेरिक राउंड'],
+    // Setup Quality dynamic advice sentences (all branches)
+    'Forces are mixed right now — no need to chase; wait for dips near the floor price or a clear breakout.': ['แรงซื้อและแรงขายยังก้ำกึ่ง — ไม่ต้องรีบไล่ราคา รอจังหวะย่อใกล้แนวรับหรือรอเบรกเอาต์ชัดเจน', 'ແຮງຊື້ຂາຍຍັງກ້ຳກຶ່ງ — ບໍ່ຕ້ອງຟ້າວໄລ່ລາຄາ ລໍຖ້າຍໍ່ໃກ້ແນວຮັບ', 'Las fuerzas están mixtas — sin prisa; espera retrocesos al piso o una ruptura clara.', '当前多空力量交织——无需追高，耐心等待回踩支撑位或明确突破。', '強弱材料が拮抗中 — 飛びつかず下値支持付近の押し目か明確な突破待ち。', 'बाज़ार में मिले-जुले संकेत हैं — जल्दबाज़ी न करें; समर्थन स्तर पर गिरावट या स्पष्ट ब्रेकआउट का इंतज़ार करें।'],
+    'Prices jumped fast from short-sellers covering without strong real-world demand behind it — high risk of a sudden drop.': ['ราคาพุ่งเร็วจากการปิดชอร์ตโดยไม่มีแรงซื้อของจริงหนุนเต็มที่ — เสี่ยงถูกเทขายร่วงแรงฉับพลัน', 'ລາຄາພຸ່ງໄວຈາກການປິດຊອດ ໂດຍບໍ່ມີແຮງຊື້ຈິງໜຸນ — ສ່ຽງຫຼຸດແຮງ', 'El precio subió rápido por cierre de cortos sin demanda real fuerte — alto riesgo de caída brusca.', '价格因空头回补急涨但缺乏扎实实物需求支撑——面临突然回落的高风险。', '実需の裏付けが薄い踏み上げ急騰 — 急反落リスクが高い状態です。', 'मज़बूत वास्तविक मांग के बिना शॉर्ट-कवरिंग से तेज़ी आई — अचानक गिरावट का उच्च जोखिम।'],
+    'Tight physical supply and heavy short-squeeze pressure can cause sharp jumps, but avoid chasing big spikes — look for pullbacks toward the floor price.': ['อุปทานของจริงตึงตัวและแรงบีบชอร์ตอาจทำให้ราคาดีดแรง แต่อย่าเพิ่งไล่ซื้อตอนพุ่ง — รอจังหวะย่อตัวเข้าหาแนวรับจะปลอดภัยกว่า', 'ອຸປະທານຂອງຈິງຕຶງຕົວ ແລະ ແຮງບີບຊອດອາດເຮັດໃຫ້ລາຄາພຸ່ງແຮງ ຢ່າໄລ່ຊື້ຕອນພຸ່ງ — ລໍຖ້າຍໍ່ຫາແນວຮັບ', 'La oferta física ajustada y el squeeze pueden causar saltos bruscos, pero evita perseguir picos — busca retrocesos hacia el piso.', '实物供应偏紧叠加空头挤压容易引发急拉，但切勿追高大阳线——优先等待回踩支撑位。', '現物逼迫と踏み上げ圧力で急騰しやすい局面ですが、高値追いは避け下値支持への押し目を狙いましょう。', 'तंग भौतिक आपूर्ति और शॉर्ट-स्क्वीज़ से तेज़ उछाल आ सकते हैं, लेकिन बड़ी छलांग का पीछा न करें — समर्थन की ओर गिरावट देखें।'],
+    'Heavy short-squeeze pressure can cause sharp jumps, but avoid chasing big spikes — look for pullbacks toward the floor price.': ['แรงบีบชอร์ตสูงอาจทำให้ราคาดีดแรงฉับพลัน แต่อย่าไล่ซื้อยอดดอย — รอย่อตัวเข้าหาแนวรับจะปลอดภัยกว่า', 'ແຮງບີບຊອດສູງອາດເຮັດໃຫ້ລາຄາພຸ່ງແຮງ ຢ່າໄລ່ຊື້ — ລໍຖ້າຍໍ່ຫາແນວຮັບ', 'La fuerte presión de short-squeeze puede causar saltos bruscos — evita perseguir picos y espera retrocesos al piso.', '强劲空头挤压可能引发快速拉升，切忌追高——优先等待回调至支撑位。', '強い踏み上げ圧力で急伸しやすいですが高値追いは避け、支持線への押し目待ちが賢明です。', 'भारी शॉर्ट-स्क्वीज़ से तेज़ उछाल संभव है, पर उछाल के पीछे न भागें — समर्थन के पास गिरावट का इंतज़ार करें।'],
+    'Prices have pulled back enough that buyers often step in here, backed by tight physical supply. Good area to slowly add near the floor price.': ['ราคาย่อตัวลงมามากจนผู้ซื้อมักกลับเข้ามาเก็บ พร้อมมีของจริงขาดตลาดหนุน — โซนน่าทยอยสะสมใกล้แนวรับ', 'ລາຄາຫຍໍ້ລົງມາຈົນຜູ້ຊື້ມັກກັບມາເກັບ ພ້ອມອຸປະທານຕຶງຕົວ — ໂຊນດີສຳລັບທະຍອຍຊື້', 'El precio retrocedió a una zona donde suelen entrar compradores, respaldado por oferta ajustada. Buena zona para acumular gradualmente.', '价格已回落至买盘常介入区域，且有实物偏紧支撑，适合在支撑位附近分批低吸。', '買いが入りやすい水準まで調整し現物逼迫も追い風 — 支持線付近で少しずつ拾う好機です。', 'कीमतें इतनी गिरी हैं कि खरीदार अक्सर यहाँ प्रवेश करते हैं और तंग आपूर्ति का सहारा है। समर्थन के पास धीरे-धीरे जोड़ने का अच्छा क्षेत्र।'],
+    'Prices have pulled back enough that buyers often step in here. Good area to slowly add near the floor price.': ['ราคาย่อตัวลงมาสู่จุดที่ผู้ซื้อมักเริ่มกลับเข้ามาเก็บ — โซนน่าทยอยสะสมใกล้แนวรับ', 'ລາຄາຫຍໍ້ລົງມາສູ່ຈຸດທີ່ຜູ້ຊື້ມັກເຂົ້າມາເກັບ — ໂຊນດີສຳລັບທະຍອຍຊື້', 'El precio ha retrocedido lo suficiente como para atraer compradores. Buena zona para acumular poco a poco cerca del piso.', '价格已回调至买盘常介入的位置，适合在支撑位附近逐步逢低布局。', '買い手が入りやすい水準まで調整 — 支持線付近で少しずつ買い増すのに適したエリアです。', 'कीमतें खरीदारों के प्रवेश स्तर तक गिरी हैं। समर्थन के पास धीरे-धीरे जोड़ने का अच्छा क्षेत्र।'],
+    'Steady real-world buying supports adding gradually without chasing overheated prices.': ['แรงซื้อของจริงที่สม่ำเสมอเอื้อให้ทยอยสะสมได้เรื่อยๆ โดยไม่ต้องไล่ซื้อตอนราคาร้อนแรง', 'ແຮງຊື້ຂອງຈິງສະໝ່ຳສະເໝີ ຊ່ວຍໃຫ້ທະຍອຍສະສົມໄດ້ໂດຍບໍ່ຕ້ອງໄລ່ລາຄາ', 'Las compras físicas constantes respaldan acumular gradualmente sin perseguir precios sobrecalentados.', '稳健的实物买盘支撑逢低分批加仓，无需在过热时追高。', '堅実な実需買いが下支えしており、過熱を追わず段階的に積立しやすい環境です。', 'स्थिर वास्तविक खरीदारी बिना ज़्यादा गरम कीमतों के पीछे भागे धीरे-धीरे संचय का समर्थन करती है।'],
+    'Real physical and economic demand is driving a steady climb — favors holding what you own and buying small dips.': ['ความต้องการของจริงและปัจจัยเศรษฐกิจกำลังดันราคาขึ้นอย่างมั่นคง — เหมาะกับการถือต่อและเก็บตอนย่อเล็กน้อย', 'ຄວາມຕ້ອງການຈິງກຳລັງດັນລາຄາຂຶ້ນໝັ້ນຄົງ — ເໝາະແກ່ການຖືຕໍ່ ແລະ ຊື້ຕອນຍໍ່', 'La demanda física y económica real impulsa una subida constante — favorece mantener posiciones y comprar pequeñas caídas.', '真实的实物与宏观需求正推动稳步上涨——适合持股待涨并在小幅回调时补仓。', '実需と経済要因が堅調な上昇を牽引 — 保有継続と小押し目買いが有利です。', 'वास्तविक भौतिक व आर्थिक मांग स्थिर बढ़त ला रही है — होल्ड करने और छोटी गिरावट पर खरीदने के अनुकूल।'],
+    'A strong US Dollar and softer demand are weighing on prices right now — be patient and wait for prices to settle near the floor.': ['ดอลลาร์สหรัฐฯ ที่แข็งค่าและแรงซื้อที่ชะลอตัวกำลังกดดันราคา — ใจเย็นและรอให้ราคาทรงตัวใกล้แนวรับก่อน', 'ໂດລາແຂງຄ່າ ແລະ ແຮງຊື້ຊະລໍກຳລັງກົດດັນລາຄາ — ໃຈເຢັນລໍຖ້າໃກ້ແນວຮັບ', 'Un dólar fuerte y menor demanda presionan el precio — ten paciencia y espera a que se estabilice cerca del piso.', '强势美元与偏弱需求正压制价格——保持耐心，等待价格在支撑位附近企稳。', '米ドル高と需要一服が重荷 — 焦らず下値支持付近で落ち着くのを待ちましょう。', 'मज़बूत अमेरिकी डॉलर और नरम मांग कीमतों पर दबाव डाल रही है — धैर्य रखें और समर्थन पर स्थिर होने दें।'],
+    "Futures cost less than today's spot price, signaling tight gold supply — prices could push higher.": ['ราคาฟิวเจอร์สต่ำกว่าสปอตวันนี้ สะท้อนทองคำจริงขาดตลาด — ราคาอาจปรับตัวขึ้นต่อได้', 'ລາຄາຟິວເຈີຕ່ຳກວ່າສະປອດ ສະທ້ອນຄຳຈິງຂາດຕະຫຼາດ — ລາຄາອາດຂຶ້ນຕໍ່', 'Los futuros cuestan menos que el spot de hoy, señal de escasez de oro — el precio podría subir.', '期货低于今日现货价格，表明黄金现货供应偏紧——价格有望进一步走高。', '先物が現物を下回り金の現物逼迫を示唆 — 価格が押し上げられる可能性があります。', 'फ्यूचर्स आज के स्पॉट से सस्ते हैं, जो सोने की तंग आपूर्ति दर्शाता है — कीमतें ऊपर जा सकती हैं।'],
+    "Futures cost less than today's spot price, signaling tight silver supply — prices could push higher.": ['ราคาฟิวเจอร์สต่ำกว่าสปอตวันนี้ สะท้อนเงินจริงขาดตลาด — ราคาอาจปรับตัวขึ้นต่อได้', 'ລາຄາຟິວເຈີຕ່ຳກວ່າສະປອດ ສະທ້ອນເງິນຈິງຂາດຕະຫຼາດ — ລາຄາອາດຂຶ້ນຕໍ່', 'Los futuros cuestan menos que el spot de hoy, señal de escasez de plata — el precio podría subir.', '期货低于今日现货价格，表明白银现货供应偏紧——价格有望进一步走高。', '先物が現物を下回り銀の現物逼迫を示唆 — 価格が押し上げられる可能性があります。', 'फ्यूचर्स आज के स्पॉट से सस्ते हैं, जो चांदी की तंग आपूर्ति दर्शाता है — कीमतें ऊपर जा सकती हैं।'],
+    // Hidden Alpha standout clauses
+    'East Physical Buying / West Paper Dip divergence': ['แรงซื้อของจริงฝั่งตะวันออกสวนทางตลาดกระดาษตะวันตก', 'ຕະເວັນອອກຊື້ຈິງສວນທາງຕະຫຼາດຕະເວັນຕົກ', 'Divergencia Compra Física Oriente / Caída Papel Occidente', '东方实物扫货与西方纸盘抛压背离', '東洋現物買い・西洋先物売りの乖離', 'पूर्व भौतिक खरीद / पश्चिम पेपर गिरावट विचलन'],
+    'Coiled Spring volatility compression': ['สปริงความผันผวนอัดตัวแน่นรอระเบิด', 'ສະປຣິງຄວາມຜັນຜວນອັດຕົວແໜ້ນ', 'Compresión de volatilidad en resorte tensado', '波动率弹簧蓄力压缩', 'ボラティリティ圧縮コイル', 'कॉइल्ड स्प्रिंग अस्थिरता संकुचन'],
+    'Balanced cross-engine backdrop — no extreme hidden divergence': ['ทั้ง 6 เครื่องมือสมดุลกัน — ยังไม่พบความผิดปกติรุนแรง', 'ທັງ 6 ເຄື່ອງມືສົມດຸນກັນ — ບໍ່ພົບສັນຍານຜິດປົກກະຕິ', 'Panorama equilibrado entre los 6 motores — sin divergencia extrema', '六大引擎整体均衡——暂无极端隐藏背离', '6エンジン全体が均衡 — 極端な隠れ乖離なし', 'संतुलित क्रॉस-इंजन स्थिति — कोई चरम छिपा विचलन नहीं'],
+    'OpEx Expiry Day (Pin Peak)': ['วันหมดอายุออปชัน OpEx (แรงดูดสูงสุด)', 'ມື້ໝົດອາຍຸ OpEx (ແຮງດູດສູງສຸດ)', 'Día de Vencimiento OpEx (Imán Máximo)', '期权到期日（磁力峰值）', 'OP満期当日（ピン最大）', 'OpEx समाप्ति दिवस (पिन पीक)'],
+    // Institutional Catalyst Calendar, Event-Risk & Futures Basis
+    'Pre-Event Vol': ['ผันผวนก่อนข่าวใหญ่', 'ຜັນຜວນກ່ອນຂ່າວໃຫຍ່', 'Vol. Pre-Evento', '事件前波动', 'イベント前変動', 'प्री-इवेंट अस्थिरता'],
+    'Imminent (<48h)': ['ใกล้เหตุการณ์ (<48ชม.)', 'ໃກ້ເຫດການ (<48ຊມ)', 'Inminente (<48h)', '临近事件（<48h）', '直前（48h以内）', 'आसन्न (<48घं)'],
+    'Calm Calendar': ['ปฏิทินเงียบสงบ', 'ປະຕິທິນສະຫງົບ', 'Calendario Tranquilo', '日程平静', '静穏カレンダー', 'शांत कैलेंडर'],
+    'Macro': ['มหภาค', 'ມະຫາພາກ', 'Macro', '宏观', 'マクロ', 'मैक्रो'],
+    'Vaults': ['คลังโลหะ', 'ຄັງໂລຫະ', 'Bóvedas', '金库', '金庫', 'वॉल्ट'],
+    'Central Bank': ['ธนาคารกลาง', 'ທະນາຄານກາງ', 'Banco Central', '央行', '中銀', 'केंद्रीय बैंक'],
+    'Physical': ['ของจริง', 'ຂອງຈິງ', 'Físico', '实物', '現物', 'भौतिक'],
+    'Space': ['อวกาศ', 'ອະວະກາດ', 'Espacio', '太空', '宇宙', 'अंतरिक्ष'],
+    'Event': ['เหตุการณ์', 'ເຫດການ', 'Evento', '事件', 'イベント', 'इवेंट'],
+    'TODAY': ['วันนี้', 'ມື້ນີ້', 'HOY', '今日', '本日', 'आज'],
+    'FOMC Rate Decision': ['ประชุมดอกเบี้ยเฟด (FOMC)', 'ປະຊຸມດອກເບ້ຍ FOMC', 'Decisión de Tasas FOMC', '美联储FOMC利率决议', '米FOMC政策金利発表', 'FOMC ब्याज दर निर्णय'],
+    'ECB Rate Decision': ['ประชุมดอกเบี้ยยุโรป (ECB)', 'ປະຊຸມດອກເບ້ຍ ECB', 'Decisión de Tasas BCE', '欧洲央行ECB利率决议', '欧州ECB政策金利発表', 'ECB ब्याज दर निर्णय'],
+    'Bank of Japan (BoJ) Policy': ['นโยบายธนาคารกลางญี่ปุ่น (BoJ)', 'ນະໂຍບາຍທະນາຄານຍີ່ປຸ່ນ (BoJ)', 'Política del Banco de Japón (BoJ)', '日本央行（BoJ）货币政策', '日銀（BoJ）金融政策決定', 'बैंक ऑफ जापान (BoJ) नीति'],
+    'US CPI Inflation Print': ['ประกาศเงินเฟ้อ CPI สหรัฐฯ', 'ປະກາດເງິນເຟີ້ CPI ສະຫະລັດ', 'Dato de Inflación IPC EE.UU.', '美国CPI通胀数据', '米CPIインフレ指標', 'अमेरिकी CPI मुद्रास्फीति डेटा'],
+    'US Jobs Report (NFP)': ['ตัวเลขจ้างงานสหรัฐฯ (NFP)', 'ຕົວເລກຈ້າງງານສະຫະລັດ (NFP)', 'Informe de Empleo EE.UU. (NFP)', '美国非农就业报告（NFP）', '米雇用統計（NFP）', 'अमेरिकी रोज़गार रिपोर्ट (NFP)'],
+    'US Core PCE Inflation': ['เงินเฟ้อพื้นฐาน Core PCE สหรัฐฯ', 'ເງິນເຟີ້ Core PCE ສະຫະລັດ', 'Inflación Core PCE EE.UU.', '美国核心PCE通胀', '米コアPCEインフレ', 'अमेरिकी कोर PCE मुद्रास्फीति'],
+    'COMEX Silver Delivery Notice': ['วันแจ้งส่งมอบเงินจริง COMEX', 'ມື້ແຈ້ງສົ່ງມອບເງິນ COMEX', 'Aviso de Entrega Plata COMEX', 'COMEX白银交割通知日', 'COMEX銀受渡通知日', 'COMEX चांदी डिलीवरी नोटिस'],
+    'COMEX Gold Delivery Notice': ['วันแจ้งส่งมอบทองคำจริง COMEX', 'ມື້ແຈ້ງສົ່ງມອບຄຳ COMEX', 'Aviso de Entrega Oro COMEX', 'COMEX黄金交割通知日', 'COMEX金受渡通知日', 'COMEX सोना डिलीवरी नोटिस'],
+    'COMEX Silver First Notice': ['วันแรกแจ้งส่งมอบเงิน COMEX', 'ມື້ທຳອິດສົ່ງມອບເງິນ COMEX', 'Primer Aviso Plata COMEX', 'COMEX白银首个通知日', 'COMEX銀初回受渡通知', 'COMEX चांदी प्रथम नोटिस'],
+    'COMEX Silver First Notice Day': ['วันแรกแจ้งส่งมอบเงิน COMEX', 'ມື້ທຳອິດສົ່ງມອບເງິນ COMEX', 'Día de Primer Aviso Plata COMEX', 'COMEX白银首个交割通知日', 'COMEX銀初回受渡通知日', 'COMEX चांदी प्रथम नोटिस दिवस'],
+    'COMEX Gold First Notice': ['วันแรกแจ้งส่งมอบทอง COMEX', 'ມື້ທຳອິດສົ່ງມອບຄຳ COMEX', 'Primer Aviso Oro COMEX', 'COMEX黄金首个通知日', 'COMEX金初回受渡通知', 'COMEX सोना प्रथम नोटिस'],
+    'COMEX Gold First Notice Day': ['วันแรกแจ้งส่งมอบทอง COMEX', 'ມື້ທຳອິດສົ່ງມອບຄຳ COMEX', 'Día de Primer Aviso Oro COMEX', 'COMEX黄金首个交割通知日', 'COMEX金初回受渡通知日', 'COMEX सोना प्रथम नोटिस दिवस'],
+    'COMEX Gold/Silver Options Expiry': ['วันหมดอายุออปชันทอง/เงิน COMEX', 'ມື້ໝົດອາຍຸອອບຊັນ COMEX', 'Vencimiento Opciones Oro/Plata COMEX', 'COMEX金银期权到期日', 'COMEX金・銀オプション満期', 'COMEX सोना/चांदी ऑप्शन समाप्ति'],
+    'World Gold Council Demand Report': ['รายงานความต้องการทองสภาทองคำโลก', 'ລາຍງານຄວາມຕ້ອງການຄຳ WGC', 'Informe de Demanda del WGC', '世界黄金协会（WGC）需求报告', 'ワールド・ゴールド・カウンシル需要報告', 'विश्व स्वर्ण परिषद मांग रिपोर्ट'],
+    'CFTC COT Positioning Report': ['รายงานสถานะกองทุน CFTC COT', 'ລາຍງານສະຖານະ CFTC COT', 'Informe de Posiciones CFTC COT', 'CFTC COT持仓报告', 'CFTC COT建玉報告', 'CFTC COT पोज़िशनिंग रिपोर्ट'],
+    'Chinese New Year Gold Restock': ['เทศกาลตรุษจีนเติมสต็อกทองคำ', 'ກຸດຈີນເຕີມສະຕັອກຄຳ', 'Reabastecimiento de Oro Año Nuevo Chino', '中国春节前黄金备货潮', '春節前の中国金在庫補充', 'चीनी नववर्ष सोना रिस्टॉक'],
+    'Spring Equinox Solar Storm Peak': ['ช่วงพายุสุริยะสูงสุดวสันตวิษุวัต', 'ພາຍຸສຸລິຍະສູງສຸດລະດູໃບໄມ້ປົ່ງ', 'Pico Tormenta Solar Equinoccio Primavera', '春分太阳风暴高峰期', '春分の太陽嵐ピーク', 'वसंत विषुव सौर तूफान शिखर'],
+    'India Akshaya Tritiya Buying': ['เทศกาลซื้อทองอัคษยตฤติยา อินเดีย', 'ເທດສະການຊື້ຄຳອິນເດຍ', 'Compras de Oro Akshaya Tritiya (India)', '印度佛陀满月节（Akshaya Tritiya）购金潮', 'インド・アクシャヤ・トリティヤ金購入期', 'भारत अक्षय तृतीया सोना खरीदारी'],
+    'Autumn Equinox Solar Storm Peak': ['ช่วงพายุสุริยะสูงสุดศารทวิษุวัต', 'ພາຍຸສຸລິຍະສູງສຸດລະດູໃບໄມ້ຫຼົ່ນ', 'Pico Tormenta Solar Equinoccio Otoño', '秋分太阳风暴高峰期', '秋分の太陽嵐ピーク', 'शरद विषुव सौर तूफान शिखर'],
+    'India Dhanteras & Diwali Peak': ['เทศกาลดิวาลีและดันเทราส อินเดีย', 'ເທດສະການດີວາລີ ອິນເດຍ', 'Pico Dhanteras y Diwali (India)', '印度排灯节（Diwali）购金高峰', 'インド・ディワリ金需要ピーク', 'भारत धनतेरस और दिवाली शिखर'],
+    'Year-End Bullion Vault Positioning': ['ปรับพอร์ตคลังทองคำช่วงสิ้นปี', 'ປັບພອດຄັງຄຳທ້າຍປີ', 'Posicionamiento de Bóvedas Fin de Año', '年末金库持仓与交割布局', '年末ブリオン金庫ポジション調整', 'वर्षांत बुलियन वॉल्ट पोज़िशनिंग'],
+    'Monthly Gold & Silver Contract Expiry': ['วันหมดอายุสัญญาทองคำและเงินรายเดือน', 'ມື້ໝົດອາຍຸສັນຍາຄຳ-ເງິນປະຈຳເດືອນ', 'Vencimiento Mensual Contratos Oro y Plata', '月度金银合约到期日', '月次金・銀先物契約満期', 'मासिक सोना व चांदी अनुबंध समाप्ति'],
+    'Gold & Silver supply shortage!': ['ทองคำและเงินของจริงขาดตลาด!', 'ຄຳ ແລະ ເງິນຂອງຈິງຂາດຕະຫຼາດ!', '¡Escasez física de Oro y Plata!', '黄金与白银现货均告紧缺！', '金・銀ともに現物供給不足！', 'सोना और चांदी दोनों की आपूर्ति कमी!'],
+    'Silver supply tight (backwardation)': ['เงินจริงตึงตัว (ฟิวเจอร์สต่ำกว่าสปอต)', 'ເງິນຈິງຕຶງຕົວ (Backwardation)', 'Oferta de plata ajustada (backwardation)', '白银现货偏紧（期货贴水）', '銀供給ひっ迫（逆ザヤ）', 'चांदी आपूर्ति तंग (बैकवर्डेशन)'],
+    'Gold supply tight (backwardation)': ['ทองคำจริงตึงตัว (ฟิวเจอร์สต่ำกว่าสปอต)', 'ຄຳຈິງຕຶງຕົວ (Backwardation)', 'Oferta de oro ajustada (backwardation)', '黄金现货偏紧（期货贴水）', '金供給ひっ迫（逆ザヤ）', 'सोना आपूर्ति तंग (बैकवर्डेशन)'],
+    'Normal futures carry': ['ส่วนต่างฟิวเจอร์สอยู่ในเกณฑ์ปกติ', 'ສ່ວນຕ່າງຟິວເຈີປົກກະຕິ', 'Carry normal de futuros', '期货升水正常', '通常先物キャリー', 'सामान्य फ्यूचर्स कैरी'],
+    // Jump Diffusion & Self-Learn labels
+    '⚠ Overheated — Drop Risk': ['⚠ ร้อนแรงเกินไป — เสี่ยงร่วง', '⚠ ຮ້ອນແຮງເກີນ — ສ່ຽງຫຼຸດ', '⚠ Sobrecalentado — Riesgo Caída', '⚠ 过热预警 —— 回调风险', '⚠ 過熱警戒 — 下落リスク', '⚠ अत्यधिक गर्म — गिरावट जोखिम'],
+    'Upside Spike Risk': ['โอกาสพุ่งทะลุขาขึ้น', 'ໂອກາດພຸ່ງຂາຂຶ້ນ', 'Riesgo de Salto Alcista', '向上暴涨风险', '上方向急騰リスク', 'तेज़ी से उछाल जोखिम'],
+    'Steady Climb Odds': ['โอกาสไต่ขึ้นต่อเนื่อง', 'ໂອກາດໄຕ່ຂຶ້ນຕໍ່ເນື່ອງ', 'Probabilidad de Subida Estable', '稳步攀升概率', '堅調上昇の確率', 'स्थिर चढ़ाई की संभावना'],
+    'Normal Odds': ['โอกาสความน่าจะเป็นปกติ', 'ໂອກາດປົກກະຕິ', 'Probabilidades Normales', '常规概率分布', '通常確率分布', 'सामान्य संभावनाएँ'],
+    'Calibrating…': ['กำลังปรับเทียบ…', 'ກຳລັງປັບທຽບ…', 'Calibrando…', '正在校准…', '調整中…', 'कैलिब्रेट हो रहा है…'],
+    'Evaluating 30D…': ['กำลังประเมินผล 30 วัน…', 'ກຳລັງປະເມີນ 30 ມື້…', 'Evaluando 30D…', '评估30天表现中…', '30日検証中…', '30दिन मूल्यांकन…'],
+    'Vault Supply (+0.18%)': ['อุปทานคลังโลหะ (+0.18%)', 'ອຸປະທານຄັງໂລຫະ (+0.18%)', 'Oferta de Bóvedas (+0.18%)', '金库供应 (+0.18%)', '金庫供給 (+0.18%)', 'वॉल्ट आपूर्ति (+0.18%)'],
+    'Busy Market': ['ตลาดคึกคัก', 'ຕະຫຼາດຄຶກຄັກ', 'Mercado Activo', '活跃行情', '活況相場', 'व्यस्त बाज़ार'],
+    'Calm Market': ['ตลาดสงบ', 'ຕະຫຼາດສະຫງົບ', 'Mercado Tranquilo', '平稳行情', '静穏相場', 'शांत बाज़ार'],
+    'Live Logged Checks': ['บันทึกการตรวจสดรายวัน', 'ບັນທຶກການກວດສົດ', 'Registros Verificados en Vivo', '实盘每日校验记录', 'ライブ記録チェック', 'लाइव लॉग जांच'],
+    'Resetting toward defaults': ['กำลังรีเซ็ตกลับสู่ค่าเริ่มต้น', 'ກຳລັງຣີເຊັດສູ່ຄ່າເລີ່ມຕົ້ນ', 'Restableciendo valores base', '正向默认权重回调', '標準設定へリセット中', 'डिफ़ॉल्ट पर रीसेट हो रहा है'],
+    'Forecast (Gold) vs. Actual (Green/Red) · Daily Gold': ['คาดการณ์ (ทอง) เทียบจริง (เขียว/แดง) · ทองคำรายวัน', 'ຄາດຄະເນ (ຄຳ) ທຽບຈິງ (ຂຽວ/ແດງ) · ຄຳລາຍວັນ', 'Pronóstico (Oro) vs. Real (Verde/Rojo) · Oro Diario', '预测（金色）对比实际（绿/红）· 黄金每日复盘', '予測（金）vs 実績（緑/赤）・金日次', 'पूर्वानुमान (सोना) बनाम वास्तविक (हरा/लाल) · दैनिक सोना'],
   });
+
+  // v59 Dynamic Template Patterns covering all v48–v58 runtime cards, counters, placeholders & live badges
+  const P = window.__BP_I18N_PACKS.PATTERNS;
+  const EX = window.__BP_I18N_PACKS.EXACT;
+  const tr = (s, l) => EX[s]?.[l] || s;
+  const pick = (l, arr) => {
+    const idx = ['th', 'lo', 'es', 'zh', 'ja', 'hi'].indexOf(l);
+    return idx >= 0 ? arr[idx] : null;
+  };
+  const MONTHS_I18N = {
+    Jan: ['ม.ค.', 'ມ.ກ.', 'Ene', '1月', '1月', 'जन'],
+    Feb: ['ก.พ.', 'ກ.ພ.', 'Feb', '2月', '2月', 'फ़र'],
+    Mar: ['มี.ค.', 'ມີ.ນ.', 'Mar', '3月', '3月', 'मार्च'],
+    Apr: ['เม.ย.', 'ມ.ສ.', 'Abr', '4月', '4月', 'अप्रै'],
+    May: ['พ.ค.', 'ພ.ພ.', 'May', '5月', '5月', 'मई'],
+    Jun: ['มิ.ย.', 'ມິ.ຖ.', 'Jun', '6月', '6月', 'जून'],
+    Jul: ['ก.ค.', 'ກ.ລ.', 'Jul', '7月', '7月', 'जुल'],
+    Aug: ['ส.ค.', 'ສ.ຫ.', 'Ago', '8月', '8月', 'अग'],
+    Sep: ['ก.ย.', 'ກ.ຍ.', 'Sep', '9月', '9月', 'सित'],
+    Oct: ['ต.ค.', 'ຕ.ລ.', 'Oct', '10月', '10月', 'अक्टू'],
+    Nov: ['พ.ย.', 'ພ.ຈ.', 'Nov', '11月', '11月', 'नवं'],
+    Dec: ['ธ.ค.', 'ທ.ວ.', 'Dic', '12月', '12月', 'दिस'],
+  };
+  const DAYS_I18N = {
+    Mon: ['จ.', 'ຈັນ', 'Lun', '周一', '月', 'सोम'],
+    Tue: ['อ.', 'ອັງຄານ', 'Mar', '周二', '火', 'मंगल'],
+    Wed: ['พ.', 'ພຸດ', 'Mié', '周三', '水', 'बुध'],
+    Thu: ['พฤ.', 'ພະຫັດ', 'Jue', '周四', '木', 'गुरु'],
+    Fri: ['ศ.', 'ສຸກ', 'Vie', '周五', '金', 'शुक्र'],
+    Sat: ['ส.', 'ເສົາ', 'Sáb', '周六', '土', 'शनि'],
+    Sun: ['อา.', 'ອາທິດ', 'Dom', '周日', '日', 'रवि'],
+  };
+  const trMonths = (str, l) =>
+    String(str).replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g, (k) => pick(l, MONTHS_I18N[k]) || k);
+  const trHiddenClause = (part, l) => {
+    const s = String(part || '').trim();
+    if (EX[s]?.[l]) return EX[s][l];
+    let mm;
+    if ((mm = s.match(/^Post-OpEx Release \(\+(\d+)d\)( ?⚡)?$/))) {
+      const bolt = mm[2] ? ' ⚡' : '';
+      return pick(l, [
+        `ช่วงปลดล็อกหลัง OpEx (+${mm[1]} วัน)${bolt}`,
+        `ປົດລັອກຫຼັງ OpEx (+${mm[1]} ມື້)${bolt}`,
+        `Liberación Post-OpEx (+${mm[1]}d)${bolt}`,
+        `期权到期后释放期（+${mm[1]}天）${bolt}`,
+        `OP満期後解放期（+${mm[1]}日）${bolt}`,
+        `पोस्ट-OpEx रिलीज़ (+${mm[1]}दिन)${bolt}`,
+      ]);
+    }
+    if ((mm = s.match(/^Pre-OpEx Strike Pin \((\d+)d\)$/))) {
+      return pick(l, [
+        `แรงดูดก่อนหมดอายุ OpEx (${mm[1]} วัน)`,
+        `ກ່ອນໝົດອາຍຸ OpEx (${mm[1]} ມື້)`,
+        `Imán Pre-OpEx (${mm[1]}d)`,
+        `期权到期前磁力钉扎（${mm[1]}天）`,
+        `OP満期前ストライクピン（${mm[1]}日）`,
+        `प्री-OpEx स्ट्राइक पिन (${mm[1]}दिन)`,
+      ]);
+    }
+    if ((mm = s.match(/^Stealth Global Currency Breakout \((\d+)% of world FX near highs\)$/))) {
+      return pick(l, [
+        `เบรกเอาต์ลับสกุลเงินโลก (${mm[1]}% ของสกุลเงินโลกใกล้จุดสูงสุด)`,
+        `ເບຣກເອົາຕ໌ລັບສະກຸນເງິນໂລກ (${mm[1]}% ໃກ້ຈຸດສູງ)`,
+        `Ruptura Global Oculta (${mm[1]}% de divisas en máximos)`,
+        `全球货币隐蔽突破（${mm[1]}% 世界货币接近新高）`,
+        `世界通貨ステルス突破（${mm[1]}%が高値圏）`,
+        `वैश्विक मुद्रा ब्रेकआउट (${mm[1]}% मुद्राएं उच्च पर)`,
+      ]);
+    }
+    return s;
+  };
+
+  P.push(
+    // Futures strip inside Spot cards
+    [/^vs Spot (.+?)\/(oz|g) \((.+)\)$/, (m, l) => {
+      const u = m[2] === 'g' ? pick(l, ['กรัม', 'ກຣາມ', 'g', '克', 'g', 'ग्राम']) : pick(l, ['ออนซ์', 'ອອນສ໌', 'oz', '盎司', 'oz', 'औंस']);
+      return pick(l, [
+        `เทียบสปอต ${m[1]}/${u} (${m[3]})`,
+        `ທຽບສະປອດ ${m[1]}/${u} (${m[3]})`,
+        `vs Spot ${m[1]}/${u} (${m[3]})`,
+        `对比现货 ${m[1]}/${u} (${m[3]})`,
+        `現物比 ${m[1]}/${u} (${m[3]})`,
+        `स्पॉट बनाम ${m[1]}/${u} (${m[3]})`,
+      ]);
+    }],
+    [/^Supply shortage: futures below spot \(\+(\d+) pts forecast lift\)$/, (m, l) => pick(l, [
+      `ของขาดตลาด: ฟิวเจอร์สต่ำกว่าสปอต (หนุนคาดการณ์ +${m[1]} คะแนน)`,
+      `ສິນຄ້າຂາດ: ຟິວເຈີຕ່ຳກວ່າສະປອດ (+${m[1]} ຄະແນນ)`,
+      `Escasez física: futuros bajo spot (+${m[1]} pts pronóstico)`,
+      `实物紧缺：期货低于现货（预测提升 +${m[1]} 分）`,
+      `供給不足：先物が現物割れ（予測 +${m[1]}pt 押上げ）`,
+      `आपूर्ति कमी: फ्यूचर्स स्पॉट से नीचे (+${m[1]} अंक बढ़त)`,
+    ])],
+    [/^Tight physical supply \(\+(\d+) pts forecast lift\)$/, (m, l) => pick(l, [
+      `อุปทานของจริงตึงตัว (หนุนคาดการณ์ +${m[1]} คะแนน)`,
+      `ອຸປະທານຈິງຕຶງຕົວ (+${m[1]} ຄະແນນ)`,
+      `Oferta física ajustada (+${m[1]} pts pronóstico)`,
+      `实物供应偏紧（预测提升 +${m[1]} 分）`,
+      `現物供給ひっ迫（予測 +${m[1]}pt 押上げ）`,
+      `तंग भौतिक आपूर्ति (+${m[1]} अंक बढ़त)`,
+    ])],
+    // 30-Day Roadmap dynamic badges & metadata
+    [/^4-Model Ensemble · (\d+)% Agree$/, (m, l) => pick(l, [
+      `4 โมเดลร่วมกัน · เห็นตรงกัน ${m[1]}%`,
+      `4 ໂມເດວ · ເຫັນກົງກັນ ${m[1]}%`,
+      `Conjunto 4 Modelos · ${m[1]}% Acuerdo`,
+      `4模型集成 · ${m[1]}% 一致`,
+      `4モデル統合・${m[1]}%一致`,
+      `4-मॉडल संयोजन · ${m[1]}% सहमति`,
+    ])],
+    [/^(\d+)% Odds Up$/, (m, l) => pick(l, [
+      `โอกาสขึ้น ${m[1]}%`,
+      `ໂອກາດຂຶ້ນ ${m[1]}%`,
+      `${m[1]}% Prob. Alza`,
+      `上涨概率 ${m[1]}%`,
+      `上昇確率 ${m[1]}%`,
+      `तेज़ी संभावना ${m[1]}%`,
+    ])],
+    [/^(\d)\/4 Agree$/, (m, l) => pick(l, [
+      `ตรงกัน ${m[1]}/4`,
+      `ກົງກັນ ${m[1]}/4`,
+      `${m[1]}/4 Acuerdo`,
+      `${m[1]}/4 一致`,
+      `${m[1]}/4 一致`,
+      `${m[1]}/4 सहमति`,
+    ])],
+    [/^(Strong Trend|Trending|Strong Snap-Back|Mean-Reverting|Balanced) \(H=([0-9.]+)\)$/, (m, l) => `${tr(m[1], l)} (H=${m[2]})`],
+    [/^20-Yr (.+):$/, (m, l) => {
+      const mo = trMonths(m[1], l);
+      return pick(l, [
+        `สถิติ 20 ปี ${mo}:`,
+        `ສະຖິຕິ 20 ປີ ${mo}:`,
+        `20 Años ${mo}:`,
+        `20年季节 ${mo}：`,
+        `20年平均 ${mo}：`,
+        `20-वर्ष ${mo}:`,
+      ]);
+    }],
+    [/^Past Twins \((\d+)% match\):$/, (m, l) => pick(l, [
+      `คู่แฝดอดีต (คล้าย ${m[1]}%):`,
+      `ຄູ່ແຝດອະດີດ (${m[1]}%):`,
+      `Gemelos Históricos (${m[1]}%):`,
+      `历史相似期（匹配${m[1]}%）：`,
+      `過去類似期（一致${m[1]}%）：`,
+      `ऐतिहासिक समानता (${m[1]}%):`,
+    ])],
+    [/^([+−\-]?[0-9.]+%) avg$/, (m, l) => pick(l, [
+      `เฉลี่ย ${m[1]}`,
+      `ສະເລ່ຍ ${m[1]}`,
+      `prom. ${m[1]}`,
+      `均幅 ${m[1]}`,
+      `平均 ${m[1]}`,
+      `औसत ${m[1]}`,
+    ])],
+    [/^(Macro & Vaults|Lead-Lag|Hurst & RSI|Seasonal & Twins) ([↑↓→])$/, (m, l) => `${tr(m[1], l)} ${m[2]}`],
+    // World & Space Catalyst Pulse dynamic strings
+    [/^(\d+)\/100 · (.+)$/, (m, l) => `${m[1]}/100 · ${tr(m[2], l)}`],
+    [/^G(\d) Storm · R(\d) Radio · S(\d) Solar · 24h G(\d)$/, (m, l) => pick(l, [
+      `พายุแม่เหล็ก G${m[1]} · วิทยุ R${m[2]} · รังสี S${m[3]} · 24ชม. G${m[4]}`,
+      `ພາຍຸ G${m[1]} · ວິທະຍຸ R${m[2]} · ລັງສີ S${m[3]} · 24ຊມ G${m[4]}`,
+      `Tormenta G${m[1]} · Radio R${m[2]} · Solar S${m[3]} · 24h G${m[4]}`,
+      `地磁暴 G${m[1]} · 无线电 R${m[2]} · 辐射 S${m[3]} · 24h G${m[4]}`,
+      `磁気嵐 G${m[1]}・電波 R${m[2]}・放射 S${m[3]}・24h G${m[4]}`,
+      `तूफ़ान G${m[1]} · रेडियो R${m[2]} · सौर S${m[3]} · 24h G${m[4]}`,
+    ])],
+    [/^(\d+) breaking · (\d+) \(24h\)$/, (m, l) => pick(l, [
+      `ข่าวด่วน ${m[1]} · ใน 24 ชม. ${m[2]} ข่าว`,
+      `ຂ່າວດ່ວນ ${m[1]} · 24ຊມ ${m[2]}`,
+      `${m[1]} urgentes · ${m[2]} (24h)`,
+      `${m[1]} 条突发 · ${m[2]} 条（24h）`,
+      `速報 ${m[1]}件・24h ${m[2]}件`,
+      `${m[1]} ब्रेकिंग · ${m[2]} (24घं)`,
+    ])],
+    [/^Live tape: (.+)$/, (m, l) => pick(l, [
+      `ตลาดสด: ${m[1]}`,
+      `ລາຄາສົດ: ${m[1]}`,
+      `En vivo: ${m[1]}`,
+      `实时盘面：${m[1]}`,
+      `ライブ相場：${m[1]}`,
+      `लाइव भाव: ${m[1]}`,
+    ])],
+    [/^(NOAA SWPC Live|NOAA SWPC|Baseline Quiet):\s*(.+)$/, (m, l) => {
+      const src = m[1] === 'Baseline Quiet'
+        ? pick(l, ['ค่าพื้นฐานปกติ', 'ຄ່າພື້ນຖານປົກກະຕິ', 'Base Tranquila', '基准静穏', 'ベースライン静穏', 'सामान्य बेसलाइन'])
+        : m[1] === 'NOAA SWPC Live'
+          ? pick(l, ['NOAA SWPC สด', 'NOAA SWPC ສົດ', 'NOAA SWPC en Vivo', 'NOAA SWPC 实时', 'NOAA SWPC ライブ', 'NOAA SWPC लाइव'])
+          : 'NOAA SWPC';
+      let msg = tr(m[2], l);
+      const gm = m[2].match(/^NOAA forecasts G(\d) storm within 24h — minor safe-haven watch active\.$/);
+      if (gm) {
+        msg = pick(l, [
+          `NOAA คาดการณ์พายุแม่เหล็ก G${gm[1]} ภายใน 24 ชม. — เฝ้าระวังแรงซื้อหลบภัยเล็กน้อย`,
+          `NOAA ຄາດການພາຍຸ G${gm[1]} ໃນ 24 ຊມ — ເຝົ້າລະວັງເລັກນ້ອຍ`,
+          `NOAA pronostica tormenta G${gm[1]} en 24h — vigilancia refugio leve activa.`,
+          `NOAA 预测未来24小时将出现 G${gm[1]} 级地磁暴——轻度避险关注已开启。`,
+          `NOAAは24時間以内のG${gm[1]}磁気嵐を予測 — 軽度の安全資産警戒中。`,
+          `NOAA ने 24 घंटे में G${gm[1]} तूफान का अनुमान जताया — हल्की सुरक्षित निगरानी सक्रिय।`,
+        ]);
+      }
+      return `${src}: ${msg}`;
+    }],
+    // Physical Premiums dynamic labels & placeholders
+    [/^Normal (\d+[–\-]\d+%)$/, (m, l) => pick(l, [
+      `ปกติ ${m[1]}`,
+      `ປົກກະຕິ ${m[1]}`,
+      `Normal ${m[1]}`,
+      `正常 ${m[1]}`,
+      `通常 ${m[1]}`,
+      `सामान्य ${m[1]}`,
+    ])],
+    [/^\+([0-9.]+)% over melt$/, (m, l) => pick(l, [
+      `+${m[1]}% เหนือราคาหลอม`,
+      `+${m[1]}% ເໜືອລາຄາຫຼອມ`,
+      `+${m[1]}% sobre fundición`,
+      `高于熔化价 +${m[1]}%`,
+      `溶解価値比 +${m[1]}%`,
+      `मेल्ट से +${m[1]}% अधिक`,
+    ])],
+    [/^Est\. Buyback (.+)$/, (m, l) => pick(l, [
+      `ราคารับซื้อคืนโดยประมาณ ${m[1]}`,
+      `ລາຄາຮັບຊື້ຄືນ ${m[1]}`,
+      `Recompra est. ${m[1]}`,
+      `预估回购价 ${m[1]}`,
+      `推定買取 ${m[1]}`,
+      `अनुमानित बायबैक ${m[1]}`,
+    ])],
+    [/^Buyback (.+) \(ABOVE SPOT \+([0-9.]+)%\)$/, (m, l) => pick(l, [
+      `รับซื้อคืน ${m[1]} (สูงกว่าสปอต +${m[2]}%)`,
+      `ຮັບຊື້ຄືນ ${m[1]} (ສູງກວ່າສະປອດ +${m[2]}%)`,
+      `Recompra ${m[1]} (SOBRE SPOT +${m[2]}%)`,
+      `回购价 ${m[1]}（高于现货 +${m[2]}%）`,
+      `買取 ${m[1]}（スポット超 +${m[2]}%）`,
+      `बायबैक ${m[1]} (स्पॉट से +${m[2]}% ऊपर)`,
+    ])],
+    [/^Forecast impact: \+(\d+) pts bullish physical squeeze lead(.*)$/, (m, l) => pick(l, [
+      `ผลต่อคาดการณ์: +${m[1]} คะแนน แรงดึงของจริงขาดตลาด${m[2] ? ' (ราคาจริงแยกจากกระดาษ)' : ''}`,
+      `ຜົນຕໍ່ຄາດຄະເນ: +${m[1]} ຄະແນນ ຄວາມຕ້ອງການຂອງຈິງສູງ`,
+      `Impacto pronóstico: +${m[1]} pts señal alcista por escasez física`,
+      `预测影响：+${m[1]} 分 实物紧缺看涨领先信号`,
+      `予測影響：+${m[1]}pt 現物逼迫の強気先行シグナル`,
+      `पूर्वानुमान प्रभाव: +${m[1]} अंक भौतिक किल्लत तेज़ी संकेत`,
+    ])],
+    [/^Forecast impact: [−\-](\d+) pts cooled retail momentum \(low buyer markup\)$/, (m, l) => pick(l, [
+      `ผลต่อคาดการณ์: −${m[1]} คะแนน แรงซื้อรายย่อยแผ่ว (ค่าพรีเมียมถูกน่าเก็บ)`,
+      `ຜົນຕໍ່ຄາດຄະເນ: −${m[1]} ຄະແນນ ແຮງຊື້ລາຍຍ່ອຍຊະລໍ`,
+      `Impacto pronóstico: −${m[1]} pts menor impulso minorista (prima baja)`,
+      `预测影响：−${m[1]} 分 零售热度降温（低溢价买点）`,
+      `予測影響：−${m[1]}pt 小売勢い一服（低プレミアム）`,
+      `पूर्वानुमान प्रभाव: −${m[1]} अंक धीमा खुदरा रुझान (कम मार्कअप)`,
+    ])],
+    [/^Enter dealer 1 oz (Gold|Silver) coin \$ \(auto (.+)\)$/, (m, l) => {
+      const met = tr(m[1], l);
+      return pick(l, [
+        `กรอกราคาเหรียญ${met} 1 ออนซ์จากร้านค้า (อัตโนมัติ ${m[2]})`,
+        `ໃສ່ລາຄາຫຼຽນ${met} 1 ອອນສ໌ (ອັດຕະໂນມັດ ${m[2]})`,
+        `Precio moneda ${met} 1 oz en tienda (auto ${m[2]})`,
+        `输入本地金店1盎司${met}币报价（自动 ${m[2]}）`,
+        `店頭1oz${met}コイン価格を入力（自動 ${m[2]}）`,
+        `1 औंस ${met} सिक्के का डीलर भाव लिखें (ऑटो ${m[2]})`,
+      ]);
+    }],
+    [/^Retail markups \(([0-9.]+)% avg\) sit inside the normal (.+?) range — shelves are well stocked, making this a clean accumulation window\.$/, (m, l) => pick(l, [
+      `ค่าพรีเมียมหน้าร้าน (เฉลี่ย ${m[1]}%) อยู่ในเกณฑ์ปกติ ${m[2]} — ร้านค้ามีของพร้อม เหมาะสำหรับทยอยสะสมในต้นทุนต่ำ`,
+      `ຄ່າພຣີມຽມ (ສະເລ່ຍ ${m[1]}%) ຢູ່ໃນລະດັບປົກກະຕິ ${m[2]} — ເໝາະແກ່ການສະສົມ`,
+      `Las primas minoristas (${m[1]}% prom.) están en rango normal ${m[2]} — buen inventario para acumular sin sobreprecio.`,
+      `零售溢价（均约 ${m[1]}%）处于正常区间 ${m[2]} —— 商家库存充足，适合平稳逢低定投。`,
+      `小売プレミアム（平均${m[1]}%）は通常範囲${m[2]}内 — 在庫は潤沢で落ち着いた積立好機です。`,
+      `खुदरा मार्कअप (औसत ${m[1]}%) सामान्य ${m[2]} सीमा में हैं — स्टॉक भरपूर है, संचय के लिए अच्छा समय।`,
+    ])],
+    [/^Physical premiums \(([0-9.]+)% on (.+?)\) sit above normal (.+?) — rising retail buying adds bullish support\. (.+?) \(([0-9.]+)%\) saves ~([0-9.]+)% in markup\.$/, (m, l) => pick(l, [
+      `พรีเมียมของจริง (${m[1]}% บน${tr(m[2], l)}) สูงกว่าปกติ ${m[3]} — แรงซื้อรายย่อยช่วยหนุนราคา แนะนำสลับเป็น${tr(m[4], l)} (${m[5]}%) ประหยัดค่าพรีเมียม ~${m[6]}%`,
+      `ພຣີມຽມຂອງຈິງ (${m[1]}%) ສູງກວ່າປົກກະຕິ ${m[3]} — ສະຫຼັບເປັນ ${tr(m[4], l)} (${m[5]}%) ປະຢັດ ~${m[6]}%`,
+      `Primas físicas (${m[1]}% en ${tr(m[2], l)}) superan lo normal ${m[3]} — respaldo alcista. ${tr(m[4], l)} (${m[5]}%) ahorra ~${m[6]}%.`,
+      `实物溢价（${tr(m[2], l)} 达 ${m[1]}%）高于常态 ${m[3]} —— 零售买盘提供看涨支撑。换买${tr(m[4], l)}（${m[5]}%）可省约 ${m[6]}% 溢价。`,
+      `現物プレミアム（${tr(m[2], l)} ${m[1]}%）は通常${m[3]}超 — 強気の下支え。${tr(m[4], l)}（${m[5]}%）なら約${m[6]}%節約。`,
+      `भौतिक प्रीमियम (${tr(m[2], l)} पर ${m[1]}%) सामान्य ${m[3]} से ऊपर — खुदरा मांग का सहारा। ${tr(m[4], l)} (${m[5]}%) से ~${m[6]}% बचत।`,
+    ])],
+    [/^Dealer markups compressed to ([0-9.]+)% \(below normal (.+?)\) — retail rush cooled, giving buyers the lowest over-melt cost\.$/, (m, l) => pick(l, [
+      `พรีเมียมร้านค้าลดลงเหลือ ${m[1]}% (ต่ำกว่าปกติ ${m[2]}) — แรงแย่งซื้อลดลง เป็นจังหวะซื้อที่ต้นทุนเหนือราคาหลอมถูกที่สุด`,
+      `ພຣີມຽມຫຼຸດເຫຼືອ ${m[1]}% (ຕ່ຳກວ່າປົກກະຕິ ${m[2]}) — ຕົ້ນທຶນຊື້ຖືກສຸດ`,
+      `Las primas bajaron a ${m[1]}% (bajo lo normal ${m[2]}) — menor fiebre minorista y costo mínimo sobre fundición.`,
+      `零售商溢价压缩至 ${m[1]}%（低于常态 ${m[2]}）——抢购降温，买家可享最低熔化溢价成本。`,
+      `プレミアムは${m[1]}%へ低下（通常${m[2]}未満）— 小売過熱が収まり最安水準の購入コスト。`,
+      `डीलर मार्कअप ${m[1]}% तक घटा (सामान्य ${m[2]} से नीचे) — खरीदारों के लिए सबसे कम लागत।`,
+    ])],
+    // Hidden Market Edges dynamic strings
+    [/^Net Edge ([+−\-]\d+)(?: pts)?$/, (m, l) => pick(l, [
+      `แต้มต่อสุทธิ ${m[1]} คะแนน`,
+      `ແຕ້ມຕໍ່ສຸດທິ ${m[1]}`,
+      `Ventaja Neta ${m[1]} pts`,
+      `净优势 ${m[1]} 分`,
+      `純エッジ ${m[1]}pt`,
+      `नेट एज ${m[1]} अंक`,
+    ])],
+    [/^(\d+)% Highs$/, (m, l) => pick(l, [
+      `ใกล้จุดสูงสุด ${m[1]}%`,
+      `ໃກ້ຈຸດສູງ ${m[1]}%`,
+      `${m[1]}% Máximos`,
+      `${m[1]}% 货币高位`,
+      `${m[1]}% 高値圏`,
+      `${m[1]}% उच्च स्तर`,
+    ])],
+    [/^(\d+)\/(\d+) global currencies near highs · USD ([0-9.]+)%$/, (m, l) => pick(l, [
+      `${m[1]}/${m[2]} สกุลเงินโลกใกล้จุดสูงสุด · USD ${m[3]}%`,
+      `${m[1]}/${m[2]} ສະກຸນເງິນໃກ້ຈຸດສູງ · USD ${m[3]}%`,
+      `${m[1]}/${m[2]} divisas globales en máximos · USD ${m[3]}%`,
+      `${m[1]}/${m[2]} 种全球货币接近新高 · 美元 ${m[3]}%`,
+      `世界${m[1]}/${m[2]}通貨が高値圏・USD ${m[3]}%`,
+      `${m[1]}/${m[2]} वैश्विक मुद्राएं उच्च पर · USD ${m[3]}%`,
+    ])],
+    [/^5d\/30d Vol ([0-9.]+)× · Energy ([0-9.]+)×$/, (m, l) => pick(l, [
+      `ผันผวน 5ว/30ว ${m[1]}× · พลังงาน ${m[2]}×`,
+      `ຜັນຜວນ 5ມ/30ມ ${m[1]}× · ພະລັງງານ ${m[2]}×`,
+      `Vol 5d/30d ${m[1]}× · Energía ${m[2]}×`,
+      `5日/30日波动 ${m[1]}× · 爆发能量 ${m[2]}×`,
+      `5日/30日ボラ ${m[1]}×・エネルギー ${m[2]}×`,
+      `5d/30d अस्थिरता ${m[1]}× · ऊर्जा ${m[2]}×`,
+    ])],
+    [/^Short-term swings are ([0-9.]+)× normal — balanced energy\.$/, (m, l) => pick(l, [
+      `ความผันผวนระยะสั้นอยู่ที่ ${m[1]}× ของค่าปกติ — พลังงานสมดุล`,
+      `ຄວາມຜັນຜວນໄລຍະສັ້ນ ${m[1]}× ປົກກະຕິ — ພະລັງງານສົມດຸນ`,
+      `La volatilidad reciente es ${m[1]}× lo normal — energía equilibrada.`,
+      `短期振幅为常态的 ${m[1]}× —— 波动能量均衡。`,
+      `短期値幅は通常の${m[1]}倍 — エネルギー均衡。`,
+      `अल्पकालिक उतार-चढ़ाव सामान्य का ${m[1]}× — संतुलित ऊर्जा।`,
+    ])],
+    [/^Asia ([+−\-]?[0-9.]+%) · London ([+−\-]?[0-9.]+%) · NY ([+−\-]?[0-9.]+%)$/, (m, l) => pick(l, [
+      `เอเชีย ${m[1]} · ลอนดอน ${m[2]} · นิวยอร์ก ${m[3]}`,
+      `ອາຊີ ${m[1]} · ລອນດອນ ${m[2]} · ນິວຢອກ ${m[3]}`,
+      `Asia ${m[1]} · Londres ${m[2]} · NY ${m[3]}`,
+      `亚洲 ${m[1]} · 伦敦 ${m[2]} · 纽约 ${m[3]}`,
+      `アジア ${m[1]}・ロンドン ${m[2]}・NY ${m[3]}`,
+      `एशिया ${m[1]} · लंदन ${m[2]} · NY ${m[3]}`,
+    ])],
+    [/^Asia\+London physical desks bought \((.+?)\) while NY paper sold \((.+?)\) — classic snap-back bullish divergence\.$/, (m, l) => pick(l, [
+      `ฝั่งเอเชีย+ลอนดอนเข้าซื้อของจริง (${m[1]}) ขณะที่ตลาดกระดาษนิวยอร์กเทขาย (${m[2]}) — สัญญาณดีดกลับขาขึ้นแบบคลาสสิก`,
+      `ອາຊີ+ລອນດອນຊື້ຂອງຈິງ (${m[1]}) ຂະນະທີ່ NY ຂາຍ (${m[2]}) — ສັນຍານດີດກັບຂາຂຶ້ນ`,
+      `Asia+Londres compraron físico (${m[1]}) mientras NY vendió papel (${m[2]}): divergencia alcista clásica.`,
+      `亚洲+伦敦实物盘买进（${m[1]}），而纽约纸面期货抛售（${m[2]}）——经典看涨背离信号。`,
+      `アジア＋ロンドン現物買い（${m[1]}）に対しNY先物売り（${m[2]}）— 典型的な強気反発ダイバージェンス。`,
+      `एशिया+लंदन में भौतिक खरीदारी (${m[1]}) जबकि NY पेपर बिकवाली (${m[2]}) — क्लासिक तेज़ी डायवर्जेंस।`,
+    ])],
+    [/^News (\d+)% bull \((\d+)↑ \/ (\d+)↓\) · Brake (.+)$/, (m, l) => {
+      const brk = m[4] === 'Off' ? pick(l, ['ปิด', 'ປິດ', 'Inactivo', '未触发', '解除', 'बंद']) : m[4];
+      return pick(l, [
+        `ข่าวบวก ${m[1]}% (${m[2]}↑ / ${m[3]}↓) · เบรค ${brk}`,
+        `ຂ່າວບວກ ${m[1]}% (${m[2]}↑ / ${m[3]}↓) · ເບຣກ ${brk}`,
+        `Noticias ${m[1]}% alcistas (${m[2]}↑ / ${m[3]}↓) · Freno ${brk}`,
+        `新闻看涨占比 ${m[1]}%（${m[2]}↑ / ${m[3]}↓）· 刹车 ${brk}`,
+        `ニュース強気 ${m[1]}%（${m[2]}↑ / ${m[3]}↓）・ブレーキ ${brk}`,
+        `समाचार ${m[1]}% तेज़ी (${m[2]}↑ / ${m[3]}↓) · ब्रेक ${brk}`,
+      ]);
+    }],
+    [/^Crowd score (\d+)\/100 — room for trend continuation without extreme crowding\.$/, (m, l) => pick(l, [
+      `คะแนนความหนาแน่นฝูงชน ${m[1]}/100 — ยังมีพื้นที่ไปต่อโดยไม่แออัดเกินไป`,
+      `ຄະແນນຝູງຊົນ ${m[1]}/100 — ຍັງມີພື້ນທີ່ໄປຕໍ່`,
+      `Euforia ${m[1]}/100 — margen para continuar tendencia sin saturación.`,
+      `情绪拥挤度 ${m[1]}/100 —— 尚未过度拥挤，趋势仍有延续空间。`,
+      `過熱スコア ${m[1]}/100 — 過度な偏りなくトレンド継続余地あり。`,
+      `भीड़ स्कोर ${m[1]}/100 — बिना अत्यधिक भीड़ के ट्रेंड जारी रहने की गुंजाइश।`,
+    ])],
+    [/^Post-OpEx Release \(\+(\d+)d\)( ?⚡)?$/, (m, l) => {
+      const bolt = m[2] ? ' ⚡' : '';
+      return pick(l, [
+        `ช่วงปลดล็อกหลัง OpEx (+${m[1]} วัน)${bolt}`,
+        `ປົດລັອກຫຼັງ OpEx (+${m[1]} ມື້)${bolt}`,
+        `Liberación Post-OpEx (+${m[1]}d)${bolt}`,
+        `期权到期后释放期（+${m[1]}天）${bolt}`,
+        `OP満期後解放期（+${m[1]}日）${bolt}`,
+        `पोस्ट-OpEx रिलीज़ (+${m[1]}दिन)${bolt}`,
+      ]);
+    }],
+    [/^Pre-OpEx Strike Pin \((\d+)d\)$/, (m, l) => pick(l, [
+      `แรงดูดก่อนหมดอายุ OpEx (${m[1]} วัน)`,
+      `ກ່ອນໝົດອາຍຸ OpEx (${m[1]} ມື້)`,
+      `Imán Pre-OpEx (${m[1]}d)`,
+      `期权到期前磁力钉扎（${m[1]}天）`,
+      `OP満期前ストライクピン（${m[1]}日）`,
+      `प्री-OpEx स्ट्राइक पिन (${m[1]}दिन)`,
+    ])],
+    [/^Strike Magnet (.+?) \((.+?)\)$/, (m, l) => pick(l, [
+      `แม่เหล็กแนวสไตรค์ ${m[1]} (${m[2]})`,
+      `ແມ່ເຫຼັກ ${m[1]} (${m[2]})`,
+      `Imán Strike ${m[1]} (${m[2]})`,
+      `行权磁力位 ${m[1]}（${m[2]}）`,
+      `権利行使マグネット ${m[1]}（${m[2]}）`,
+      `स्ट्राइक मैग्नेट ${m[1]} (${m[2]})`,
+    ])],
+    [/^Options hedges just rolled off (\d+)d ago — suppressed directional trend often accelerates cleanly now\.$/, (m, l) => pick(l, [
+      `สัญญาประกันความเสี่ยงออปชันเพิ่งหมดอายุเมื่อ ${m[1]} วันก่อน — เทรนด์ที่ถูกกดไว้มักเร่งตัวชัดเจนขึ้นตอนนี้`,
+      `ອອບຊັນໝົດອາຍຸ ${m[1]} ມື້ກ່ອນ — ເທຣນມັກຈະເລັ່ງຕົວຕອນນີ້`,
+      `Las coberturas de opciones vencieron hace ${m[1]}d — la tendencia contenida suele acelerarse ahora.`,
+      `期权对冲盘已于 ${m[1]} 天前到期解除——此前受压制的趋势往往会加速释放。`,
+      `オプションヘッジが${m[1]}日前に解消 — 抑えられていたトレンドが加速しやすい局面です。`,
+      `ऑप्शन हेज ${m[1]} दिन पहले समाप्त हुए — दबा हुआ ट्रेंड अब तेज़ी से चल सकता है।`,
+    ])],
+    [/^(Gold|Silver) net hidden-edge forecast boost: ([+−\-]\d+) pts · (.+)$/, (m, l) => {
+      const met = tr(m[1], l);
+      const clauses = m[3].split(' · ').map((c) => trHiddenClause(c, l)).join(' · ');
+      return pick(l, [
+        `แต้มต่อลับหนุนคาดการณ์${met}: ${m[2]} คะแนน · ${clauses}`,
+        `ແຕ້ມຕໍ່ລັບ${met}: ${m[2]} ຄະແນນ · ${clauses}`,
+        `Impulso oculto ${met}: ${m[2]} pts · ${clauses}`,
+        `${met}隐藏优势净提升：${m[2]} 分 · ${clauses}`,
+        `${met}隠れエッジ予測加算：${m[2]}pt・${clauses}`,
+        `${met} नेट हिडन-एज बढ़त: ${m[2]} अंक · ${clauses}`,
+      ]);
+    }],
+    // Planetary AI, Space & EV Race dynamic chips & status badges
+    [/^(Steady Global AI & EV|Active Global Buildout ↑|Global AI & EV Surge ↑|Global CapEx Slowdown ↓|Steady AI & EV Expansion|Active AI & EV Buildout ↑|Hyperscale & EV Surge ↑|CapEx & EV Slowdown ↓) · (\d+)\/100$/, (m, l) => `${tr(m[1], l)} · ${m[2]}/100`],
+    [/^\+(\d+)% DC Power by 2030$/, (m, l) => pick(l, [
+      `พลังงานศูนย์ข้อมูลโต +${m[1]}% ปี 2030`,
+      `ພະລັງງານ DC ໂຕ +${m[1]}% ປີ 2030`,
+      `+${m[1]}% Energía DC para 2030`,
+      `2030年数据中心电力 +${m[1]}%`,
+      `2030年DC電力 +${m[1]}%`,
+      `2030 तक DC पावर +${m[1]}%`,
+    ])],
+    [/^~(\d+) Moz\/yr Silver Draw$/, (m, l) => pick(l, [
+      `ใช้เงิน ~${m[1]} ล้านออนซ์/ปี`,
+      `ໃຊ້ເງິນ ~${m[1]} ລ້ານອອນສ໌/ປີ`,
+      `~${m[1]} Moz/año Demanda Plata`,
+      `年耗银约 ${m[1]} 百万盎司`,
+      `年間銀消費 約${m[1]}百万oz`,
+      `~${m[1]} Moz/वर्ष चांदी खपत`,
+    ])],
+    [/^(\d+)-Yr Structural Deficit$/, (m, l) => pick(l, [
+      `ขาดดุลโครงสร้าง ${m[1]} ปีซ้อน`,
+      `ຂາດດຸນ ${m[1]} ປີຊ້ອນ`,
+      `Déficit Estructural de ${m[1]} Años`,
+      `连续 ${m[1]} 年结构性短缺`,
+      `${m[1]}年連続の構造的供給不足`,
+      `${m[1]}-वर्ष संरचनात्मक घाटा`,
+    ])],
+    [/^Tightness ([0-9.]+)×$/, (m, l) => pick(l, [
+      `ความตึงตัว ${m[1]}×`,
+      `ຄວາມຕຶງຕົວ ${m[1]}×`,
+      `Tensión ${m[1]}×`,
+      `紧缺乘数 ${m[1]}×`,
+      `逼迫倍率 ${m[1]}×`,
+      `तंगी गुणक ${m[1]}×`,
+    ])],
+    [/^Forecast ([+−\-]\d+) pts$/, (m, l) => pick(l, [
+      `คาดการณ์ ${m[1]} คะแนน`,
+      `ຄາດຄະເນ ${m[1]} ຄະແນນ`,
+      `Pronóstico ${m[1]} pts`,
+      `预测 ${m[1]} 分`,
+      `予測 ${m[1]}pt`,
+      `अनुमान ${m[1]} अंक`,
+    ])],
+    [/^5d ([+−\-]?[0-9.]+%) \((\d+)\/(\d+) ↑\)$/, (m, l) => pick(l, [
+      `5วัน ${m[1]} (${m[2]}/${m[3]} ↑)`,
+      `5ມື້ ${m[1]} (${m[2]}/${m[3]} ↑)`,
+      `5d ${m[1]} (${m[2]}/${m[3]} ↑)`,
+      `5日 ${m[1]}（${m[2]}/${m[3]} ↑）`,
+      `5日 ${m[1]}（${m[2]}/${m[3]} ↑）`,
+      `5दिन ${m[1]} (${m[2]}/${m[3]} ↑)`,
+    ])],
+    [/^(Planetary AI\/Space\/EV|Global US & China AI\/EV) race index at (\d+)\/100 \((.+?)\)\. (.+)$/, (m, l) => pick(l, [
+      `ดัชนีศึก AI/อวกาศ/รถ EV โลกอยู่ที่ ${m[2]}/100 (${tr(m[3], l)}) — ขับเคลื่อนความต้องการเงินจริง (สวิตช์เกียร์, รถ EV BYD/Tesla, โซลาร์ Starlink) และทองคำเชื่อมชิปทั่วทั้ง 6 ทวีป`,
+      `ດັດຊະນີ AI/EV ໂລກ ${m[2]}/100 (${tr(m[3], l)}) — ໜຸນຄວາມຕ້ອງການເງິນ ແລະ ຄຳທົ່ວໂລກ`,
+      `Índice global de IA/Espacio/EV en ${m[2]}/100 (${tr(m[3], l)}): impulsa la demanda física no sustituible de plata y conectividad de oro en 6 continentes.`,
+      `全球AI/太空/电动车竞赛指数报 ${m[2]}/100（${tr(m[3], l)}）—— 6大洲算力机房开关柜、比亚迪/特斯拉电动车与星链太阳能持续推升白银刚需与黄金芯片支撑。`,
+      `世界AI・宇宙・EVレース指数 ${m[2]}/100（${tr(m[3], l)}）— 6大陸のデータセンター電源・BYD/Tesla EV・衛星需要が銀の実需と金のチップ需要を下支え。`,
+      `वैश्विक AI/अंतरिक्ष/EV सूचकांक ${m[2]}/100 (${tr(m[3], l)}) — 6 महाद्वीपों में डेटा सेंटर स्विचगियर, BYD/Tesla EV व सैटेलाइट से चांदी-सोना मांग को सहारा।`,
+    ])],
+    // 100-Article News header, summary, pagination & Accuracy title
+    [/^Updated (.+?) · 22 global Gold, Silver, AI & EV feeds scored for real signal vs\. hype$/, (m, l) => pick(l, [
+      `อัปเดต ${m[1]} · 22 แหล่งข่าวทองคำ เงิน AI และรถ EV ทั่วโลก คัดกรองสัญญาณจริงเทียบข่าวปั่น`,
+      `ອັບເດດ ${m[1]} · 22 ແຫຼ່ງຂ່າວຄຳ ເງິນ AI ແລະ EV ທົ່ວໂລກ`,
+      `Actualizado ${m[1]} · 22 fuentes globales de Oro, Plata, IA y EV filtradas por señal real`,
+      `更新于 ${m[1]} · 22路全球黄金、白银、AI与电动车情报源（已筛除炒作噪音）`,
+      `${m[1]} 更新・22国際フィード（金・銀・AI・EV）の本物シグナル判定済`,
+      `${m[1]} अपडेट · 22 वैश्विक सोना, चांदी, AI व EV फ़ीड (असली संकेत बनाम हाइप)`,
+    ])],
+    [/^(\d+) stories \(up to 100\) across (\d+) subjects · (\d+) Positive ↑ · (\d+) Negative ↓ · (\d+) Real Signal · (\d+) Hype filtered$/, (m, l) => pick(l, [
+      `${m[1]} ข่าว (สูงสุด 100) ครอบคลุม ${m[2]} หมวด · บวก ${m[3]} ↑ · ลบ ${m[4]} ↓ · สัญญาณจริง ${m[5]} · กรองข่าวปั่น ${m[6]}`,
+      `${m[1]} ຂ່າວ (${m[2]} ໝວດ) · ບວກ ${m[3]} ↑ · ລົບ ${m[4]} ↓ · ສັນຍານຈິງ ${m[5]}`,
+      `${m[1]} noticias (máx. 100) en ${m[2]} temas · ${m[3]} Positivas ↑ · ${m[4]} Negativas ↓ · ${m[5]} Señal Real · ${m[6]} Ruido`,
+      `${m[1]} 篇文章（上限100）覆盖 ${m[2]} 领域 · 利多 ${m[3]} ↑ · 利空 ${m[4]} ↓ · 真实信号 ${m[5]} · 已滤除炒作 ${m[6]}`,
+      `${m[1]}件（最大100）${m[2]}分野・強気 ${m[3]} ↑・弱気 ${m[4]} ↓・本物 ${m[5]}・煽り除外 ${m[6]}`,
+      `${m[1]} समाचार (अधिकतम 100), ${m[2]} विषय · सकारात्मक ${m[3]} ↑ · नकारात्मक ${m[4]} ↓ · असली संकेत ${m[5]}`,
+    ])],
+    [/^Showing 1–(\d+) of (\d+) matching articles \(cap 100\)$/, (m, l) => pick(l, [
+      `แสดง 1–${m[1]} จาก ${m[2]} ข่าวที่ตรงกัน (สูงสุด 100)`,
+      `ສະແດງ 1–${m[1]} ຈາກ ${m[2]} ຂ່າວ (ສູງສຸດ 100)`,
+      `Mostrando 1–${m[1]} de ${m[2]} artículos (máx. 100)`,
+      `显示第 1–${m[1]} 篇，共 ${m[2]} 篇匹配（上限100）`,
+      `${m[2]}件中 1–${m[1]}件を表示（上限100）`,
+      `${m[2]} में से 1–${m[1]} लेख दिखाए जा रहे हैं (सीमा 100)`,
+    ])],
+    [/^Showing 1–(\d+) of (\d+)$/, (m, l) => pick(l, [
+      `แสดง 1–${m[1]} จาก ${m[2]}`,
+      `ສະແດງ 1–${m[1]} ຈາກ ${m[2]}`,
+      `Mostrando 1–${m[1]} de ${m[2]}`,
+      `显示 1–${m[1]} / 共 ${m[2]}`,
+      `${m[2]}件中 1–${m[1]}件`,
+      `${m[2]} में से 1–${m[1]}`,
+    ])],
+    [/^Predicted Line vs\. Actual \((Daily|7-Day|30-Day) · (Gold|Silver)\)$/, (m, l) => pick(l, [
+      `เส้นคาดการณ์ เทียบราคาจริง (${tr(m[1], l)} · ${tr(m[2], l)})`,
+      `ເສັ້ນຄາດຄະເນ ທຽບລາຄາຈິງ (${tr(m[1], l)} · ${tr(m[2], l)})`,
+      `Línea Prevista vs. Real (${tr(m[1], l)} · ${tr(m[2], l)})`,
+      `预测曲线 vs. 实际走势（${tr(m[1], l)} · ${tr(m[2], l)}）`,
+      `予測ライン vs 実績（${tr(m[1], l)}・${tr(m[2], l)}）`,
+      `अनुमानित रेखा बनाम वास्तविक (${tr(m[1], l)} · ${tr(m[2], l)})`,
+    ])],
+    [/^Current screen: (\d+)px · (Split-Desk Active \(Live & Chart Pinned Left\)|3-Column Ultrawide Active|Single View Active)\. (.+)$/, (m, l) => {
+      const modeLbl = m[2].includes('Split')
+        ? pick(l, ['โหมดแบ่งจอ (ตรึงราคาสดและกราฟซ้าย)', 'ໂໝດແບ່ງຈໍ', 'Pantalla Dividida (En Vivo y Gráfico Fijos)', '分屏模式（左栏固定实时与图表）', '分割表示（左にライブ・チャート固定）', 'स्प्लिट-डेस्क सक्रिय (बाएँ लाइव व चार्ट)'])
+        : m[2].includes('Ultrawide')
+          ? pick(l, ['โหมดจอกว้าง 3 คอลัมน์', 'ໂໝດ 3 ຄໍລຳ', '3 Columnas Ultrawide', '3栏超宽屏模式', '3列ウルトラワイド表示', '3-कॉलम अल्ट्रावाइड सक्रिय'])
+          : pick(l, ['โหมดหน้าจอเดี่ยว', 'ໂໝດໜ້າຈໍດ່ຽວ', 'Vista Única', '单栏模式', 'シングル表示', 'सिंगल व्यू सक्रिय']);
+      return pick(l, [
+        `หน้าจอปัจจุบัน: ${m[1]}px · ${modeLbl}`,
+        `ໜ້າຈໍປັດຈຸບັນ: ${m[1]}px · ${modeLbl}`,
+        `Pantalla actual: ${m[1]}px · ${modeLbl}`,
+        `当前屏幕：${m[1]}px · ${modeLbl}`,
+        `現在の画面：${m[1]}px・${modeLbl}`,
+        `वर्तमान स्क्रीन: ${m[1]}px · ${modeLbl}`,
+      ]);
+    }],
+    // v59 Live DOM Audit Dynamic Patterns (Futures, World/Space, Physical Squeeze, Catalysts, Jump Diffusion, Self-Learn, Alerts, OHLC)
+    [/^Futures (.+?)( · Shortage ↑)?$/, (m, l) => {
+      const sh = m[2]
+        ? pick(l, [' · ของขาด ↑', ' · ສິນຄ້າຂາດ ↑', ' · Escasez ↑', ' · 现货紧缺 ↑', ' · 供給不足 ↑', ' · कमी ↑'])
+        : '';
+      return pick(l, [
+        `ฟิวเจอร์ส ${m[1]}${sh}`,
+        `ຟິວເຈີ ${m[1]}${sh}`,
+        `Futuros ${m[1]}${sh}`,
+        `期货 ${m[1]}${sh}`,
+        `先物 ${m[1]}${sh}`,
+        `फ्यूचर्स ${m[1]}${sh}`,
+      ]);
+    }],
+    [/^Au ([+−\-]?\d+) pts · Ag ([+−\-]?\d+) pts$/, (m, l) => pick(l, [
+      `ทอง ${m[1]} คะแนน · เงิน ${m[2]} คะแนน`,
+      `ຄຳ ${m[1]} ຄະແນນ · ເງິນ ${m[2]} ຄະແນນ`,
+      `Oro ${m[1]} pts · Plata ${m[2]} pts`,
+      `黄金 ${m[1]} 分 · 白银 ${m[2]} 分`,
+      `金 ${m[1]}pt・銀 ${m[2]}pt`,
+      `सोना ${m[1]} अंक · चांदी ${m[2]} अंक`,
+    ])],
+    [/^([+−\-]?\d+) pts$/, (m, l) => pick(l, [
+      `${m[1]} คะแนน`,
+      `${m[1]} ຄະແນນ`,
+      `${m[1]} pts`,
+      `${m[1]} 分`,
+      `${m[1]}pt`,
+      `${m[1]} अंक`,
+    ])],
+    [/^(\d+)d · (.+)$/, (m, l) => {
+      const rhs = EX[m[2]]?.[l] || trMonths(m[2], l);
+      return pick(l, [
+        `${m[1]} วัน · ${rhs}`,
+        `${m[1]} ມື້ · ${rhs}`,
+        `${m[1]}d · ${rhs}`,
+        `${m[1]}天 · ${rhs}`,
+        `${m[1]}日 · ${rhs}`,
+        `${m[1]} दिन · ${rhs}`,
+      ]);
+    }],
+    [/^Next in (\d+)d$/, (m, l) => pick(l, [
+      `ถัดไปใน ${m[1]} วัน`,
+      `ຕໍ່ໄປໃນ ${m[1]} ມື້`,
+      `Próximo en ${m[1]}d`,
+      `${m[1]}天后到来`,
+      `次回あと${m[1]}日`,
+      `अगला ${m[1]} दिन में`,
+    ])],
+    [/^(\d{4}-\d{2}-\d{2}) · High-volatility event proximity$/, (m, l) => pick(l, [
+      `${m[1]} · ใกล้เหตุการณ์ผันผวนสูง`,
+      `${m[1]} · ໃກ້ເຫດການຜັນຜວນສູງ`,
+      `${m[1]} · Proximidad de evento de alta volatilidad`,
+      `${m[1]} · 临近高波动风险事件`,
+      `${m[1]}・高ボラティリティイベント接近`,
+      `${m[1]} · उच्च अस्थिरता इवेंट निकट`,
+    ])],
+    [/^(Severe Storm|Strong Storm|Moderate Solar|Storm Watch Ahead|Minor Solar) \(([^)]+)\)$/, (m, l) => {
+      const lbl = {
+        'Severe Storm': ['พายุสุริยะรุนแรง', 'ພາຍຸສຸລິຍະຮຸນແຮງ', 'Tormenta Severa', '强烈太阳风暴', '激しい太陽嵐', 'गंभीर सौर तूफान'],
+        'Strong Storm': ['พายุสุริยะแรง', 'ພາຍຸສຸລິຍະແຮງ', 'Tormenta Fuerte', '强太阳风暴', '強い太陽嵐', 'मज़बूत सौर तूफान'],
+        'Moderate Solar': ['สุริยะระดับกลาง', 'ສຸລິຍະລະດັບກາງ', 'Actividad Solar Moderada', '中等太阳活动', '中程度の太陽活動', 'मध्यम सौर गतिविधि'],
+        'Storm Watch Ahead': ['เฝ้าระวังพายุสุริยะ', 'ເຝົ້າລະວັງພາຍຸສຸລິຍະ', 'Alerta de Tormenta', '太阳风暴预警', '太陽嵐警戒', 'सौर तूफान चेतावनी'],
+        'Minor Solar': ['สุริยะระดับเบา', 'ສຸລິຍະລະດັບເບົາ', 'Actividad Solar Menor', '轻微太阳活动', '小規模太陽活動', 'हल्की सौर गतिविधि'],
+      }[m[1]];
+      return lbl ? `${pick(l, lbl)} (${m[2]})` : null;
+    }],
+    // Physical Premiums Squeeze & Paper-Physical Disconnect guidance paragraphs
+    [/^High physical retail demand \(([0-9.]+)% on (.+?)\) signals mint\/dealer tightness( with buybacks above spot)?\. Rotate into (.+?) \(([0-9.]+)%\) to get ~([0-9.]+)% more ounces per dollar\.$/, (m, l) => {
+      const coin = tr(m[2], l);
+      const bar = tr(m[4], l);
+      const bb = m[3]
+        ? pick(l, [' พร้อมราคารับซื้อคืนสูงกว่าสปอต', ' ພ້ອມຮັບຊື້ຄືນສູງກວ່າສະປອດ', ' con recompras sobre spot', '且回购价高于现货', '（スポット超の買取価格）', ' और स्पॉट से ऊपर बायबैक के साथ'])
+        : '';
+      return pick(l, [
+        `ความต้องการซื้อของจริงสูง (${m[1]}% บน${coin}) สะท้อนโรงกษาปณ์และร้านค้าของตึงตัว${bb} แนะนำสลับเป็น${bar} (${m[5]}%) เพื่อได้ปริมาณออนซ์เพิ่มขึ้น ~${m[6]}% ต่อดอลลาร์`,
+        `ຄວາມຕ້ອງການຊື້ຂອງຈິງສູງ (${m[1]}% ບົນ ${coin}) ສະທ້ອນສິນຄ້າຕຶງຕົວ${bb} ແນະນຳສະຫຼັບເປັນ ${bar} (${m[5]}%) ເພື່ອໄດ້ນ້ຳໜັກເພີ່ມ ~${m[6]}%`,
+        `Alta demanda física minorista (${m[1]}% en ${coin}) refleja escasez en casas de moneda${bb}. Rota hacia ${bar} (${m[5]}%) para obtener ~${m[6]}% más onzas por dólar.`,
+        `实物零售需求强劲（${coin} 溢价达 ${m[1]}%），表明造币厂与经销商货源紧俏${bb}。换买${bar}（${m[5]}%）每美元可多获得约 ${m[6]}% 的盎司重量。`,
+        `強い現物小売需要（${coin} ${m[1]}%）は造幣局・販売店の逼迫を示唆${bb}。${bar}（${m[5]}%）へ切り替えると1ドルあたり約${m[6]}%多く入手できます。`,
+        `उच्च भौतिक खुदरा मांग (${coin} पर ${m[1]}%) टकसाल/डीलर में तंगी दर्शाती है${bb}। प्रति डॉलर ~${m[6]}% अधिक औंस पाने के लिए ${bar} (${m[5]}%) चुनें।`,
+      ]);
+    }],
+    [/^Paper spot dipped while physical premiums surged to ([0-9.]+)% on (.+?) — classic Paper-Physical Disconnect \(leading bullish spot catch-up\)\. Rotate into (.+?) \(([0-9.]+)%\) for ~([0-9.]+)% more metal per dollar\.$/, (m, l) => {
+      const coin = tr(m[2], l);
+      const bar = tr(m[3], l);
+      return pick(l, [
+        `ราคาสปอตกระดาษย่อตัวขณะพรีเมียมของจริงพุ่งแตะ ${m[1]}% บน${coin} — สัญญาณราคาจริงแยกจากกระดาษแบบคลาสสิก (มักนำขาขึ้นตามมา) สลับเป็น${bar} (${m[4]}%) ได้เนื้อโลหะเพิ่ม ~${m[5]}% ต่อดอลลาร์`,
+        `ສະປອດຫຼຸດແຕ່ພຣີມຽມຂອງຈິງພຸ່ງ ${m[1]}% ບົນ ${coin} — ສັນຍານລາຄາຈິງແຍກຈາກກະດາດ ສະຫຼັບເປັນ ${bar} (${m[4]}%) ໄດ້ໂລຫະເພີ່ມ ~${m[5]}%`,
+        `El spot cayó mientras las primas físicas subieron a ${m[1]}% en ${coin} — clásica desconexión papel-físico alcista. Rota a ${bar} (${m[4]}%) para ~${m[5]}% más metal por dólar.`,
+        `纸面现货下跌而${coin}实物溢价飙升至 ${m[1]}% —— 典型“纸盘与实物背离”（看涨补涨先行信号）。换买${bar}（${m[4]}%）每美元可多得约 ${m[5]}% 金属。`,
+        `現物スポット下落中に${coin}プレミアムが${m[1]}%へ急騰 — 典型的な先物・現物乖離の強気先行シグナル。${bar}（${m[4]}%）なら約${m[5]}%多く確保可能。`,
+        `पेपर स्पॉट गिरा जबकि ${coin} पर भौतिक प्रीमियम ${m[1]}% उछला — क्लासिक पेपर-भौतिक विचलन (तेज़ी संकेत)। ~${m[5]}% अधिक धातु के लिए ${bar} (${m[4]}%) चुनें।`,
+      ]);
+    }],
+    // COMEX Vault Delivery Start (month + metal)
+    [/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (Gold & Silver|Gold|Silver) Vault Delivery Start$/, (m, l) => {
+      const mo = pick(l, MONTHS_I18N[m[1]]);
+      const met = m[2] === 'Gold & Silver'
+        ? pick(l, ['ทองคำและเงิน', 'ຄຳ ແລະ ເງິນ', 'Oro y Plata', '黄金与白银', '金・銀', 'सोना और चांदी'])
+        : tr(m[2], l);
+      return pick(l, [
+        `เริ่มส่งมอบคลัง${met} เดือน${mo}`,
+        `ເລີ່ມສົ່ງມອບຄັງ${met} ເດືອນ${mo}`,
+        `Inicio Entrega Bóveda ${met} (${mo})`,
+        `${mo}${met}金库交割启动`,
+        `${mo} ${met}金庫受渡開始`,
+        `${mo} ${met} वॉल्ट डिलीवरी शुरू`,
+      ]);
+    }],
+    // Jump Diffusion dynamic subtitle
+    [/^1,500 simulated (\S+) price paths · ~([0-9.]+) big jumps\/mo$/, (m, l) => {
+      const hz = tr(m[1], l);
+      return pick(l, [
+        `จำลองเส้นทางราคา ${hz} จำนวน 1,500 แบบ · กระโดดแรงเฉลี่ย ~${m[2]} ครั้ง/เดือน`,
+        `ຈຳລອງລາຄາ ${hz} 1,500 ເສັ້ນທາງ · ກະໂດດແຮງ ~${m[2]} ຄັ້ງ/ເດືອນ`,
+        `1,500 rutas simuladas (${hz}) · ~${m[2]} saltos fuertes/mes`,
+        `模拟 1,500 条 ${hz} 价格路径 · 月均大幅跳空 ~${m[2]} 次`,
+        `${hz}価格パスを1,500回試行・月間急変動 約${m[2]}回`,
+        `1,500 सिमुलेटेड ${hz} मूल्य पथ · ~${m[2]} बड़े उछाल/माह`,
+      ]);
+    }],
+    // Self-Learn Accuracy header, badge, summary chips, hover readout, and 6-month audit rows
+    [/^Grades 1D, 7D & 30D predictions every weekday at 5:10 PM ET · (Last checked (\S+)|First check after market close)$/, (m, l) => {
+      const tail = m[2]
+        ? pick(l, [`ตรวจล่าสุด ${m[2]}`, `ກວດລ່າສຸດ ${m[2]}`, `Última revisión ${m[2]}`, `最近校验 ${m[2]}`, `最終確認 ${m[2]}`, `अंतिम जांच ${m[2]}`])
+        : pick(l, ['ตรวจครั้งแรกหลังตลาดปิด', 'ກວດຄັ້ງທຳອິດຫຼັງຕະຫຼາດປິດ', 'Primera revisión tras el cierre', '收盘后首次校验', '引け後に初回採点', 'बाज़ार बंद होने के बाद पहली जांच']);
+      return pick(l, [
+        `ตรวจเกรดคำทำนาย 1 วัน 7 วัน และ 30 วัน ทุกวันจันทร์-ศุกร์ 17:10 น. ET · ${tail}`,
+        `ກວດຄະແນນ 1 ມື້ 7 ມື້ ແລະ 30 ມື້ ທຸກວັນຈັນ-ສຸກ 17:10 ET · ${tail}`,
+        `Evalúa pronósticos 1D, 7D y 30D cada día hábil a las 5:10 PM ET · ${tail}`,
+        `每工作日美东 17:10 自动评分 1日、7日与30日预测 · ${tail}`,
+        `毎営業日17:10 ETに1日・7日・30日予測を自己採点・${tail}`,
+        `हर कार्यदिवस 5:10 PM ET पर 1D, 7D व 30D पूर्वानुमानों की जांच · ${tail}`,
+      ]);
+    }],
+    [/^Grade ([A-F][+-]?) · ((\d+)d checked|5:10 PM ET)$/, (m, l) => {
+      const tail = m[3]
+        ? pick(l, [`ตรวจแล้ว ${m[3]} วัน`, `ກວດແລ້ວ ${m[3]} ມື້`, `${m[3]}d revisados`, `已校验 ${m[3]} 天`, `${m[3]}日検証済`, `${m[3]} दिन जांचे गए`])
+        : '5:10 PM ET';
+      return pick(l, [
+        `เกรด ${m[1]} · ${tail}`,
+        `ເກຣດ ${m[1]} · ${tail}`,
+        `Nota ${m[1]} · ${tail}`,
+        `评级 ${m[1]} · ${tail}`,
+        `評価 ${m[1]}・${tail}`,
+        `ग्रेड ${m[1]} · ${tail}`,
+      ]);
+    }],
+    [/^(\d+)% Dir · ±([0-9.]+)% Err$/, (m, l) => pick(l, [
+      `ถูกทิศ ${m[1]}% · คลาดเคลื่อน ±${m[2]}%`,
+      `ຖືກທິດ ${m[1]}% · ຄາດເຄື່ອນ ±${m[2]}%`,
+      `${m[1]}% Dir · ±${m[2]}% Error`,
+      `方向胜率 ${m[1]}% · 误差 ±${m[2]}%`,
+      `方向的中 ${m[1]}%・誤差 ±${m[2]}%`,
+      `दिशा ${m[1]}% · त्रुटि ±${m[2]}%`,
+    ])],
+    [/^([+−\-]?[0-9.]+% vs\. default|Resetting toward defaults) · (Busy Market|Calm Market)(?: · (±[0-9.]+%))?$/, (m, l) => {
+      const lhs = m[1] === 'Resetting toward defaults'
+        ? tr(m[1], l)
+        : (() => {
+          const pct = m[1].replace(/ vs\. default$/, '');
+          return pick(l, [
+            `${pct} เทียบค่าเริ่มต้น`, `${pct} ທຽບຄ່າເລີ່ມຕົ້ນ`, `${pct} vs. base`,
+            `${pct} 对比默认`, `標準比 ${pct}`, `डिफ़ॉल्ट से ${pct}`,
+          ]);
+        })();
+      const reg = tr(m[2], l);
+      const rad = m[3] ? ` · ${m[3]}` : '';
+      return `${lhs} · ${reg}${rad}`;
+    }],
+    [/^(\S+) \((Daily|7-Day|30-Day)\) · Pred ([+−\-]?[0-9.]+%) vs Actual ([+−\-]?[0-9.]+%) · Err ±([0-9.]+%)$/, (m, l) => {
+      const hz = tr(m[2], l);
+      return pick(l, [
+        `${m[1]} (${hz}) · ทำนาย ${m[3]} เทียบจริง ${m[4]} · คลาดเคลื่อน ±${m[5]}`,
+        `${m[1]} (${hz}) · ຄາດ ${m[3]} ທຽບຈິງ ${m[4]} · ຜິດພາດ ±${m[5]}`,
+        `${m[1]} (${hz}) · Prev. ${m[3]} vs Real ${m[4]} · Error ±${m[5]}`,
+        `${m[1]}（${hz}）· 预测 ${m[3]} 对比实际 ${m[4]} · 误差 ±${m[5]}`,
+        `${m[1]}（${hz}）・予測 ${m[3]} vs 実績 ${m[4]}・誤差 ±${m[5]}`,
+        `${m[1]} (${hz}) · अनुमान ${m[3]} बनाम वास्तविक ${m[4]} · त्रुटि ±${m[5]}`,
+      ]);
+    }],
+    [/^(RIGHT|WRONG|CLOSE|PENDING) · (\d+)% Dir · ±([0-9.]+%) Avg Err$/, (m, l) => {
+      const tag = {
+        RIGHT: ['ถูกทาง', 'ຖືກທາງ', 'ACIERTO', '命中', '的中', 'सही'],
+        WRONG: ['ผิดทาง', 'ຜິດທາງ', 'FALLO', '偏差', '外れ', 'गलत'],
+        CLOSE: ['ใกล้เคียง', 'ໃກ້ຄຽງ', 'CERCA', '接近', '近似', 'करीब'],
+        PENDING: ['รอผล', 'ລໍຖ້າຜົນ', 'PENDIENTE', '待校验', '待機中', 'लंबित'],
+      }[m[1]];
+      return pick(l, [
+        `${pick(l, tag)} · ถูกทิศ ${m[2]}% · คลาดเคลื่อนเฉลี่ย ±${m[3]}`,
+        `${pick(l, tag)} · ຖືກທິດ ${m[2]}% · ສະເລ່ຍ ±${m[3]}`,
+        `${pick(l, tag)} · ${m[2]}% Dir · ±${m[3]} Error Prom.`,
+        `${pick(l, tag)} · 方向胜率 ${m[2]}% · 平均误差 ±${m[3]}`,
+        `${pick(l, tag)}・方向的中 ${m[2]}%・平均誤差 ±${m[3]}`,
+        `${pick(l, tag)} · दिशा ${m[2]}% · औसत त्रुटि ±${m[3]}`,
+      ]);
+    }],
+    [/^(\d+)d Replay$/, (m, l) => pick(l, [
+      `ย้อนหลัง ${m[1]} วัน`, `ຍ້ອນຫຼັງ ${m[1]} ມື້`, `Repetición ${m[1]}d`,
+      `近 ${m[1]} 日回放`, `${m[1]}日プレイバック`, `${m[1]} दिन रीप्ले`,
+    ])],
+    [/^(7-Day|30-Day) Audit · (Gold|Silver) \((\d+) checks\)$/, (m, l) => {
+      const hz = tr(m[1], l);
+      const met = tr(m[2], l);
+      return pick(l, [
+        `ตรวจย้อนหลัง ${hz} · ${met} (${m[3]} ครั้ง)`,
+        `ກວດຍ້ອນຫຼັງ ${hz} · ${met} (${m[3]} ຄັ້ງ)`,
+        `Auditoría ${hz} · ${met} (${m[3]} pruebas)`,
+        `${hz}回测 · ${met}（${m[3]} 次校验）`,
+        `${hz}検証・${met}（${m[3]}回）`,
+        `${hz} ऑडिट · ${met} (${m[3]} जांच)`,
+      ]);
+    }],
+    [/^(\d+)% Right(?: · ±([0-9.]+)% Err)?(?: · (Skill|Conf) ([+−\-±]?[0-9.]+%))?$/, (m, l) => {
+      const right = pick(l, [`ถูก ${m[1]}%`, `ຖືກ ${m[1]}%`, `${m[1]}% Acierto`, `胜率 ${m[1]}%`, `的中 ${m[1]}%`, `सही ${m[1]}%`]);
+      const err = m[2]
+        ? pick(l, [` · ผิดพลาด ±${m[2]}%`, ` · ຜິດພາດ ±${m[2]}%`, ` · ±${m[2]}% Error`, ` · 误差 ±${m[2]}%`, `・誤差 ±${m[2]}%`, ` · त्रुटि ±${m[2]}%`])
+        : '';
+      const extra = m[3]
+        ? (m[3] === 'Skill'
+          ? pick(l, [` · ทักษะ ${m[4]}`, ` · ທັກສະ ${m[4]}`, ` · Habilidad ${m[4]}`, ` · 技巧 ${m[4]}`, `・スキル ${m[4]}`, ` · कौशल ${m[4]}`])
+          : pick(l, [` · ช่วงมั่นใจ ${m[4]}`, ` · ຊ່ວງໝັ້ນໃຈ ${m[4]}`, ` · Confianza ${m[4]}`, ` · 置信区间 ${m[4]}`, `・信頼幅 ${m[4]}`, ` · विश्वास ${m[4]}`]))
+        : '';
+      return `${right}${err}${extra}`;
+    }],
+    [/^Saving daily · (Next 7D grade in (\d+)d|Grades 7D after 7 days) · (30D in (\d+)d|30D after 30 days)$/, (m, l) => {
+      const p7 = m[2]
+        ? pick(l, [`ตรวจ 7 วันในอีก ${m[2]} วัน`, `ກວດ 7 ມື້ໃນ ${m[2]} ມື້`, `Próxima nota 7D en ${m[2]}d`, `${m[2]}天后评分7日预测`, `${m[2]}日後に7日採点`, `${m[2]} दिन में 7D जांच`])
+        : pick(l, ['ตรวจเกรด 7 วันเมื่อครบ 7 วัน', 'ກວດ 7 ມື້ເມື່ອຄົບ 7 ມື້', 'Evalúa 7D tras 7 días', '满7天后评分7日预测', '7日経過後に7日採点', '7 दिन बाद 7D जांच']);
+      const p30 = m[4]
+        ? pick(l, [`30 วันในอีก ${m[4]} วัน`, `30 ມື້ໃນ ${m[4]} ມື້`, `30D en ${m[4]}d`, `${m[4]}天后评分30日`, `${m[4]}日後に30日採点`, `${m[4]} दिन में 30D`])
+        : pick(l, ['30 วันเมื่อครบ 30 วัน', '30 ມື້ເມື່ອຄົບ 30 ມື້', '30D tras 30 días', '满30天后评分30日', '30日経過後に30日採点', '30 दिन बाद 30D']);
+      return pick(l, [
+        `บันทึกทุกวัน · ${p7} · ${p30}`,
+        `ບັນທຶກທຸກມື້ · ${p7} · ${p30}`,
+        `Guardando a diario · ${p7} · ${p30}`,
+        `每日自动记录 · ${p7} · ${p30}`,
+        `毎日記録中・${p7}・${p30}`,
+        `रोज़ सेव हो रहा है · ${p7} · ${p30}`,
+      ]);
+    }],
+    // Recent Alert log items
+    [/^(Gold|Silver) \((XAU|XAG)\) (surged|dropped) ([+−\-]?[0-9.]+%)$/, (m, l) => {
+      const met = tr(m[1], l);
+      const verb = m[3] === 'surged'
+        ? pick(l, ['พุ่งขึ้น', 'ພຸ່ງຂຶ້ນ', 'subió', '飙升', '急騰', 'उछला'])
+        : pick(l, ['ร่วงลง', 'ຫຼຸດລົງ', 'cayó', '急跌', '急落', 'गिरा']);
+      return `${met} (${m[2]}) ${verb} ${m[4]}`;
+    }],
+    // News cluster count suffix & minor static placeholders
+    [/^· (\d+) articles$/, (m, l) => pick(l, [
+      `· ${m[1]} บทความ`, `· ${m[1]} ບົດຄວາມ`, `· ${m[1]} artículos`,
+      `· ${m[1]} 篇报道`, `・${m[1]}件の記事`, `· ${m[1]} लेख`,
+    ])],
+    [/^AI Race (\d+)\/100$/, (m, l) => pick(l, [
+      `ศึก AI ${m[1]}/100`, `ສຶກ AI ${m[1]}/100`, `Carrera IA ${m[1]}/100`,
+      `AI竞赛 ${m[1]}/100`, `AIレース ${m[1]}/100`, `AI दौड़ ${m[1]}/100`,
+    ])],
+    [/^([0-9.]+×) Vol$/, (m, l) => pick(l, [
+      `วอลุ่ม ${m[1]}`, `ວໍລຸມ ${m[1]}`, `Vol. ${m[1]}`,
+      `成交量 ${m[1]}`, `出来高 ${m[1]}`, `वॉल्यूम ${m[1]}`,
+    ])],
+    // Chart OHLC timestamp weekday prefix (e.g. "Thu 11:30 PM–12:00 AM")
+    [/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (\d{1,2}:\d{2}.*)$/, (m, l) => `${pick(l, DAYS_I18N[m[1]])} ${m[2]}`],
+    // Universal "Label (Count)" pattern (e.g. "All Topics (12)", "Show All (100)", "World & Space (3)")
+    [/^(.+?)\s*\((\d+)\)$/, (m, l) => {
+      const base = EX[m[1]]?.[l];
+      return base ? `${base} (${m[2]})` : null;
+    }]
+  );
 })();
