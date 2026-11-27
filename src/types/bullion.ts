@@ -151,6 +151,7 @@ export interface AppSettings {
   showMyBuys: boolean;
   showPatterns: boolean;
   showGaps: boolean;
+  showSessions: boolean;
   showNewsDots: boolean;
   newsFilter: NewsFilterMode;
   newsTopic: NewsTopicKey;

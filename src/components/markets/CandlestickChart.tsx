@@ -148,6 +148,7 @@ export const CandlestickChart: React.FC = () => {
           showRsi: settings.showRsi,
           showPatterns: settings.showPatterns,
           showGaps: settings.showGaps,
+          showSessions: settings.showSessions,
         },
         precisionLine: quant.precisionLine,
         activeRegime,
@@ -226,6 +227,7 @@ export const CandlestickChart: React.FC = () => {
       | 'showRsi'
       | 'showPatterns'
       | 'showGaps'
+      | 'showSessions'
   ) => {
     updateSettings((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -239,7 +241,8 @@ export const CandlestickChart: React.FC = () => {
       | 'showSma'
       | 'showRsi'
       | 'showPatterns'
-      | 'showGaps';
+      | 'showGaps'
+      | 'showSessions';
     label: string;
   }> = [
     { key: 'showForecast', label: 'Forecast' },
@@ -250,6 +253,7 @@ export const CandlestickChart: React.FC = () => {
     { key: 'showRsi', label: 'Momentum' },
     { key: 'showPatterns', label: 'Patterns' },
     { key: 'showGaps', label: 'Gaps' },
+    { key: 'showSessions', label: 'Market Hours' },
   ];
 
   const handleModeChange = (nextMode: ChartMode) => {

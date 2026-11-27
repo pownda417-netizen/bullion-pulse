@@ -31,6 +31,7 @@ export interface ChartRenderOptions {
     showRsi: boolean;
     showPatterns: boolean;
     showGaps: boolean;
+    showSessions: boolean;
   };
   precisionLine?: any;
   activeRegime?: any;
@@ -156,6 +157,140 @@ function computeShortSqueezeSeries(bars: CandleBar[], regimeObj: any): number[] 
     out[i] = Math.max(0.01, baseAnchor * (1 + clampNum(volSpread + stretch, 0.0015, 0.12)));
   }
   return out;
+}
+
+export interface SessionMarker {
+  barIdx: number;
+  label: string;
+  color: string;
+  priority: number;
+  kind: 'open' | 'close';
+}
+
+const NY_CLOCK_FMT =
+  typeof Intl !== 'undefined'
+    ? new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    : null;
+
+function getNyClockParts(tsMs: number): { wd: string; mins: number } {
+  if (!NY_CLOCK_FMT) {
+    const d = new Date(tsMs);
+    const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
+    return { wd, mins: ((d.getUTCHours() - 5 + 24) % 24) * 60 + d.getUTCMinutes() };
+  }
+  const parts = NY_CLOCK_FMT.formatToParts(new Date(tsMs));
+  const wd = parts.find((p) => p.type === 'weekday')?.value || 'Mon';
+  let hr = Number(parts.find((p) => p.type === 'hour')?.value || 0);
+  if (hr === 24) hr = 0;
+  const min = Number(parts.find((p) => p.type === 'minute')?.value || 0);
+  return { wd, mins: hr * 60 + min };
+}
+
+function crossedMinuteMark(prevMins: number, currMins: number, targetMins: number): boolean {
+  if (prevMins <= currMins) {
+    return prevMins < targetMins && currMins >= targetMins;
+  }
+  // Midnight rollover (e.g. 23:55 -> 00:05)
+  return prevMins < targetMins || currMins >= targetMins;
+}
+
+export function detectMarketSessionMarkers(
+  visBars: CandleBar[],
+  timeframe: TimeframeKey,
+  nowMs: number = Date.now()
+): SessionMarker[] {
+  if (!Array.isArray(visBars) || visBars.length < 2) return [];
+  const markers: SessionMarker[] = [];
+  const isIntraday = timeframe === '15min' || timeframe === '1h' || timeframe === '4h' || timeframe === '1d';
+  const isMultiDay = timeframe === '7d' || timeframe === '1m';
+  if (!isIntraday && !isMultiDay) return markers;
+
+  const markedIdx = new Set<number>();
+
+  if (isIntraday) {
+    for (let i = 1; i < visBars.length; i++) {
+      const prev = visBars[i - 1];
+      const curr = visBars[i];
+      if (!prev?.t || !curr?.t) continue;
+      const dtMs = curr.t - prev.t;
+
+      // 1. Actual exchange close/reopen halt gaps (catches weekends, 5-6 PM ET daily breaks, & holidays like Black Friday)
+      if (dtMs >= 20 * 3600_000) {
+        markers.push({ barIdx: i - 1, label: 'Mkt Close', color: '#f87171', priority: 5, kind: 'close' });
+        markers.push({ barIdx: i, label: 'Mkt Open', color: '#22c55e', priority: 5, kind: 'open' });
+        markedIdx.add(i - 1);
+        markedIdx.add(i);
+        continue;
+      }
+      if (dtMs >= 45 * 60_000) {
+        markers.push({ barIdx: i - 1, label: 'Mkt Close', color: '#f87171', priority: 4, kind: 'close' });
+        markers.push({ barIdx: i, label: 'Mkt Open', color: '#38bdf8', priority: 4, kind: 'open' });
+        markedIdx.add(i - 1);
+        markedIdx.add(i);
+        continue;
+      }
+
+      // 2. Major scheduled global bullion opens & closes (America/New_York DST-safe)
+      const prevNy = getNyClockParts(prev.t);
+      const currNy = getNyClockParts(curr.t);
+      if (crossedMinuteMark(prevNy.mins, currNy.mins, 17 * 60)) {
+        markers.push({ barIdx: i, label: 'Mkt Close', color: '#f87171', priority: 4, kind: 'close' });
+        markedIdx.add(i);
+      } else if (crossedMinuteMark(prevNy.mins, currNy.mins, 18 * 60)) {
+        markers.push({ barIdx: i, label: 'Mkt Open', color: '#38bdf8', priority: 4, kind: 'open' });
+        markedIdx.add(i);
+      } else if (crossedMinuteMark(prevNy.mins, currNy.mins, 8 * 60 + 20)) {
+        markers.push({ barIdx: i, label: 'NY Open', color: '#22c55e', priority: 3, kind: 'open' });
+        markedIdx.add(i);
+      } else if (crossedMinuteMark(prevNy.mins, currNy.mins, 3 * 60)) {
+        markers.push({ barIdx: i, label: 'Lon Open', color: '#d4a843', priority: 2, kind: 'open' });
+        markedIdx.add(i);
+      } else if (crossedMinuteMark(prevNy.mins, currNy.mins, 11 * 60 + 30)) {
+        markers.push({ barIdx: i, label: 'Lon Close', color: '#f59e0b', priority: 1, kind: 'close' });
+        markedIdx.add(i);
+      }
+    }
+  } else if (isMultiDay) {
+    // Weekly market open markers across 7D / 1M views
+    for (let i = 1; i < visBars.length; i++) {
+      const prev = visBars[i - 1];
+      const curr = visBars[i];
+      if (!prev?.t || !curr?.t) continue;
+      const dtMs = curr.t - prev.t;
+      const currNy = getNyClockParts(curr.t);
+      const prevNy = getNyClockParts(prev.t);
+      if (dtMs >= 36 * 3600_000 || (currNy.wd === 'Mon' && prevNy.wd !== 'Mon' && prevNy.wd !== 'Sun')) {
+        markers.push({ barIdx: i, label: 'Wk Open', color: '#38bdf8', priority: 4, kind: 'open' });
+      }
+    }
+  }
+
+  // 3. Live right-edge market closed marker during Weekend Close or Daily 5-6 PM ET Settlement Break
+  const nowNy = getNyClockParts(nowMs);
+  const isWeekendClosed =
+    nowNy.wd === 'Sat' ||
+    (nowNy.wd === 'Fri' && nowNy.mins >= 17 * 60) ||
+    (nowNy.wd === 'Sun' && nowNy.mins < 18 * 60);
+  const isDailyBreak =
+    nowNy.wd !== 'Sat' && nowNy.wd !== 'Sun' && nowNy.mins >= 17 * 60 && nowNy.mins < 18 * 60;
+  if (isWeekendClosed || isDailyBreak) {
+    const lastIdx = visBars.length - 1;
+    markers.push({
+      barIdx: lastIdx,
+      label: isWeekendClosed ? 'Mkt Closed' : 'Daily Break',
+      color: '#f87171',
+      priority: 6,
+      kind: 'close',
+    });
+  }
+
+  return markers;
 }
 
 export function buildRatioBars(goldBars: CandleBar[], silverBars: CandleBar[]): CandleBar[] {
@@ -436,6 +571,37 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
     ctx.restore();
   }
 
+  // 3b. Market Open / Close vertical session lines (drawn softly behind candlesticks)
+  const sessionMarkers = overlays.showSessions
+    ? detectMarketSessionMarkers(visBars, opts.timeframe)
+    : [];
+  const placedSessionLabels: Array<{ marker: SessionMarker; x: number }> = [];
+  if (sessionMarkers.length > 0) {
+    // Priority-sort so key markers (Mkt Closed / Mkt Open / NY Open) win if two are too close horizontally
+    const minLabelGapPx = cssW < 460 ? 64 : 58;
+    const byPriority = [...sessionMarkers].sort((a, b) => b.priority - a.priority || b.barIdx - a.barIdx);
+    for (const m of byPriority) {
+      const mx = xOf(m.barIdx);
+      if (placedSessionLabels.some((p) => Math.abs(p.x - mx) < minLabelGapPx)) continue;
+      placedSessionLabels.push({ marker: m, x: mx });
+    }
+    placedSessionLabels.sort((a, b) => a.x - b.x);
+
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    for (const { marker, x } of placedSessionLabels) {
+      ctx.strokeStyle = marker.color;
+      ctx.globalAlpha = 0.52;
+      ctx.beginPath();
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, padT + plotH);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   // 4. Candlesticks (with clean wick + crisp body)
   const bodyW = Math.max(2, Math.min(14, slotW * 0.64));
   for (let i = 0; i < visBars.length; i++) {
@@ -556,6 +722,12 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
         color: openCount > 0 ? '#34d399' : textCol,
       });
     }
+    if (overlays.showSessions && placedSessionLabels.length === 0) {
+      chips.push({
+        text: `│ Hours: 15m–1M`,
+        color: textCol,
+      });
+    }
     if (chips.length > 0) {
       ctx.save();
       ctx.font = '600 9.5px "JetBrains Mono", monospace';
@@ -574,6 +746,38 @@ export function renderCandlestickChart(opts: ChartRenderOptions): ChartGeometry 
       }
       ctx.restore();
     }
+  }
+
+  // 6b. Market Open / Close bottom-anchored badge pills (collision-free above x-axis)
+  if (placedSessionLabels.length > 0) {
+    ctx.save();
+    ctx.font = '600 8.5px "JetBrains Mono", monospace';
+    ctx.textBaseline = 'middle';
+    const pillH = 13;
+    const pillY = padT + plotH - pillH - 2;
+    for (const { marker, x } of placedSessionLabels) {
+      const tw = ctx.measureText(marker.label).width;
+      const pillW = tw + 8;
+      const px = clampNum(x - pillW / 2, padL + 1, cssW - padR - pillW - 1);
+      // Small marker dot at bottom of line
+      ctx.fillStyle = marker.color;
+      ctx.beginPath();
+      ctx.arc(x, padT + plotH, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      // Pill background + thin color border
+      ctx.fillStyle = isLightTheme ? 'rgba(255,255,255,0.92)' : 'rgba(13,14,17,0.88)';
+      ctx.fillRect(px, pillY, pillW, pillH);
+      ctx.strokeStyle = marker.color;
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = 0.9;
+      ctx.strokeRect(px, pillY, pillW, pillH);
+      ctx.globalAlpha = 1;
+      // Label text
+      ctx.fillStyle = marker.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(marker.label, px + pillW / 2, pillY + pillH / 2 + 0.3);
+    }
+    ctx.restore();
   }
 
   // 7. SMA 20 & SMA 50 overlays

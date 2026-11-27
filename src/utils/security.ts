@@ -90,6 +90,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showMyBuys: false,
   showPatterns: false,
   showGaps: true,
+  showSessions: true,
   showNewsDots: false,
   newsFilter: 'all',
   newsTopic: 'all',
@@ -355,6 +356,7 @@ export function sanitizePersistedSettings(raw: unknown): AppSettings {
     showMyBuys: Boolean(s.showMyBuys),
     showPatterns: Boolean(s.showPatterns),
     showGaps: s.showGaps !== undefined ? Boolean(s.showGaps) : DEFAULT_SETTINGS.showGaps,
+    showSessions: s.showSessions !== undefined ? Boolean(s.showSessions) : DEFAULT_SETTINGS.showSessions,
     showNewsDots: Boolean(s.showNewsDots),
     newsFilter: s.newsFilter === 'signal' || s.newsFilter === 'nohype' ? s.newsFilter : 'all',
     newsTopic:

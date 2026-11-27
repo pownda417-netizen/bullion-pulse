@@ -10,6 +10,7 @@ import {
 import { buildBackupJson, parseBackupJson } from '../utils/storage';
 import { translateText } from '../i18n/I18nContext';
 import { computeFullQuantSuite, projectEquirectangular } from '../engines/outlookEngine';
+import { detectMarketSessionMarkers } from '../engines/chartEngine';
 import { runMonteCarloSync } from '../engines/monteCarlo';
 import { DEFAULT_FX_RATES } from '../utils/format';
 import { defaultSpaceWeather } from '../utils/security';
@@ -210,9 +211,10 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(screen.getByText('Gold Spot')).toBeInTheDocument();
     expect(screen.getByText('Silver Spot')).toBeInTheDocument();
     expect(document.getElementById('btn-listen-brief')).toBeNull();
-    // Chart overlays: Gaps & Squeeze Risk present; My Buys & News Pins removed
+    // Chart overlays: Gaps, Squeeze Risk & Market Hours present; My Buys & News Pins removed
     expect(screen.getByRole('button', { name: 'Gaps' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Squeeze Risk' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Market Hours' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'My Buys' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'News Pins' })).toBeNull();
 
@@ -306,5 +308,23 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     });
     expect(fxCalls).toBe(1);
     expect(bvCalls).toBe(1);
+  });
+
+  it('detects Market Open, Market Close, NY Open, and Weekend Closed markers accurately', () => {
+    // 2026-11-25 (Wednesday) 08:15 ET -> 08:25 ET (crosses NY Open 8:20 ET), then 16:50/16:55 ET -> 18:05 ET (daily close/open break)
+    const bars = [
+      { t: Date.parse('2026-11-25T13:15:00Z'), o: 3600, h: 3605, l: 3598, c: 3602 },
+      { t: Date.parse('2026-11-25T13:25:00Z'), o: 3602, h: 3610, l: 3601, c: 3608 }, // NY Open (08:20 ET)
+      { t: Date.parse('2026-11-25T21:50:00Z'), o: 3607, h: 3610, l: 3605, c: 3608 },
+      { t: Date.parse('2026-11-25T21:55:00Z'), o: 3608, h: 3612, l: 3606, c: 3610 }, // Mkt Close before 5-6 PM ET break
+      { t: Date.parse('2026-11-25T23:05:00Z'), o: 3611, h: 3615, l: 3610, c: 3614 }, // Mkt Open after break
+    ];
+    // Test during Saturday weekend close (2026-11-28T16:00:00Z)
+    const markers = detectMarketSessionMarkers(bars, '1d', Date.parse('2026-11-28T16:00:00Z'));
+    const labels = markers.map((m) => m.label);
+    expect(labels).toContain('NY Open');
+    expect(labels).toContain('Mkt Close');
+    expect(labels).toContain('Mkt Open');
+    expect(labels).toContain('Mkt Closed');
   });
 });
