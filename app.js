@@ -6676,7 +6676,7 @@ function computeInteractiveOutlook() {
 }
 
 function renderFuturesPanel(outlookRes = null) {
-  if (!document.getElementById('panel-futures')) return;
+  if (!document.getElementById('futures-card-gold') && !document.getElementById('futures-card-silver')) return;
   const res = outlookRes || computeInteractiveOutlook();
   const fut = res.futures;
   if (!fut) return;
@@ -6694,11 +6694,10 @@ function renderFuturesPanel(outlookRes = null) {
 
     const dispFut = convertUnit(data.futures);
     const dispBasis = convertUnit(data.basisUsd);
-    const dec = dispFut >= 500 ? 2 : 2;
-    if (priceEl) priceEl.textContent = formatMoney(dispFut, dec);
+    if (priceEl) priceEl.textContent = formatMoney(dispFut, 2);
     if (basisEl) {
       const pctSign = data.basisPct > 0 ? '+' : data.basisPct < 0 ? '−' : '';
-      basisEl.textContent = `Diff vs Spot: ${formatSignedMoney(dispBasis, 2)}/${uLbl} (${pctSign}${Math.abs(data.basisPct).toFixed(2)}%)`;
+      basisEl.textContent = `vs Spot ${formatSignedMoney(dispBasis, 2)}/${uLbl} (${pctSign}${Math.abs(data.basisPct).toFixed(2)}%)`;
       basisEl.className = `futures-basis ${data.isBackwardation ? 'up' : data.basisPct > 1.15 ? 'down' : ''}`;
     }
     if (curveEl) {
@@ -6720,35 +6719,21 @@ function renderFuturesPanel(outlookRes = null) {
     if (boostEl) {
       if (data.isBackwardation) {
         const liftPts = Math.round((data.priceDiscoveryBoost || 0) * 100);
-        boostEl.textContent = `Futures cost less than today's price — tight physical supply lifts forecasts (+${liftPts} pts)`;
+        boostEl.textContent = `Supply shortage: futures below spot (+${liftPts} pts forecast lift)`;
+        boostEl.hidden = false;
       } else if (data.state === 'Compressed EFP') {
         const liftPts = Math.round((data.priceDiscoveryBoost || 0) * 100);
-        boostEl.textContent = `Futures nearly match today's spot — physical supply is tightening (+${liftPts} pts)`;
+        boostEl.textContent = `Tight physical supply (+${liftPts} pts forecast lift)`;
+        boostEl.hidden = false;
       } else {
-        boostEl.textContent = `Normal pricing (futures cost slightly more than today's spot of ${formatMoney(convertUnit(data.spot))})`;
+        boostEl.textContent = '';
+        boostEl.hidden = true;
       }
     }
   };
 
   renderCard('gold', fut.gold);
   renderCard('silver', fut.silver);
-
-  const subEl = document.getElementById('futures-subtitle');
-  const badgeEl = document.getElementById('futures-status-badge');
-  const anyBackw = !!(fut.gold?.isBackwardation || fut.silver?.isBackwardation);
-  if (subEl) {
-    subEl.textContent = anyBackw
-      ? 'Supply shortage active (futures below spot) — lifting price forecasts'
-      : 'Futures vs. today\'s price — included automatically in forecasts';
-  }
-  if (badgeEl) {
-    badgeEl.textContent = anyBackw
-      ? 'Supply Shortage ↑'
-      : fut.gold?.state === 'Compressed EFP' || fut.silver?.state === 'Compressed EFP'
-        ? 'Tight Supply'
-        : 'Normal Market';
-    badgeEl.className = `signal-pill ${anyBackw ? 'bullish' : ''}`;
-  }
 }
 
 function renderDollarStrength(res) {
@@ -7577,7 +7562,7 @@ function getTtsWorker() {
   if (ttsWorkerBroken || typeof Worker === 'undefined') return null;
   if (ttsWorker) return ttsWorker;
   try {
-    ttsWorker = new Worker('./tts_worker.js?v=48', { type: 'module' });
+    ttsWorker = new Worker('./tts_worker.js?v=49', { type: 'module' });
     ttsWorker.onmessage = (e) => {
       const msg = e.data || {};
       const entry = ttsPending.get(msg.id);
@@ -12158,7 +12143,7 @@ function wireEvents() {
   document.getElementById('btn-export-backup')?.addEventListener('click', () => {
     const payload = {
       app: 'Bullion Pulse',
-      version: 48,
+      version: 49,
       exportedAt: new Date().toISOString(),
       settings: state.settings,
       alertLog: state.alertLog.slice(0, 25),
