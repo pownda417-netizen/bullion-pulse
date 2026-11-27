@@ -96,6 +96,90 @@ export const ForecastTab: React.FC = () => {
           </div>
         </div>
 
+        {/* Cross-Horizon Alignment & GARCH/GVZ Volatility Regime Strip (v61) */}
+        <div
+          className="stat-box"
+          id="horizon-alignment-strip"
+          style={{
+            marginBottom: 12,
+            borderColor:
+              fc.horizonAlignment.tone === 'bullish'
+                ? 'rgba(34, 197, 94, 0.35)'
+                : fc.horizonAlignment.tone === 'bearish'
+                  ? 'rgba(239, 68, 68, 0.35)'
+                  : undefined,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+            <strong style={{ fontSize: 12.5 }}>{t('Cross-Horizon Alignment & Volatility Regime')}</strong>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span className={`badge-pill ${fc.horizonAlignment.tone}`}>
+                {fc.horizonAlignment.label}
+              </span>
+              <span className="badge-pill neutral mono" style={{ fontSize: 10.5 }}>
+                {`${fc.volRegime.label} (${fc.volRegime.blendedAnnVolPct.toFixed(1)}% ann)`}
+              </span>
+              {fc.horizonAlignment.upcomingCatalysts7d > 0 && (
+                <span className="badge-pill bearish mono" style={{ fontSize: 10.5 }}>
+                  {`${fc.horizonAlignment.upcomingCatalysts7d} High-Impact Catalyst${fc.horizonAlignment.upcomingCatalysts7d > 1 ? 's' : ''} ≤7d`}
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+            <div>
+              <div className="stat-label">+12H Tactical</div>
+              <div
+                className="mono"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: fc.horizonAlignment.tactical12hPct >= 0 ? 'var(--up)' : 'var(--down)',
+                }}
+              >
+                {formatSignedPct(fc.horizonAlignment.tactical12hPct, 2)}
+              </div>
+            </div>
+            <div>
+              <div className="stat-label">7D Swing</div>
+              <div
+                className="mono"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: fc.horizonAlignment.swing7dPct >= 0 ? 'var(--up)' : 'var(--down)',
+                }}
+              >
+                {formatSignedPct(fc.horizonAlignment.swing7dPct, 2)}
+              </div>
+            </div>
+            <div>
+              <div className="stat-label">30D Macro</div>
+              <div
+                className="mono"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: fc.horizonAlignment.macro30dPct >= 0 ? 'var(--up)' : 'var(--down)',
+                }}
+              >
+                {formatSignedPct(fc.horizonAlignment.macro30dPct, 2)}
+              </div>
+            </div>
+            <div>
+              <div className="stat-label">GARCH / GVZ Vol</div>
+              <div className="mono" style={{ fontSize: 12.5, fontWeight: 700 }}>
+                {fc.volRegime.gvzAnnPct != null
+                  ? `EWMA ${fc.volRegime.ewmaAnnVolPct.toFixed(1)}% · IV ${fc.volRegime.gvzAnnPct.toFixed(1)}%`
+                  : `EWMA ${fc.volRegime.ewmaAnnVolPct.toFixed(1)}% ann`}
+              </div>
+            </div>
+          </div>
+          <div className="panel-subtitle" style={{ marginTop: 6 }}>
+            {fc.horizonAlignment.summary}
+          </div>
+        </div>
+
         {/* 30-Day 4-Checkpoint Trajectory Roadmap */}
         <div style={{ marginBottom: 12 }}>
           <div className="stat-label" style={{ marginBottom: 6 }}>

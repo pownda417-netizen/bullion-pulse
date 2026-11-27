@@ -53,6 +53,175 @@ function quantile(sorted, q) {
 }
 
 /**
+ * GARCH(1,1) + RiskMetrics EWMA Volatility Clustering & GVZ Implied-Vol Term Structure.
+ * Captures sudden stress-regime vol spikes and mean-reversion toward long-run vol
+ * over multi-day horizons (7D / 30D / 90D) instead of a flat static 20-day window.
+ */
+export function computeEwmaGarchVol(
+  closes = [],
+  {
+    ewmaLambda = 0.94,
+    alpha = 0.085,
+    beta = 0.875,
+    impliedVolAnnPct = null,
+    fallbackDailyVol = 0.012,
+  } = {}
+) {
+  const clean = Array.isArray(closes)
+    ? closes.filter((c) => typeof c === 'number' && Number.isFinite(c) && c > 0)
+    : [];
+  if (clean.length < 10) {
+    const base = clamp(Number(fallbackDailyVol) || 0.012, 0.004, 0.06);
+    const ivDaily =
+      Number.isFinite(Number(impliedVolAnnPct)) && Number(impliedVolAnnPct) > 4
+        ? clamp(Number(impliedVolAnnPct) / 100 / Math.sqrt(252), 0.004, 0.08)
+        : null;
+    const blended = ivDaily != null ? base * 0.62 + ivDaily * 0.38 : base;
+    return {
+      ewmaDailyVol: +base.toFixed(5),
+      ewmaAnnVolPct: +(base * Math.sqrt(252) * 100).toFixed(1),
+      garchDailyVol: +base.toFixed(5),
+      longRunDailyVol: +base.toFixed(5),
+      blendedDailyVol: +blended.toFixed(5),
+      blendedAnnVolPct: +(blended * Math.sqrt(252) * 100).toFixed(1),
+      ivSpreadAnnPct: ivDaily != null ? +((ivDaily - base) * Math.sqrt(252) * 100).toFixed(1) : 0,
+      volRegime: ivDaily != null && ivDaily > base * 1.28 ? 'Vol Expansion (IV > RV)' : 'Balanced Vol',
+      termVolForDays: () => +blended.toFixed(5),
+    };
+  }
+
+  const rets = [];
+  for (let i = 1; i < clean.length; i++) {
+    const r = Math.log(clean[i] / clean[i - 1]);
+    if (Number.isFinite(r)) rets.push(clamp(r, -0.18, 0.18));
+  }
+  const meanR = rets.reduce((a, b) => a + b, 0) / Math.max(1, rets.length);
+  const longRunVar = clamp(
+    rets.reduce((s, r) => s + (r - meanR) * (r - meanR), 0) / Math.max(1, rets.length - 1),
+    0.000016,
+    0.0036
+  );
+
+  let ewmaVar = longRunVar;
+  let garchVar = longRunVar;
+  const omega = Math.max(1e-7, (1 - alpha - beta) * longRunVar);
+
+  for (const r of rets) {
+    const eps2 = (r - meanR) * (r - meanR);
+    ewmaVar = ewmaLambda * ewmaVar + (1 - ewmaLambda) * eps2;
+    garchVar = omega + alpha * eps2 + beta * garchVar;
+  }
+
+  const ewmaDailyVol = clamp(Math.sqrt(ewmaVar), 0.004, 0.065);
+  const garchDailyVol = clamp(Math.sqrt(garchVar), 0.004, 0.065);
+  const longRunDailyVol = clamp(Math.sqrt(longRunVar), 0.004, 0.06);
+  const realizedDynamic = garchDailyVol * 0.65 + ewmaDailyVol * 0.35;
+
+  const ivDaily =
+    Number.isFinite(Number(impliedVolAnnPct)) && Number(impliedVolAnnPct) > 4
+      ? clamp(Number(impliedVolAnnPct) / 100 / Math.sqrt(252), 0.004, 0.085)
+      : null;
+
+  // Weight options implied vol higher when IV >> RV (forward stress fear)
+  const ivWeight = ivDaily != null ? (ivDaily > realizedDynamic * 1.2 ? 0.42 : 0.32) : 0;
+  const blendedDailyVol = clamp(
+    ivDaily != null ? realizedDynamic * (1 - ivWeight) + ivDaily * ivWeight : realizedDynamic,
+    0.0045,
+    0.07
+  );
+
+  const persistence = clamp(alpha + beta, 0.75, 0.985);
+  const termVolForDays = (horizonDays = 21) => {
+    const h = Math.max(1, Math.round(horizonDays));
+    let avgVar = 0;
+    const startVar = blendedDailyVol * blendedDailyVol;
+    const eqVar =
+      ivDaily != null
+        ? (longRunDailyVol * 0.7 + ivDaily * 0.3) ** 2
+        : longRunVar;
+    for (let k = 0; k < h; k++) {
+      const decay = Math.pow(persistence, k);
+      avgVar += eqVar + decay * (startVar - eqVar);
+    }
+    return +clamp(Math.sqrt(avgVar / h), 0.0045, 0.07).toFixed(5);
+  };
+
+  const ivSpreadAnnPct =
+    ivDaily != null ? +((ivDaily - realizedDynamic) * Math.sqrt(252) * 100).toFixed(1) : 0;
+  const volRegime =
+    ivSpreadAnnPct >= 6
+      ? 'Stress / High Options Fear'
+      : garchDailyVol > longRunDailyVol * 1.22
+        ? 'Volatility Clustering (Expanding)'
+        : garchDailyVol < longRunDailyVol * 0.82
+          ? 'Compressed / Coiling Vol'
+          : 'Balanced Volatility';
+
+  return {
+    ewmaDailyVol: +ewmaDailyVol.toFixed(5),
+    ewmaAnnVolPct: +(ewmaDailyVol * Math.sqrt(252) * 100).toFixed(1),
+    garchDailyVol: +garchDailyVol.toFixed(5),
+    longRunDailyVol: +longRunDailyVol.toFixed(5),
+    blendedDailyVol: +blendedDailyVol.toFixed(5),
+    blendedAnnVolPct: +(blendedDailyVol * Math.sqrt(252) * 100).toFixed(1),
+    ivSpreadAnnPct,
+    volRegime,
+    termVolForDays,
+  };
+}
+
+const EVENT_RISK_PROFILES = {
+  fomc:          { shortLabel: 'FOMC',     volMult: 1.48, jumpMult: 2.5 },
+  cpi:           { shortLabel: 'CPI',      volMult: 1.42, jumpMult: 2.3 },
+  nfp:           { shortLabel: 'NFP',      volMult: 1.38, jumpMult: 2.1 },
+  pce:           { shortLabel: 'PCE',      volMult: 1.24, jumpMult: 1.6 },
+  comex_fnd:     { shortLabel: 'Ag FND',   volMult: 1.32, jumpMult: 1.9 },
+  comex_gold_fnd:{ shortLabel: 'Au FND',   volMult: 1.24, jumpMult: 1.6 },
+  cftc_cot:      { shortLabel: 'COT',      volMult: 1.12, jumpMult: 1.25 },
+};
+
+/**
+ * Maps scheduled high-impact macro/COMEX calendar events into exact Jump-Diffusion
+ * simulation steps so volatility and Poisson jump intensity spike specifically on FOMC/CPI/NFP/FND dates.
+ */
+export function buildEventRiskSchedule(
+  expandedEvents = [],
+  { calendarDays = 30, steps = 21 } = {}
+) {
+  if (!Array.isArray(expandedEvents) || !expandedEvents.length || steps < 2) return [];
+  const byStep = new Map();
+
+  for (const ev of expandedEvents) {
+    const daysUntil = Number(ev?.daysUntil);
+    if (!Number.isFinite(daysUntil) || daysUntil < 0 || daysUntil > calendarDays) continue;
+    const type = String(ev?.type || '').toLowerCase();
+    const prof = EVENT_RISK_PROFILES[type] || (ev?.impact === 'high'
+      ? { shortLabel: 'Event', volMult: 1.28, jumpMult: 1.75 }
+      : null);
+    if (!prof) continue;
+
+    const frac = clamp(daysUntil / Math.max(1, calendarDays), 0.04, 0.98);
+    const stepIdx = clamp(Math.round(frac * steps), 1, steps);
+    const existing = byStep.get(stepIdx);
+    if (!existing || prof.jumpMult > existing.jumpMult) {
+      byStep.set(stepIdx, {
+        stepIdx,
+        daysUntil,
+        date: String(ev.date || ''),
+        type,
+        shortLabel: prof.shortLabel,
+        title: String(ev.title || prof.shortLabel),
+        impact: String(ev.impact || 'high'),
+        volMult: prof.volMult,
+        jumpMult: prof.jumpMult,
+      });
+    }
+  }
+
+  return Array.from(byStep.values()).sort((a, b) => a.stepIdx - b.stepIdx);
+}
+
+/**
  * Estimates jump intensity (jumps/day), jump mean skew, and jump volatility
  * from metal beta, macro VIX stress, active catalyst intensity, market regime
  * (Short Squeeze vs. True Price Discovery), and RSI exhaustion.
@@ -159,10 +328,17 @@ export function runJumpDiffusion({
   jumpSigma = 0.025,
   samplePathCount = 18,
   seed = 20261119,
+  eventSchedule = [],
 }) {
   const rng = createRng(seed);
   const kappa = Math.exp(jumpMean + 0.5 * jumpSigma * jumpSigma) - 1;
-  const driftStep = dailyDrift - 0.5 * diffVol * diffVol - lambda * kappa;
+  const eventMap = new Map();
+  if (Array.isArray(eventSchedule)) {
+    for (const ev of eventSchedule) {
+      const idx = Math.round(Number(ev?.stepIdx));
+      if (idx >= 1 && idx <= tradingDays) eventMap.set(idx, ev);
+    }
+  }
 
   const terminalPrices = new Float64Array(paths);
   const maxPrices = new Float64Array(paths);
@@ -179,13 +355,17 @@ export function runJumpDiffusion({
     const pathArr = recordSample ? [s] : null;
 
     for (let d = 1; d <= tradingDays; d++) {
+      const ev = eventMap.get(d);
+      const localVol = ev ? diffVol * clamp(Number(ev.volMult) || 1, 1, 2.2) : diffVol;
+      const localLambda = ev ? lambda * clamp(Number(ev.jumpMult) || 1, 1, 3.5) : lambda;
+      const localDrift = dailyDrift - 0.5 * localVol * localVol - localLambda * kappa;
       const z = normalSample(rng);
-      const nJumps = poissonSample(lambda, rng);
+      const nJumps = poissonSample(localLambda, rng);
       let jumpSum = 0;
       for (let j = 0; j < nJumps; j++) {
         jumpSum += jumpMean + jumpSigma * normalSample(rng);
       }
-      s = s * Math.exp(driftStep + diffVol * z + jumpSum);
+      s = s * Math.exp(localDrift + localVol * z + jumpSum);
       if (s > hi) hi = s;
       if (s < lo) lo = s;
       stepBuckets[d][p] = s;

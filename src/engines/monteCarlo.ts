@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MetalKey, MonteCarloMilestone, MonteCarloSummary } from '../types/bullion';
 import { clampNum } from '../utils/format';
-import { estimateJumpParams, runJumpDiffusion } from '../../monitor/jump_diffusion.mjs';
+import {
+  buildEventRiskSchedule,
+  computeEwmaGarchVol,
+  estimateJumpParams,
+  runJumpDiffusion,
+} from '../../monitor/jump_diffusion.mjs';
 
 const mcCache = new Map<string, MonteCarloSummary>();
 const MAX_MC_CACHE = 32;
@@ -28,6 +33,9 @@ export interface MonteCarloRequest {
   annualVolPct: number;
   unitScore: number; // -1..+1
   vix?: number;
+  gvz?: number | null;
+  dailyCloses?: number[];
+  expandedEvents?: Array<Record<string, any>>;
   coneMultiplier?: number;
   lambdaMult?: number;
   sigmaJMult?: number;
@@ -55,8 +63,36 @@ function resolveJumpParams(req: MonteCarloRequest): {
   expectedJumpsPerMonth: number;
   skewRegime: string;
   exhaustionRisk: boolean;
+  effectiveAnnVolPct: number;
+  volRegime: string;
 } {
-  const dailyVol = clampNum(req.annualVolPct / 100 / Math.sqrt(252), 0.005, 0.055);
+  const tradingDays = calendarToTradingDays(req.horizonDays);
+  const fallbackDailyVol = clampNum(req.annualVolPct / 100 / Math.sqrt(252), 0.005, 0.055);
+  // Scale GVZ (Gold implied vol) to Silver by 1.55x historical beta when running Silver
+  const impliedVolAnnPct =
+    req.gvz != null && Number.isFinite(req.gvz) && req.gvz > 4
+      ? req.metal === 'silver'
+        ? req.gvz * 1.55
+        : req.gvz
+      : null;
+  const garch = computeEwmaGarchVol(req.dailyCloses || [], {
+    impliedVolAnnPct,
+    fallbackDailyVol,
+  });
+  const horizonDailyVol = clampNum(
+    garch.termVolForDays ? garch.termVolForDays(tradingDays) : garch.blendedDailyVol,
+    0.005,
+    0.065
+  );
+  // Blend GARCH/GVZ term-structure vol with macro annualVolPct so sudden stress shocks expand tails immediately
+  const dailyVol =
+    Array.isArray(req.dailyCloses) && req.dailyCloses.length >= 12
+      ? clampNum(horizonDailyVol * 0.72 + fallbackDailyVol * 0.28, 0.005, 0.065)
+      : impliedVolAnnPct != null
+        ? clampNum(garch.blendedDailyVol * 0.65 + fallbackDailyVol * 0.35, 0.005, 0.065)
+        : fallbackDailyVol;
+  const effectiveAnnVolPct = +(dailyVol * Math.sqrt(252) * 100).toFixed(1);
+
   const pre = req.precomputedJumpParams;
   const est = estimateJumpParams({
     metal: req.metal,
@@ -70,7 +106,7 @@ function resolveJumpParams(req: MonteCarloRequest): {
     rsi14: req.rsi14 ?? null,
   });
 
-  // Prefer calibrated backend jumpParams when available & no extreme override, layering space jump boost
+  // Prefer calibrated backend jumpParams blended with GARCH/GVZ dynamic vol & live unitScore
   const usePre =
     pre &&
     Number.isFinite(Number(pre.diffVol)) &&
@@ -78,11 +114,12 @@ function resolveJumpParams(req: MonteCarloRequest): {
     Number.isFinite(Number(pre.jumpSigma)) &&
     Math.abs(req.unitScore) < 0.99;
 
-  const baseDiffVol = usePre ? Number(pre.diffVol) : Number(est.diffVol);
+  const baseDiffVol = usePre
+    ? Number(pre.diffVol) * 0.45 + Number(est.diffVol) * 0.55
+    : Number(est.diffVol);
   const baseLambda = clampNum((usePre ? Number(pre.lambda) : Number(est.lambda)) + (req.spaceJumpBoost ?? 0), 0.02, 0.35);
   const baseJumpMean = usePre ? Number(pre.jumpMean) : Number(est.jumpMean);
   const baseJumpSigma = usePre ? Number(pre.jumpSigma) : Number(est.jumpSigma);
-  // Blend backend drift with live unitScore so scenario/whisper changes move the distribution cleanly
   const baseDailyDrift = usePre
     ? clampNum(Number(pre.dailyDrift) * 0.65 + Number(est.dailyDrift) * 0.35, -0.008, 0.008)
     : Number(est.dailyDrift);
@@ -96,6 +133,8 @@ function resolveJumpParams(req: MonteCarloRequest): {
     expectedJumpsPerMonth: +(baseLambda * 21).toFixed(1),
     skewRegime: String((usePre ? pre.skewRegime : est.skewRegime) || 'Balanced Tails'),
     exhaustionRisk: Boolean(usePre ? pre.exhaustionRisk : est.exhaustionRisk),
+    effectiveAnnVolPct,
+    volRegime: String(garch.volRegime || 'Balanced Volatility'),
   };
 }
 
@@ -264,7 +303,8 @@ function buildSummary(
     probMinus5: number;
     milestones?: { upside: MonteCarloMilestone; downside: MonteCarloMilestone };
   },
-  jumpParams: ReturnType<typeof resolveJumpParams>
+  jumpParams: ReturnType<typeof resolveJumpParams>,
+  eventPins: NonNullable<MonteCarloSummary['eventPins']> = []
 ): MonteCarloSummary {
   const lastIdx = curves.p50.length - 1;
   const p10End = +Number(curves.p10[lastIdx] ?? req.spot).toFixed(2);
@@ -275,6 +315,10 @@ function buildSummary(
   const medianMovePct = req.spot > 0 ? +(((medianEnd - req.spot) / req.spot) * 100).toFixed(2) : 0;
 
   const logical = buildLogicalTrajectory(req.spot, curves, samplePaths, req, jumpParams);
+  const evNote =
+    eventPins.length > 0
+      ? ` Event jump-risk priced on ${eventPins.slice(0, 3).map((e) => e.shortLabel).join(', ')}.`
+      : '';
 
   return {
     metal: req.metal,
@@ -290,7 +334,7 @@ function buildSummary(
     logicalPath: logical.logicalPath,
     logicalEnd: logical.logicalEnd,
     logicalMovePct: logical.logicalMovePct,
-    logicalReason: logical.logicalReason,
+    logicalReason: `${logical.logicalReason}${evNote}`,
     closestSamplePath: logical.closestSamplePath,
     samplePaths,
     probUp: probs.probUp,
@@ -304,9 +348,11 @@ function buildSummary(
     p90End,
     jumpRegime: jumpParams.skewRegime,
     expectedJumpsPerMonth: jumpParams.expectedJumpsPerMonth,
-    annualVolPct: +req.annualVolPct.toFixed(1),
+    annualVolPct: jumpParams.effectiveAnnVolPct,
     dailyDriftPct: +(jumpParams.dailyDrift * 100).toFixed(3),
     exhaustionRisk: jumpParams.exhaustionRisk,
+    volRegime: jumpParams.volRegime,
+    eventPins,
     milestones: probs.milestones,
   };
 }
@@ -317,9 +363,11 @@ function makeCacheKey(req: MonteCarloRequest, paths: number): string {
     Math.round(req.spot * 10),
     req.horizonDays,
     Math.round(req.annualVolPct * 2),
+    Math.round((req.gvz ?? 0) * 2),
     Math.round(req.unitScore * 100),
     Math.round((req.ensembleTargetPct ?? 0) * 10),
     Math.round((req.regime?.squeezeScore ?? 50)),
+    (req.expandedEvents || []).length,
     paths,
   ].join('|');
 }
@@ -332,6 +380,10 @@ export function runMonteCarloSync(req: MonteCarloRequest): MonteCarloSummary {
 
   const tradingDays = calendarToTradingDays(req.horizonDays);
   const jumpParams = resolveJumpParams(req);
+  const eventPins = buildEventRiskSchedule(req.expandedEvents || [], {
+    calendarDays: req.horizonDays,
+    steps: tradingDays,
+  });
   const seed = (req.metal === 'silver' ? 20261199 : 20261127) + req.horizonDays * 31;
 
   const raw = runJumpDiffusion({
@@ -345,6 +397,7 @@ export function runMonteCarloSync(req: MonteCarloRequest): MonteCarloSummary {
     jumpSigma: jumpParams.jumpSigma,
     samplePathCount: 24,
     seed,
+    eventSchedule: eventPins,
   });
 
   const curves = raw.curves || {
@@ -367,7 +420,8 @@ export function runMonteCarloSync(req: MonteCarloRequest): MonteCarloSummary {
       probMinus5: Number(raw.probTouchDown5Pct ?? 0),
       milestones: raw.milestones,
     },
-    jumpParams
+    jumpParams,
+    eventPins
   );
 
   if (mcCache.size >= MAX_MC_CACHE) {
@@ -385,7 +439,12 @@ export async function runMonteCarloAsync(req: MonteCarloRequest): Promise<MonteC
   if (cached) return cached;
 
   const tradingDays = calendarToTradingDays(req.horizonDays);
+  const steps = Math.min(42, Math.max(10, tradingDays));
   const jumpParams = resolveJumpParams(req);
+  const eventPins = buildEventRiskSchedule(req.expandedEvents || [], {
+    calendarDays: req.horizonDays,
+    steps,
+  });
   const worker = getWorker();
   if (!worker) {
     return runMonteCarloSync({ ...req, pathsCount: paths });
@@ -418,7 +477,8 @@ export async function runMonteCarloAsync(req: MonteCarloRequest): Promise<MonteC
           sim.curves,
           Array.isArray(sim.samplePaths) ? sim.samplePaths : [],
           probs,
-          jumpParams
+          jumpParams,
+          eventPins
         );
         if (mcCache.size >= MAX_MC_CACHE) {
           const oldest = mcCache.keys().next().value;
@@ -439,7 +499,7 @@ export async function runMonteCarloAsync(req: MonteCarloRequest): Promise<MonteC
         cacheKey,
         spot: req.spot,
         horizonKey: `${req.horizonDays}d`,
-        spec: { tradingDays, steps: Math.min(42, Math.max(10, tradingDays)) },
+        spec: { tradingDays, steps },
         paths,
         params: {
           diffVol: jumpParams.diffVol,
@@ -448,6 +508,7 @@ export async function runMonteCarloAsync(req: MonteCarloRequest): Promise<MonteC
           jumpMean: jumpParams.jumpMean,
           jumpSigma: jumpParams.jumpSigma,
         },
+        eventSchedule: eventPins,
         seed,
       });
     } catch {

@@ -574,6 +574,12 @@ export function runDailyLearningStep({
     horizonObs: silverObs,
   });
 
+  // Probability calibration Brier Score: (p_up - y_up)^2 where 0.00 = perfect, 0.25 = coin flip
+  const pUpGold = clamp(0.5 + (snap1d.pred1dGoldPct / Math.max(0.3, snap1d.halfCone1dGoldPct * 1.4)) * 0.35, 0.08, 0.92);
+  const pUpSilver = clamp(0.5 + (snap1d.pred1dSilverPct / Math.max(0.5, snap1d.halfCone1dSilverPct * 1.4)) * 0.35, 0.08, 0.92);
+  const brierGold = +((pUpGold - (actualGold1dPct >= 0 ? 1 : 0)) ** 2).toFixed(4);
+  const brierSilver = +((pUpSilver - (actualSilver1dPct >= 0 ? 1 : 0)) ** 2).toFixed(4);
+
   // 2. Append daily audit entry
   const entry = {
     date: todayKey,
@@ -586,12 +592,14 @@ export function runDailyLearningStep({
     dirHitGold,
     inConeGold,
     tailBreachGold,
+    brierGold,
     silverPredPct: snap1d.pred1dSilverPct,
     silverActualPct: actualSilver1dPct,
     silverErrPct: errSilverPct,
     dirHitSilver,
     inConeSilver,
     tailBreachSilver,
+    brierSilver,
     learnedPinball,
     baselinePinball,
   };
@@ -745,6 +753,18 @@ export function runDailyLearningStep({
   const topBoosted = combinedDeltaList[0];
   const topTrimmed = combinedDeltaList[combinedDeltaList.length - 1];
 
+  const brierRows = recent.filter((h) => Number.isFinite(h.brierGold) && Number.isFinite(h.brierSilver));
+  const brierScoreGold = brierRows.length
+    ? +(brierRows.reduce((a, h) => a + h.brierGold, 0) / brierRows.length).toFixed(3)
+    : null;
+  const brierScoreSilver = brierRows.length
+    ? +(brierRows.reduce((a, h) => a + h.brierSilver, 0) / brierRows.length).toFixed(3)
+    : null;
+  const brierScoreAvg =
+    brierScoreGold != null && brierScoreSilver != null
+      ? +((brierScoreGold + brierScoreSilver) / 2).toFixed(3)
+      : null;
+
   state.summary = {
     rollingDirHitGoldPct: dirGoldPct,
     rollingDirHitSilverPct: dirSilverPct,
@@ -753,6 +773,9 @@ export function runDailyLearningStep({
     avgAbsErrSilverPct,
     conformalDailyGoldPct,
     conformalDailySilverPct,
+    brierScoreGold,
+    brierScoreSilver,
+    brierScoreAvg,
     precisionScore,
     calibrationGrade,
     streakGold,
@@ -890,6 +913,33 @@ export async function fetchSettledCloses(fetchImpl = fetch) {
     if (xauRes.ok && xagRes.ok) {
       const [xauJson, xagJson] = await Promise.all([xauRes.json(), xagRes.json()]);
       return parseGoldApiCloses(xauJson, xagJson);
+    }
+  } catch {
+    // Fall back to Yahoo Futures settled close
+  }
+  try {
+    const [sqGRes, sqSRes] = await Promise.all([
+      fetchImpl('https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD', reqOpts({
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      })),
+      fetchImpl('https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAG/USD', reqOpts({
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      })),
+    ]);
+    if (sqGRes.ok && sqSRes.ok) {
+      const [sqG, sqS] = await Promise.all([sqGRes.json(), sqSRes.json()]);
+      const midOf = (arr) => {
+        const p = Array.isArray(arr) ? arr[0]?.spreadProfilePrices : null;
+        const row = Array.isArray(p) ? p.find((r) => r.spreadProfile === 'standard') || p[0] : null;
+        return row?.bid > 0 && row?.ask > 0 ? +((row.bid + row.ask) / 2).toFixed(2) : null;
+      };
+      const g = midOf(sqG);
+      const s = midOf(sqS);
+      if (g && g >= 500 && g <= 50000 && s && s >= 5 && s <= 2000) {
+        return { gold: g, silver: s, source: 'swissquote-interbank' };
+      }
     }
   } catch {
     // Fall back to Yahoo Futures settled close

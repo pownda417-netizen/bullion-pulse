@@ -53,7 +53,7 @@ function mcQuantile(sorted, q) {
 }
 
 self.onmessage = (event) => {
-  const { reqId, cacheKey, spot, horizonKey, spec, paths: rawPaths = 1500, params, seed } = event.data || {};
+  const { reqId, cacheKey, spot, horizonKey, spec, paths: rawPaths = 1500, params, seed, eventSchedule = [] } = event.data || {};
   if (!Number.isFinite(spot) || spot <= 0 || !spec || !params) {
     self.postMessage({ reqId, cacheKey, error: 'invalid_inputs' });
     return;
@@ -81,9 +81,13 @@ self.onmessage = (event) => {
   const safeJumpSigma = clampNum(jumpSigma, 0, 2);
 
   const kappa = Math.exp(safeJumpMean + 0.5 * safeJumpSigma * safeJumpSigma) - 1;
-  const driftStep = (safeDailyDrift - 0.5 * safeDiffVol * safeDiffVol - safeLambda * kappa) * dt;
-  const stepDiffVol = safeDiffVol * Math.sqrt(dt);
-  const stepLambda = safeLambda * dt;
+  const eventMap = new Map();
+  if (Array.isArray(eventSchedule)) {
+    for (const ev of eventSchedule) {
+      const idx = Math.round(Number(ev && ev.stepIdx));
+      if (idx >= 1 && idx <= steps) eventMap.set(idx, ev);
+    }
+  }
 
   const terminalPrices = new Float64Array(paths);
   const maxPrices = new Float64Array(paths);
@@ -101,6 +105,12 @@ self.onmessage = (event) => {
     const arr = rec ? [s] : null;
 
     for (let st = 1; st <= steps; st++) {
+      const ev = eventMap.get(st);
+      const localVol = ev ? safeDiffVol * clampNum(Number(ev.volMult) || 1, 1, 2.2) : safeDiffVol;
+      const localLambda = ev ? safeLambda * clampNum(Number(ev.jumpMult) || 1, 1, 3.5) : safeLambda;
+      const stepDiffVol = localVol * Math.sqrt(dt);
+      const stepLambda = localLambda * dt;
+      const driftStep = (safeDailyDrift - 0.5 * localVol * localVol - localLambda * kappa) * dt;
       const z = mcNormal(rng);
       const nJumps = mcPoisson(stepLambda, rng);
       let jumpSum = 0;

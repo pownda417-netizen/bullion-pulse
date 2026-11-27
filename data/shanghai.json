@@ -1,6 +1,6 @@
 {
   "source": "Shanghai Gold Exchange (SGE)",
-  "updatedAt": "2026-11-27T23:09:34.020Z",
+  "updatedAt": "2026-11-27T23:06:18.230Z",
   "usdCny": 6.6537,
   "gold": {
     "contract": "Au99.99",
@@ -8,8 +8,8 @@
     "openCnyPerG": 785,
     "pct": -0.38,
     "usdPerOz": 3655.55,
-    "premiumUsdOz": 5.55,
-    "premiumPct": 0.15
+    "premiumUsdOz": 2.06,
+    "premiumPct": 0.06
   },
   "silver": {
     "contract": "Ag(T+D)",
@@ -18,8 +18,8 @@
     "pct": -1.31,
     "usdPerOz": 48.16,
     "exVatUsdPerOz": 42.62,
-    "spreadUsdOz": 4.93,
-    "exVatPremiumUsdOz": -0.61
+    "spreadUsdOz": 4.41,
+    "exVatPremiumUsdOz": -1.13
   },
   "benchmarks": null
 }

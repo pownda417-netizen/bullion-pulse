@@ -391,18 +391,25 @@ export function computeEtfFlowSignal({
   gldVolumes = [],
   slvCloses = [],
   slvVolumes = [],
+  physCloses = [],
   pslvCloses = [],
 } = {}) {
   const gld = signedVolumeFlow(gldCloses, gldVolumes);
   const slv = signedVolumeFlow(slvCloses, slvVolumes);
   if (!gld && !slv) return null;
 
+  const gld10 = pctChange(gldCloses, 10);
+  const phys10 = pctChange(physCloses, 10);
+  const physVsGld10dPct =
+    phys10 != null && gld10 != null ? +(phys10 - gld10).toFixed(2) : null;
+
   const slv10 = pctChange(slvCloses, 10);
   const pslv10 = pctChange(pslvCloses, 10);
   const pslvVsSlv10dPct =
     pslv10 != null && slv10 != null ? +(pslv10 - slv10).toFixed(2) : null;
 
-  const goldSignal = gld ? gld.score : 0;
+  const physBoost = physVsGld10dPct != null ? clamp(physVsGld10dPct / 3.0, -0.25, 0.25) : 0;
+  const goldSignal = +clamp((gld ? gld.score : 0) + physBoost, -1, 1).toFixed(3);
   const pslvBoost = pslvVsSlv10dPct != null ? clamp(pslvVsSlv10dPct / 3.5, -0.35, 0.35) : 0;
   const silverSignal = +clamp((slv ? slv.score : goldSignal * 0.7) + pslvBoost, -1, 1).toFixed(3);
 
@@ -419,6 +426,9 @@ export function computeEtfFlowSignal({
     silverSignal,
     gldVolRatio: gld?.volRatio ?? 1.0,
     slvVolRatio: slv?.volRatio ?? 1.0,
+    gldRet5dPct: gld?.ret5dPct ?? 0,
+    slvRet5dPct: slv?.ret5dPct ?? 0,
+    physVsGld10dPct,
     pslvVsSlv10dPct,
     regime,
   };

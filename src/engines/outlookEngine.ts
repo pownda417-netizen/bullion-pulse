@@ -44,6 +44,7 @@ import {
 } from '../../monitor/institutional_signals.mjs';
 import { computePhysicalPremiumSignals, PHYSICAL_BENCHMARKS } from '../../monitor/physical_premiums.mjs';
 import { computeHurstExponent, computePrecisionForecastLine } from '../../monitor/precision_forecast.mjs';
+import { computeEwmaGarchVol } from '../../monitor/jump_diffusion.mjs';
 
 export {
   AI_COMPUTE_META,
@@ -429,6 +430,22 @@ export interface FullQuantModelOutput {
       modelVotes: Array<Record<string, unknown>>;
       milestones: Array<{ day: number; label: string; price: number; pct: number }>;
     };
+    volRegime: {
+      label: string;
+      blendedAnnVolPct: number;
+      ewmaAnnVolPct: number;
+      gvzAnnPct: number | null;
+      ivSpreadAnnPct: number;
+    };
+    horizonAlignment: {
+      tactical12hPct: number;
+      swing7dPct: number;
+      macro30dPct: number;
+      label: string;
+      tone: 'bullish' | 'bearish' | 'neutral';
+      summary: string;
+      upcomingCatalysts7d: number;
+    };
   };
   hiddenAlpha: any;
   aiRace: any;
@@ -595,13 +612,16 @@ export function computeFullQuantSuite(params: {
     breakoutEnergyMult: Number(alphaForMetal?.springCoiling?.breakoutEnergyMult ?? 1.0),
   });
 
-  // Historical Twins: prefer empirical client calculation if >=48 bars, else backend 6-mo daily twins
-  const localTwins = computeEmpiricalHistoricalTwins({
-    closes: metal === 'gold' ? goldCloses : silverCloses,
-    dxy: [],
-    horizonDays: 21,
-  });
-  const twins = localTwins || outlook?.[metal]?.horizon30d?.historicalTwins || null;
+  // Historical Twins: prefer backend 7D macro-conditioned twins (DXY+VIX+TNX+price), else compute local empirical twins
+  const backendTwins = outlook?.[metal]?.horizon30d?.historicalTwins || null;
+  const twins =
+    backendTwins && backendTwins.matchPct != null
+      ? backendTwins
+      : computeEmpiricalHistoricalTwins({
+          closes: metal === 'gold' ? goldCloses : silverCloses,
+          dxy: [],
+          horizonDays: 21,
+        }) || backendTwins;
 
   const hurst = computeHurstExponent((metal === 'gold' ? goldCloses : silverCloses).slice(-90));
 
@@ -610,7 +630,20 @@ export function computeFullQuantSuite(params: {
   const baseH7 = outMetal.horizon7d || {};
   const baseH30 = outMetal.horizon30d || {};
   const annualVolPct = metal === 'silver' ? Number(macro.silverVolAnnPct ?? 36) : Number(macro.goldVolAnnPct ?? 20);
-  const dailyVol = clampNum(annualVolPct / 100 / Math.sqrt(252), 0.006, 0.05);
+  const fallbackDailyVol = clampNum(annualVolPct / 100 / Math.sqrt(252), 0.006, 0.05);
+  const bars1m = timeframes['1m']?.[metal] || [];
+  const dailyClosesForVol = bars1m.length >= 10 ? bars1m.map((b) => b.c) : [];
+  const gvzRaw = Number(outlook?.institutionalSignals?.impliedVol?.gvz);
+  const impliedVolAnnPct = Number.isFinite(gvzRaw) && gvzRaw > 4 ? (metal === 'silver' ? gvzRaw * 1.55 : gvzRaw) : null;
+  const garchVol = computeEwmaGarchVol(dailyClosesForVol, {
+    impliedVolAnnPct,
+    fallbackDailyVol,
+  });
+  const dailyVol = clampNum(
+    (garchVol.termVolForDays ? garchVol.termVolForDays(21) : garchVol.blendedDailyVol) * 0.65 + fallbackDailyVol * 0.35,
+    0.006,
+    0.06
+  );
 
   // Re-anchor backend horizon percentages to LIVE spot so spot & target never drift apart
   const exp7Pct = +clampNum(Number(baseH7.expectedPct ?? adjustedUnitScore * 2.2) + interactiveDelta * 2.4, -12, 12).toFixed(2);
@@ -683,6 +716,76 @@ export function computeFullQuantSuite(params: {
     { day: 30, label: 'Day 30', pct: exp30Pct, price: +(spot * (1 + exp30Pct / 100)).toFixed(2) },
   ];
 
+  const eventRisk = outlook?.institutionalSignals?.eventRisk || getUpcomingEventRisk(new Date());
+
+  // Cross-Horizon Alignment: compare +12H Tactical Chart Forecast vs 7D Swing vs 30D Macro Ensemble
+  const bars1dForTactical = timeframes['1d']?.[metal] || candles[metal] || activeBars;
+  const tacticalLine =
+    timeframe === '1d'
+      ? precisionLine
+      : bars1dForTactical.length >= 6
+        ? computePrecisionForecastLine({
+            bars: bars1dForTactical,
+            liveSpot: spot,
+            tf: '1d',
+            metal,
+            macroUnit: adjustedUnitScore,
+            leadLagAlpha: Number(outlook?.[metal]?.leadLagAlpha ?? 0),
+            seasonalityTilt: Number(seasonality?.unitTilt ?? 0),
+            gapPrimary: gaps?.primary || null,
+            opexMagnetPrice: Number(alphaForMetal?.opexMagnet?.magnetPrice) || null,
+            opexPinStrength: Number(alphaForMetal?.opexMagnet?.pinStrength ?? 0),
+            breakoutEnergyMult: Number(alphaForMetal?.springCoiling?.breakoutEnergyMult ?? 1.0),
+          })
+        : precisionLine;
+
+  const tacticalPts = Array.isArray(tacticalLine?.points) ? tacticalLine.points : [];
+  const tacticalEndPrice = tacticalPts.length >= 2 ? Number(tacticalPts[tacticalPts.length - 1]?.price ?? spot) : spot;
+  const tactical12hPct = spot > 0 ? +(((tacticalEndPrice - spot) / spot) * 100).toFixed(2) : 0;
+
+  const signT = tactical12hPct > 0.12 ? 1 : tactical12hPct < -0.12 ? -1 : 0;
+  const sign7 = exp7Pct > 0.25 ? 1 : exp7Pct < -0.25 ? -1 : 0;
+  const sign30 = exp30Pct > 0.4 ? 1 : exp30Pct < -0.4 ? -1 : 0;
+  const evList: Array<Record<string, any>> = Array.isArray(eventRisk?.expandedEvents)
+    ? eventRisk.expandedEvents
+    : Array.isArray(eventRisk?.upcoming)
+      ? eventRisk.upcoming
+      : [];
+  const upcomingCatalysts7d = evList.filter(
+    (e) => e.impact === 'high' && Number(e.daysUntil ?? e.daysAway ?? 99) >= 0 && Number(e.daysUntil ?? e.daysAway ?? 99) <= 7
+  ).length;
+
+  let alignLabel = 'Range Consolidation';
+  let alignTone: 'bullish' | 'bearish' | 'neutral' = 'neutral';
+  let alignSummary = 'Tactical +12H, 7D swing, and 30D macro are balanced near spot.';
+  if (signT > 0 && sign7 > 0 && sign30 > 0) {
+    alignLabel = 'Full Bullish Alignment';
+    alignTone = 'bullish';
+    alignSummary = 'Tactical +12H, 7D swing, and 30D macro ensemble all point higher.';
+  } else if (signT < 0 && sign7 < 0 && sign30 < 0) {
+    alignLabel = 'Full Bearish Alignment';
+    alignTone = 'bearish';
+    alignSummary = 'All three horizons align to the downside — elevated pullback risk.';
+  } else if (sign7 > 0 && sign30 > 0) {
+    alignLabel = signT < 0 ? 'Dip Inside Uptrend' : 'Bullish Macro Backdrop';
+    alignTone = 'bullish';
+    alignSummary =
+      signT < 0
+        ? 'Short-term +12H pullback inside a bullish 7D & 30D macro trend.'
+        : '7D swing and 30D macro trend higher with neutral intraday consolidation.';
+  } else if (sign7 < 0 && sign30 < 0) {
+    alignLabel = signT > 0 ? 'Bounce Inside Downtrend' : 'Bearish Macro Backdrop';
+    alignTone = 'bearish';
+    alignSummary =
+      signT > 0
+        ? 'Short-term +12H bounce counter to softer 7D & 30D macro pressure.'
+        : '7D swing and 30D macro trend lower with quiet intraday price action.';
+  } else if (sign7 !== 0 && sign30 !== 0 && sign7 !== sign30) {
+    alignLabel = 'Cross-Horizon Rotation';
+    alignTone = 'neutral';
+    alignSummary = '7D swing and 30D macro diverge — watch upcoming catalyst windows.';
+  }
+
   const interactiveForecast = {
     metal,
     score: finalScore100,
@@ -711,6 +814,22 @@ export function computeFullQuantSuite(params: {
       hurstLabel: String(baseH30.hurstLabel ?? hurst?.label ?? 'Balanced'),
       modelVotes: rawVotes,
       milestones,
+    },
+    volRegime: {
+      label: String(garchVol.volRegime || 'Balanced Volatility'),
+      blendedAnnVolPct: Number(garchVol.blendedAnnVolPct ?? annualVolPct),
+      ewmaAnnVolPct: Number(garchVol.ewmaAnnVolPct ?? annualVolPct),
+      gvzAnnPct: impliedVolAnnPct != null ? +impliedVolAnnPct.toFixed(1) : null,
+      ivSpreadAnnPct: Number(garchVol.ivSpreadAnnPct ?? 0),
+    },
+    horizonAlignment: {
+      tactical12hPct,
+      swing7dPct: exp7Pct,
+      macro30dPct: exp30Pct,
+      label: alignLabel,
+      tone: alignTone,
+      summary: alignSummary,
+      upcomingCatalysts7d,
     },
   };
 
@@ -755,8 +874,6 @@ export function computeFullQuantSuite(params: {
       dxyPct: Number(macro.dxy5dPct ?? 0),
       vix: Number(macro.vix ?? 18),
     });
-
-  const eventRisk = outlook?.institutionalSignals?.eventRisk || getUpcomingEventRisk(new Date());
 
   return {
     precisionLine,

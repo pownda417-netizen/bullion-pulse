@@ -19,6 +19,8 @@ declare module '*/monitor/institutional_signals.mjs' {
 
 declare module '*/monitor/jump_diffusion.mjs' {
   export function createRng(seed?: number): () => number;
+  export function computeEwmaGarchVol(closes?: number[], opts?: Record<string, any>): any;
+  export function buildEventRiskSchedule(expandedEvents?: any[], opts?: Record<string, any>): any[];
   export function estimateJumpParams(opts?: Record<string, any>): any;
   export function runJumpDiffusion(opts?: Record<string, any>): any;
 }

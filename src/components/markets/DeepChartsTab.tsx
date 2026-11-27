@@ -58,11 +58,23 @@ export const DeepChartsTab: React.FC = () => {
           </div>
           <div className="stat-box">
             <div className="stat-label">10Y Real Yield</div>
-            <div className="stat-value mono">
-              {outlook?.proSignals?.realYields?.value != null
-                ? `${Number(outlook.proSignals.realYields.value).toFixed(2)}%`
-                : '—'}
-            </div>
+            {(() => {
+              const ry = outlook?.proSignals?.realYields;
+              const ryVal = ry?.realYield10yPct ?? ry?.value;
+              const ryBps = ry?.realDelta5dBps;
+              return (
+                <>
+                  <div className="stat-value mono">
+                    {ryVal != null ? `${Number(ryVal).toFixed(2)}%` : '—'}
+                  </div>
+                  {ryBps != null && (
+                    <div className="panel-subtitle mono" style={{ fontSize: 10.5, marginTop: 2 }}>
+                      {`${Number(ryBps) >= 0 ? '+' : ''}${Number(ryBps)} bps 5d`}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
           <div className="stat-box">
             <div className="stat-label">VIX Volatility</div>

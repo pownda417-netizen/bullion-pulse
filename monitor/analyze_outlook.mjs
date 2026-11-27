@@ -160,6 +160,7 @@ const YAHOO_SYMBOLS = {
   gvz: '^GVZ',
   gld: 'GLD',
   slv: 'SLV',
+  phys: 'PHYS',
   pslv: 'PSLV',
   copper: 'HG=F',
   platinum: 'PL=F',
@@ -754,6 +755,7 @@ async function main() {
         gldVolumes: series.gldVolumes,
         slvCloses: series.slv,
         slvVolumes: series.slvVolumes,
+        physCloses: series.phys,
         pslvCloses: series.pslv,
       }) ||
       prevInst.etfFlows ||

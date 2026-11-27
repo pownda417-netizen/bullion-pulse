@@ -12,6 +12,7 @@ export const OddsTab: React.FC = () => {
     quotes,
     fxRates,
     outlook,
+    timeframes,
     spaceWeather,
     addForecastEntry,
     settleForecastEntry,
@@ -62,6 +63,16 @@ export const OddsTab: React.FC = () => {
           ? exp30 + interactiveTilt * 4.5
           : exp30 * 2.1 + interactiveTilt * 8.0;
 
+    // Use true 1-day daily closes ('1m' timeframe has 1-day bars; '6m'/'1y' are resampled weekly/bi-weekly)
+    const dailyBars = timeframes['1m']?.[m] || [];
+    const dailyCloses = dailyBars.length >= 10 ? dailyBars.map((b) => b.c) : [];
+    const gvzRaw = Number(outlook?.institutionalSignals?.impliedVol?.gvz);
+    const expandedEvents = Array.isArray(outlook?.institutionalSignals?.eventRisk?.expandedEvents)
+      ? outlook.institutionalSignals.eventRisk.expandedEvents
+      : Array.isArray(outlook?.institutionalSignals?.eventRisk?.upcoming)
+        ? outlook.institutionalSignals.eventRisk.upcoming
+        : [];
+
     return {
       metal: m,
       spot,
@@ -69,6 +80,9 @@ export const OddsTab: React.FC = () => {
       annualVolPct,
       unitScore,
       vix: Number(macro.vix ?? 18),
+      gvz: Number.isFinite(gvzRaw) && gvzRaw > 4 ? gvzRaw : null,
+      dailyCloses,
+      expandedEvents,
       coneMultiplier: Number(sl.coneMultiplier ?? outlook?.coneMultiplier ?? 1.0),
       lambdaMult: Number(sl.jumpCalibration?.lambdaMult ?? 1.0),
       sigmaJMult: Number(sl.jumpCalibration?.sigmaJMult ?? 1.0),
@@ -86,13 +100,13 @@ export const OddsTab: React.FC = () => {
   const goldQuickMc = useMemo(
     () => runMonteCarloSync(buildReq('gold', 1500)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [goldSpot, horizonDays, outlook, spaceWeather.jumpBoost, whisperCpi, whisperFed, aiSimDelta]
+    [goldSpot, horizonDays, outlook, timeframes, spaceWeather.jumpBoost, whisperCpi, whisperFed, aiSimDelta]
   );
 
   const silverQuickMc = useMemo(
     () => runMonteCarloSync(buildReq('silver', 1500)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [silverSpot, horizonDays, outlook, spaceWeather.jumpBoost, whisperCpi, whisperFed, aiSimDelta]
+    [silverSpot, horizonDays, outlook, timeframes, spaceWeather.jumpBoost, whisperCpi, whisperFed, aiSimDelta]
   );
 
   const goldDisplayMc = oddsMetal === 'gold' && mc?.metal === 'gold' ? mc : goldQuickMc;
@@ -131,7 +145,7 @@ export const OddsTab: React.FC = () => {
 
       const padL = 12;
       const padR = 76;
-      const padT = 18;
+      const padT = 24;
       const padB = 24;
       const plotW = w - padL - padR;
       const plotH = h - padT - padB;
@@ -209,6 +223,55 @@ export const OddsTab: React.FC = () => {
       mc.p50.forEach((v, i) => (i === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v))));
       ctx.stroke();
       ctx.restore();
+
+      // 5b. Scheduled Macro / COMEX Catalyst Event Pins (FOMC / CPI / NFP / FND jump windows)
+      if (Array.isArray(mc.eventPins) && mc.eventPins.length > 0) {
+        let lastPinRightX = -Infinity;
+        ctx.save();
+        ctx.font = '700 8.5px "JetBrains Mono", monospace';
+        for (const pin of mc.eventPins) {
+          const stepIdx = Math.max(1, Math.min(steps - 1, Number(pin.stepIdx) || 1));
+          const px = xOf(stepIdx);
+          const isHigh = pin.impact === 'high';
+          ctx.strokeStyle = isHigh
+            ? isLightTheme
+              ? 'rgba(217, 119, 6, 0.55)'
+              : 'rgba(245, 158, 11, 0.52)'
+            : isLightTheme
+              ? 'rgba(100, 116, 139, 0.35)'
+              : 'rgba(148, 163, 184, 0.34)';
+          ctx.lineWidth = isHigh ? 1.2 : 1;
+          ctx.setLineDash([2, 3]);
+          ctx.beginPath();
+          ctx.moveTo(px, padT);
+          ctx.lineTo(px, h - padB);
+          ctx.stroke();
+
+          // Top catalyst label pill (skip pill if overlapping prior pill to keep canvas spotless)
+          const txt = String(pin.shortLabel || 'Event');
+          const tw = Math.ceil(ctx.measureText(txt).width) + 8;
+          const bx = Math.max(padL, Math.min(w - padR - tw, px - tw / 2));
+          if (bx > lastPinRightX + 4) {
+            ctx.setLineDash([]);
+            ctx.fillStyle = isHigh
+              ? isLightTheme
+                ? 'rgba(217, 119, 6, 0.16)'
+                : 'rgba(245, 158, 11, 0.22)'
+              : isLightTheme
+                ? 'rgba(100, 116, 139, 0.14)'
+                : 'rgba(148, 163, 184, 0.18)';
+            ctx.beginPath();
+            ctx.roundRect(bx, 4, tw, 14, 3);
+            ctx.fill();
+            ctx.fillStyle = isHigh ? (isLightTheme ? '#b45309' : '#fbbf24') : textCol;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(txt, bx + tw / 2, 11);
+            lastPinRightX = bx + tw;
+          }
+        }
+        ctx.restore();
+      }
 
       // 6. HIGHLIGHTED MOST LOGICAL PREDICTION PATH (luminous halo + crisp bold line + checkpoints)
       ctx.save();
@@ -323,6 +386,10 @@ export const OddsTab: React.FC = () => {
     mc && hoverStep != null
       ? Math.round((hoverStep / Math.max(1, mc.p50.length - 1)) * mc.horizonDays)
       : null;
+  const hovEvent =
+    mc && hoverStep != null && Array.isArray(mc.eventPins)
+      ? mc.eventPins.find((p) => p.stepIdx === hoverStep) || null
+      : null;
 
   return (
     <div className="sub-tab-stack">
@@ -424,14 +491,14 @@ export const OddsTab: React.FC = () => {
         <div className="chart-ohlc-bar" style={{ marginTop: 0, marginBottom: 6 }} aria-live="polite">
           <span className="chart-ohlc-text mono" id="mc-hover-readout">
             {mc && hoverStep != null && hovDay != null
-              ? `Day ${hovDay} · Logical ${formatMoney(mc.logicalPath[hoverStep], dec, settings.currency, fxRates)} · Median ${formatMoney(mc.p50[hoverStep], dec, settings.currency, fxRates)} · Core ${formatMoney(mc.p25[hoverStep], dec, settings.currency, fxRates)}–${formatMoney(mc.p75[hoverStep], dec, settings.currency, fxRates)}`
+              ? `Day ${hovDay}${hovEvent ? ` ⚡ ${hovEvent.shortLabel}` : ''} · Logical ${formatMoney(mc.logicalPath[hoverStep], dec, settings.currency, fxRates)} · Median ${formatMoney(mc.p50[hoverStep], dec, settings.currency, fxRates)} · Core ${formatMoney(mc.p25[hoverStep], dec, settings.currency, fxRates)}–${formatMoney(mc.p75[hoverStep], dec, settings.currency, fxRates)}`
               : mc
-                ? `Most Logical Path: ${formatMoney(mc.spot, dec, settings.currency, fxRates)} → ${formatMoney(mc.logicalEnd, dec, settings.currency, fxRates)} (${formatSignedPct(mc.logicalMovePct, 2)}) · Hover to inspect any day`
+                ? `Most Logical Path: ${formatMoney(mc.spot, dec, settings.currency, fxRates)} → ${formatMoney(mc.logicalEnd, dec, settings.currency, fxRates)} (${formatSignedPct(mc.logicalMovePct, 2)})${mc.eventPins?.length ? ` · ${mc.eventPins.length} Catalyst Pin${mc.eventPins.length > 1 ? 's' : ''}` : ''} · Hover to inspect`
                 : 'Calculating 1,500 jump-diffusion paths…'}
           </span>
           {mc && (
             <span className={`badge-pill ${mc.logicalMovePct >= 0 ? 'bullish' : 'bearish'}`} style={{ flexShrink: 0 }}>
-              {mc.jumpRegime}
+              {mc.volRegime ? `${mc.jumpRegime} · ${mc.volRegime}` : mc.jumpRegime}
             </span>
           )}
         </div>

@@ -340,6 +340,14 @@ export const SelfLearningReplayChart: React.FC = () => {
   const hzLabel = horizon === '30d' ? '30-Day' : horizon === '7d' ? '7-Day' : 'Daily';
   const activePoint = hoverIdx != null ? points[hoverIdx] : null;
   const btMetal = metal === 'silver' ? bt.silver : bt.gold;
+  const wf = sl.walkForwardBacktest || null;
+  const slSum = sl.summary || {};
+  const jc = sl.jumpCalibration || {};
+  const driftBiasPct = Number(metal === 'silver' ? sl.driftBiasSilverPct : sl.driftBiasGoldPct) || 0;
+  const brierVal =
+    metal === 'silver'
+      ? slSum.brierScoreSilver ?? wf?.brierScoreSilver ?? null
+      : slSum.brierScoreGold ?? wf?.brierScoreGold ?? null;
   const learnedWeights: Record<string, number> = sl.weights?.[metal] || {};
   const weightEntries = Object.entries(learnedWeights).sort((a, b) => Number(b[1]) - Number(a[1]));
 
@@ -419,35 +427,50 @@ export const SelfLearningReplayChart: React.FC = () => {
         <div className="stat-box">
           <div className="stat-label">{t('Learning Cycles')}</div>
           <div className="stat-value mono">{`${sl.totalCycles ?? 0} runs`}</div>
-          <div className="panel-subtitle">{sl.lastLearnedDay ? `Last: ${String(sl.lastLearnedDay)}` : '5:10 PM ET'}</div>
-        </div>
-        <div className="stat-box">
-          <div className="stat-label">{t('Active Regime')}</div>
-          <div className="stat-value" style={{ textTransform: 'capitalize' }}>
-            {String(sl.activeRegime || 'Balanced')}
-          </div>
-          <div className="panel-subtitle">{`Cone ${Number(sl.coneMultiplier ?? 1).toFixed(2)}×`}</div>
-        </div>
-        <div className="stat-box">
-          <div className="stat-label">{t('6-Mo Walk-Forward')}</div>
-          <div className="stat-value mono">
-            {btMetal?.dirHitPct != null ? `${btMetal.dirHitPct}% Dir` : `${dirHitPct}% Dir`}
-          </div>
           <div className="panel-subtitle">
-            {btMetal?.inConePct != null
-              ? `${btMetal.inConePct}% in-band · ±${Number(btMetal.avgErrPct ?? avgErrPct).toFixed(1)}%`
-              : `${btMetal?.samples ?? points.length} samples`}
+            {sl.lastLearnedDay ? `Last: ${String(sl.lastLearnedDay)}` : '5:10 PM ET · Warm-Started'}
           </div>
         </div>
         <div className="stat-box">
-          <div className="stat-label">{t('Learned Drift Bias')}</div>
-          <div className="stat-value mono">
-            {formatSignedPct(
-              Number(metal === 'silver' ? sl.driftBiasSilverPct : sl.driftBiasGoldPct) || 0,
-              2
-            )}
+          <div className="stat-label">{t('Regime & Jump Tails')}</div>
+          <div className="stat-value" style={{ textTransform: 'capitalize' }}>
+            {`${String(sl.activeRegime || 'Balanced')} · ${Number(sl.coneMultiplier ?? 1).toFixed(2)}×`}
           </div>
-          <div className="panel-subtitle">{t('Auto-debias offset')}</div>
+          <div className="panel-subtitle mono">
+            {`λ ${Number(jc.lambdaMult ?? 1).toFixed(2)}× · σJ ${Number(jc.sigmaJMult ?? 1).toFixed(2)}×`}
+          </div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">
+            {wf?.evaluatedDays ? t('2-Yr Walk-Forward (OOS)') : t('6-Mo Walk-Forward')}
+          </div>
+          <div className="stat-value mono">
+            {wf?.evaluatedDays
+              ? `${metal === 'silver' ? wf.dirHit1dSilverPct : wf.dirHit1dGoldPct}% 1D · ${metal === 'silver' ? wf.dirHit20dSilverPct : wf.dirHit20dGoldPct}% 20D`
+              : btMetal?.dirHitPct != null
+                ? `${btMetal.dirHitPct}% Dir`
+                : `${dirHitPct}% Dir`}
+          </div>
+          <div className="panel-subtitle mono">
+            {wf?.evaluatedDays
+              ? `${wf.evaluatedDays}d OOS · ${wf.inConeOverallPct}% in-cone`
+              : btMetal?.inConePct != null
+                ? `${btMetal.inConePct}% in-band · ±${Number(btMetal.avgErrPct ?? avgErrPct).toFixed(1)}%`
+                : `${btMetal?.samples ?? points.length} samples`}
+          </div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">
+            {brierVal != null ? t('Brier Calibration Score') : t('Learned Drift Bias')}
+          </div>
+          <div className="stat-value mono">
+            {brierVal != null ? Number(brierVal).toFixed(3) : formatSignedPct(driftBiasPct, 2)}
+          </div>
+          <div className="panel-subtitle mono">
+            {brierVal != null
+              ? `<0.25 beats coin flip · Bias ${formatSignedPct(driftBiasPct, 2)}`
+              : t('Auto-debias offset')}
+          </div>
         </div>
       </div>
 

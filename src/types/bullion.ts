@@ -408,6 +408,17 @@ export interface MonteCarloSummary {
   annualVolPct: number;
   dailyDriftPct: number;
   exhaustionRisk: boolean;
+  volRegime?: string;
+  eventPins?: Array<{
+    stepIdx: number;
+    daysUntil: number;
+    shortLabel: string;
+    title: string;
+    date: string;
+    impact: string;
+    volMult: number;
+    jumpMult: number;
+  }>;
   milestones?: {
     upside: MonteCarloMilestone;
     downside: MonteCarloMilestone;

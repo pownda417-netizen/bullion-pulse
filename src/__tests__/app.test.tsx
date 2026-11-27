@@ -17,6 +17,7 @@ import {
   resampleBarsForDisplay,
 } from '../engines/chartEngine';
 import { runMonteCarloSync } from '../engines/monteCarlo';
+import { buildEventRiskSchedule, computeEwmaGarchVol } from '../../monitor/jump_diffusion.mjs';
 import { DEFAULT_FX_RATES } from '../utils/format';
 import { defaultSpaceWeather } from '../utils/security';
 import { BullionProvider } from '../context/BullionContext';
@@ -223,8 +224,11 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(screen.queryByRole('button', { name: 'My Buys' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'News Pins' })).toBeNull();
 
-    // Navigate to Outlook -> What Moves It (All 6 Hidden Alpha Engines + Detailed 36-Ticker AI Race)
+    // Navigate to Outlook -> Forecast (v61 Cross-Horizon Alignment), Vaults & Miners (ETF Flows), and What Moves It
     fireEvent.click(document.getElementById('top-nav-outlook')!);
+    expect(document.getElementById('horizon-alignment-strip')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Vaults & Miners' }));
+    expect(screen.getByText(/ETF Flows \(GLD\/SLV\/PHYS\)/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'What Moves It' }));
     expect(screen.getByText(/1\. Session Flow Divergence/i)).toBeInTheDocument();
     expect(screen.getByText(/6\. COMEX OpEx & Delivery Magnet/i)).toBeInTheDocument();
@@ -363,5 +367,89 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(fc.horizonLabel).toBe('+3.5D');
     expect(fc.points).toHaveLength(16);
     expect(fc.points[15]).toBeCloseTo(3670, 1);
+  });
+
+  it('v61 GARCH/EWMA volatility clustering, GVZ blending, Event-Aware Jump Pins, and Cross-Horizon Alignment work coherently', () => {
+    // Calm series vs recent volatility shock series
+    const calmCloses = Array.from({ length: 45 }, (_, i) => 3600 + Math.sin(i * 0.4) * 8);
+    const shockCloses = [
+      ...Array.from({ length: 38 }, (_, i) => 3600 + Math.sin(i * 0.4) * 8),
+      3690, 3555, 3710, 3540, 3725, 3570, 3745,
+    ];
+    const gCalm = computeEwmaGarchVol(calmCloses, { impliedVolAnnPct: 16 });
+    const gShock = computeEwmaGarchVol(shockCloses, { impliedVolAnnPct: 32 });
+    expect(gShock.blendedDailyVol).toBeGreaterThan(gCalm.blendedDailyVol);
+    expect(gShock.termVolForDays(5)).toBeGreaterThan(gShock.termVolForDays(60));
+    expect(gShock.blendedAnnVolPct).toBeGreaterThan(gCalm.blendedAnnVolPct);
+
+    // Event schedule maps FOMC/CPI/FND into valid step indices with elevated jump/vol multipliers
+    const events = [
+      { type: 'comex_fnd', title: 'COMEX Silver First Notice Day', date: '2026-11-30', impact: 'high', daysUntil: 3 },
+      { type: 'nfp', title: 'US Jobs Report (NFP)', date: '2026-12-04', impact: 'high', daysUntil: 7 },
+      { type: 'fomc', title: 'FOMC Rate Decision', date: '2026-12-09', impact: 'high', daysUntil: 12 },
+      { type: 'cpi', title: 'US CPI Inflation Print', date: '2026-12-10', impact: 'high', daysUntil: 13 },
+    ];
+    const pins = buildEventRiskSchedule(events, { calendarDays: 30, steps: 21 });
+    expect(pins.length).toBeGreaterThanOrEqual(3);
+    expect(pins.some((p) => p.shortLabel === 'FOMC')).toBe(true);
+    expect(pins.every((p) => p.stepIdx >= 1 && p.stepIdx <= 21 && p.volMult > 1 && p.jumpMult > 1)).toBe(true);
+
+    // Event-aware Monte Carlo attaches eventPins & volRegime cleanly
+    const evMc = runMonteCarloSync({
+      metal: 'gold',
+      spot: 3650,
+      horizonDays: 30,
+      annualVolPct: 24,
+      gvz: 28.5,
+      dailyCloses: shockCloses,
+      expandedEvents: events,
+      unitScore: 0.28,
+      ensembleTargetPct: 1.4,
+      pathsCount: 800,
+    });
+    expect(evMc.eventPins?.length).toBeGreaterThanOrEqual(3);
+    expect(evMc.volRegime).toBeTruthy();
+    expect(evMc.logicalReason).toMatch(/Event jump-risk priced/i);
+    expect(evMc.logicalEnd).toBeGreaterThanOrEqual(evMc.p25End);
+    expect(evMc.logicalEnd).toBeLessThanOrEqual(evMc.p75End);
+
+    // Cross-Horizon Alignment computes +12H vs 7D vs 30D + catalyst count
+    const mockBars = Array.from({ length: 30 }, (_, i) => ({
+      t: Date.now() - (30 - i) * 3600_000,
+      o: 3600 + i * 1.5,
+      h: 3604 + i * 1.5,
+      l: 3598 + i * 1.5,
+      c: 3602 + i * 1.5,
+    }));
+    const q = computeFullQuantSuite({
+      metal: 'gold',
+      timeframe: '1d',
+      goldQuote: { price: 3648, prevClose: 3620, chg: 28, pct: 0.77 },
+      silverQuote: { price: 44.2, prevClose: 43.1, chg: 1.1, pct: 2.55 },
+      outlook: {
+        confidence: 80,
+        gold: {
+          spot: 3648,
+          score: 34,
+          signal: 'Bullish',
+          horizon7d: { bear: 3530, base: 3692, bull: 3850, bearPct: -3.2, expectedPct: 1.2, bullPct: 5.5 },
+          horizon30d: { bear: 3390, base: 3720, bull: 4050, bearPct: -7.1, expectedPct: 1.97, bullPct: 11.0 },
+        },
+        silver: { spot: 44.2, score: 52, signal: 'Strong Bullish' },
+        macroSnapshot: { goldVolAnnPct: 26, silverVolAnnPct: 44, vix: 22 },
+        institutionalSignals: { impliedVol: { gvz: 27.4 }, eventRisk: { expandedEvents: events, regime: 'Pre-Event Vol Window' } },
+      },
+      shanghai: null,
+      comex: null,
+      timeframes: { '1d': { gold: mockBars, silver: mockBars }, '1y': { gold: mockBars, silver: mockBars } },
+      candles: { gold: mockBars, silver: mockBars },
+      spaceWeather: defaultSpaceWeather(),
+      dealerQuotes: { goldStreetOz: null, silverStreetOz: null },
+      fxRates: DEFAULT_FX_RATES,
+    });
+    expect(q.interactiveForecast.horizonAlignment.upcomingCatalysts7d).toBe(2);
+    expect(q.interactiveForecast.horizonAlignment.swing7dPct).toBeCloseTo(1.2, 1);
+    expect(q.interactiveForecast.horizonAlignment.macro30dPct).toBeCloseTo(1.97, 1);
+    expect(q.interactiveForecast.volRegime.gvzAnnPct).toBeCloseTo(27.4, 1);
   });
 });

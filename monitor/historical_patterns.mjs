@@ -6,7 +6,12 @@
  * and documented event analogs. Educational / analytical tool — not financial advice.
  */
 
-import { estimateJumpParams, runJumpDiffusion } from './jump_diffusion.mjs';
+import {
+  buildEventRiskSchedule,
+  computeEwmaGarchVol,
+  estimateJumpParams,
+  runJumpDiffusion,
+} from './jump_diffusion.mjs';
 import { computeHurstExponent } from './precision_forecast.mjs';
 import { computePhysicalPremiumSignals } from './physical_premiums.mjs';
 import { computeHiddenAlphaSuite } from './hidden_alpha.mjs';
@@ -646,12 +651,25 @@ export function sourceTierInfo(source = '') {
   return { tier: 3, weight: 0.75 };
 }
 
-export function recencyDecayWeight(publishedAt, nowMs = Date.now()) {
+// Category-specific exponential half-lives (hours): slow structural shifts persist days, fast chatter decays quickly
+const DRIVER_HALF_LIFE_HOURS = {
+  central_banks: 144,
+  mining_supply: 120,
+  inflation: 72,
+  rates_usd: 72,
+  geopolitics: 60,
+  shanghai_sge: 48,
+  comex_paper: 48,
+  positioning_miners: 48,
+  equities: 18,
+};
+
+export function recencyDecayWeight(publishedAt, nowMs = Date.now(), driver = null) {
   const ts = publishedAt ? new Date(publishedAt).getTime() : NaN;
   if (!Number.isFinite(ts)) return 0.7;
   const ageHours = Math.max(0, (nowMs - ts) / 3600000);
-  // 18-hour half-life: breaking news (~1h) = 0.96x, 36h recap = 0.25x
-  return +clamp(Math.exp((-Math.LN2 * ageHours) / 18), 0.2, 1.0).toFixed(3);
+  const halfLife = (driver && DRIVER_HALF_LIFE_HOURS[driver]) || 18;
+  return +clamp(Math.exp((-Math.LN2 * ageHours) / halfLife), 0.2, 1.0).toFixed(3);
 }
 
 function titleTokens(title = '') {
@@ -679,7 +697,7 @@ export function classifyHeadlines(rawHeadlines = [], nowMs = Date.now()) {
     if (!classified) continue;
 
     const { tier, weight: tierW } = sourceTierInfo(classified.source);
-    const recencyW = recencyDecayWeight(classified.publishedAt, nowMs);
+    const recencyW = recencyDecayWeight(classified.publishedAt, nowMs, classified.driver);
     const combinedW = +(tierW * recencyW).toFixed(3);
     const enriched = {
       ...classified,
@@ -693,7 +711,7 @@ export function classifyHeadlines(rawHeadlines = [], nowMs = Date.now()) {
 
     const tokens = titleTokens(enriched.title);
     const match = clusters.find(
-      (c) => c.item.driver === enriched.driver && jaccardSimilarity(c.tokens, tokens) >= 0.58
+      (c) => c.item.driver === enriched.driver && jaccardSimilarity(c.tokens, tokens) >= 0.52
     );
 
     if (match) {
@@ -709,8 +727,18 @@ export function classifyHeadlines(rawHeadlines = [], nowMs = Date.now()) {
     }
   }
 
+  // Sublinear novelty weighting so syndicated rewrites add modest confirmation without drowning out unique catalysts
   return clusters
-    .map((c) => c.item)
+    .map((c) => {
+      const n = c.item.clusterCount || 1;
+      const noveltyMult = +(1 + 0.18 * Math.log1p(n - 1)).toFixed(3);
+      return {
+        ...c.item,
+        noveltyMult,
+        goldImpact: +clamp(c.item.goldImpact * noveltyMult, -1, 1).toFixed(3),
+        silverImpact: +clamp(c.item.silverImpact * noveltyMult, -1, 1).toFixed(3),
+      };
+    })
     .sort((a, b) => b.weight - a.weight);
 }
 
@@ -1350,6 +1378,8 @@ export function computeCrossAssetLeadLag({
 export function computeEmpiricalHistoricalTwins({
   closes = [],
   dxy = [],
+  vix = [],
+  tnx = [],
   horizonDays = 21,
 } = {}) {
   const n = closes.length;
@@ -1381,13 +1411,22 @@ export function computeEmpiricalHistoricalTwins({
     if (dxy.length === n && dxy[idx] > 0 && dxy[idx - 20] > 0) {
       dxy20 = ((dxy[idx] - dxy[idx - 20]) / dxy[idx - 20]) * 100;
     }
-    return [
+    const vec = [
       clamp(ret5 / 3.0, -2.5, 2.5),
       clamp(ret20 / 6.5, -2.5, 2.5),
       clamp((rsi - 50) / 18, -2.5, 2.5),
       clamp((vol14 - 1.2) / 0.8, -2.5, 2.5),
       clamp(-dxy20 / 3.0, -2.5, 2.5),
     ];
+    // Multi-factor macro conditioning: add VIX regime & 10Y Treasury Yield momentum when aligned
+    if (vix.length === n && vix[idx] > 0) {
+      vec.push(clamp((vix[idx] - 18) / 7.5, -2.5, 2.5));
+    }
+    if (tnx.length === n && tnx[idx] > 0 && tnx[idx - 20] > 0) {
+      const tnx20 = ((tnx[idx] - tnx[idx - 20]) / tnx[idx - 20]) * 100;
+      vec.push(clamp(-tnx20 / 8.0, -2.5, 2.5));
+    }
+    return vec;
   };
 
   const curVec = stateVecAt(n - 1);
@@ -1517,7 +1556,13 @@ export function project30DayPrecision({
 
   // 4. 20-Year Calendar Seasonality + Empirical Historical Twin Matcher + Ratio Pull
   const seasonality = getUpcoming30dSeasonality(metal, nowDate);
-  const twins = computeEmpiricalHistoricalTwins({ closes, dxy: dxySeries, horizonDays: 21 });
+  const twins = computeEmpiricalHistoricalTwins({
+    closes,
+    dxy: dxySeries,
+    vix: Array.isArray(series?.vix) ? series.vix : [],
+    tnx: Array.isArray(series?.tnx) ? series.tnx : [],
+    horizonDays: 21,
+  });
   const ratioPull = isSilver ? clamp(quant?.ratioSignalSilver ?? 0, -0.5, 0.5) * 0.45 : 0;
   const cycleSeasonalUnit = clamp(
     seasonality.unitTilt * 2.1 + (twins?.unitTilt ?? 0) * 0.85 + ratioPull,
@@ -2481,13 +2526,30 @@ export function buildOutlook({
   const goldScore = Math.round(goldUnit * 100);
   const silverScore = Math.round(silverUnit * 100);
 
-  // Use forward-looking ^GVZ blended daily volatility when available
-  const effectiveGoldDailyVol = impliedVol?.blendedGoldDailyVol || quant.goldDailyVol;
+  // GARCH(1,1) / EWMA volatility clustering blended with forward-looking ^GVZ options implied volatility
+  const garchGold = computeEwmaGarchVol(series.gold || [], {
+    impliedVolAnnPct: impliedVol?.gvz ?? null,
+    fallbackDailyVol: quant.goldDailyVol,
+  });
+  const garchSilver = computeEwmaGarchVol(series.silver || [], {
+    impliedVolAnnPct: impliedVol?.gvz != null ? impliedVol.gvz * 1.55 : null,
+    fallbackDailyVol: quant.silverDailyVol,
+  });
+  const baseGoldVol = impliedVol?.blendedGoldDailyVol || quant.goldDailyVol;
+  const effectiveGoldDailyVol = +clamp(
+    garchGold.blendedDailyVol * 0.6 + baseGoldVol * 0.4,
+    0.0045,
+    0.06
+  ).toFixed(5);
   const ivRatio =
     impliedVol?.blendedGoldDailyVol && quant.goldDailyVol > 0
       ? clamp(impliedVol.blendedGoldDailyVol / quant.goldDailyVol, 0.82, 1.32)
       : 1.0;
-  const effectiveSilverDailyVol = quant.silverDailyVol * ivRatio;
+  const effectiveSilverDailyVol = +clamp(
+    garchSilver.blendedDailyVol * 0.6 + quant.silverDailyVol * ivRatio * 0.4,
+    0.008,
+    0.075
+  ).toFixed(5);
 
   // US Dollar Strength (DXY) FX Cost Impact attribution across 7D (5 trading days) & 30D (21 trading days)
   const dsBase = quant.dollarStrength || {
@@ -2732,11 +2794,21 @@ export function buildOutlook({
     rsi14: quant.silverRsi14,
   });
 
+  const eventSchedule7d = buildEventRiskSchedule(eventRisk?.expandedEvents || [], {
+    calendarDays: 7,
+    steps: 5,
+  });
+  const eventSchedule30d = buildEventRiskSchedule(eventRisk?.expandedEvents || [], {
+    calendarDays: 30,
+    steps: 21,
+  });
+
   const goldMc7d = runJumpDiffusion({
     spot: spotGold,
     tradingDays: 5,
     paths: 1500,
     ...goldJumpParams,
+    eventSchedule: eventSchedule7d,
     samplePathCount: 16,
     seed: 20261119,
   });
@@ -2745,6 +2817,7 @@ export function buildOutlook({
     tradingDays: 21,
     paths: 1500,
     ...goldJumpParams30d,
+    eventSchedule: eventSchedule30d,
     samplePathCount: 16,
     seed: 20261120,
   });
@@ -2753,6 +2826,7 @@ export function buildOutlook({
     tradingDays: 5,
     paths: 1500,
     ...silverJumpParams,
+    eventSchedule: eventSchedule7d,
     samplePathCount: 16,
     seed: 20261121,
   });
@@ -2761,6 +2835,7 @@ export function buildOutlook({
     tradingDays: 21,
     paths: 1500,
     ...silverJumpParams30d,
+    eventSchedule: eventSchedule30d,
     samplePathCount: 16,
     seed: 20261122,
   });
@@ -2783,8 +2858,9 @@ export function buildOutlook({
         weightDeltasFromBase: learnedWeights.weightDeltasFromBase || null,
         jumpCalibration: learnedWeights.jumpCalibration || null,
         championChallenger: learnedWeights.championChallenger || null,
+        walkForwardBacktest: learnedWeights.walkForwardBacktest || null,
         summary: learnedWeights.summary || null,
-        recentHistory: (learnedWeights.history || []).slice(0, 12),
+        recentHistory: (learnedWeights.history || []).slice(0, 20),
       }
     : null;
 
