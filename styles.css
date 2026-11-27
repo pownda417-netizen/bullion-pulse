@@ -7201,16 +7201,37 @@ body.pixel-shift-on .bottom-nav > * {
     gap: 10px;
     position: sticky;
     top: calc(var(--topbar-h, 70px) + 8px);
-    max-height: calc(100dvh - var(--topbar-h, 70px) - 24px);
+    max-height: calc(100dvh - var(--topbar-h, 70px) - 20px);
     overflow-y: auto;
-    padding-right: 4px;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-right: 0;
     min-width: 0;
+  }
+
+  body[data-desk-active="split"] .split-desk-left::-webkit-scrollbar,
+  body[data-desk-active="split"] .split-desk-left *::-webkit-scrollbar,
+  body[data-desk-active="split"] .desk-views-wrap::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  body[data-desk-active="split"] .split-desk-left *,
+  body[data-desk-active="split"] .desk-views-wrap {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  body[data-desk-active="split"] .split-desk-left .chart-wrap-tall {
+    height: 270px;
   }
 
   body[data-desk-active="split"] .split-desk-chart-slot {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
   }
 
