@@ -471,4 +471,39 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(res.historicalWave.length).toBe(45);
     expect(res.spectrum.length).toBeGreaterThanOrEqual(20);
   });
+
+  it('activates 3-Col desk layout cleanly on desktop viewports (1440px) with all 3 columns mounted and switches Column 3', () => {
+    const origWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 });
+    try {
+      render(
+        <BullionProvider>
+          <App />
+        </BullionProvider>
+      );
+
+      const btn3Col = document.getElementById('desk-mode-3col')!;
+      fireEvent.click(btn3Col);
+
+      expect(document.body.dataset.deskActive).toBe('ultrawide');
+      expect(document.body.dataset.deskCol3).toBe('trade');
+      expect(document.getElementById('view-markets')).toBeInTheDocument();
+      expect(document.getElementById('view-outlook')).toBeInTheDocument();
+      expect(document.getElementById('view-trade')).toBeInTheDocument();
+
+      // Clicking Stack switches Column 3 to #view-stack while keeping Markets + Outlook mounted
+      fireEvent.click(document.getElementById('btn-header-melt')!);
+      expect(document.body.dataset.deskCol3).toBe('stack');
+      expect(document.getElementById('view-markets')).toBeInTheDocument();
+      expect(document.getElementById('view-outlook')).toBeInTheDocument();
+      expect(document.getElementById('view-stack')).toBeInTheDocument();
+
+      // Clicking Settings switches Column 3 to #view-alerts
+      fireEvent.click(document.getElementById('btn-settings')!);
+      expect(document.body.dataset.deskCol3).toBe('alerts');
+      expect(document.getElementById('view-alerts')).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: origWidth });
+    }
+  });
 });

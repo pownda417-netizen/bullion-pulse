@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'bullion-pulse-';
-const CACHE_NAME = 'bullion-pulse-react-v62';
+const CACHE_NAME = 'bullion-pulse-react-v62-1';
 const APP_SHELL = [
   './',
   './index.html',

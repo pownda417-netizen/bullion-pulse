@@ -256,7 +256,7 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const resolvedDeskLayout = useMemo<ResolvedDeskLayout>(() => {
     if (viewportW < 1100) return 'single';
     if (settings.deskLayout === 'single') return 'single';
-    if (settings.deskLayout === 'ultrawide') return viewportW >= 1500 ? 'ultrawide' : 'split';
+    if (settings.deskLayout === 'ultrawide') return 'ultrawide';
     if (settings.deskLayout === 'split') return 'split';
     // auto
     return viewportW >= 1440 ? 'split' : 'single';
@@ -283,10 +283,18 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (typeof document === 'undefined' || !document.body) return;
+    const col3 = activeView === 'stack' ? 'stack' : activeView === 'alerts' ? 'alerts' : 'trade';
     document.body.dataset.deskActive = resolvedDeskLayout;
+    document.body.dataset.deskCol3 = col3;
     document.body.classList.toggle('desk-split-active', resolvedDeskLayout === 'split');
     document.body.classList.toggle('desk-ultrawide-active', resolvedDeskLayout === 'ultrawide');
-  }, [resolvedDeskLayout]);
+    // Trigger responsive canvas redraw after column width changes
+    if (typeof window !== 'undefined' && typeof requestAnimationFrame === 'function') {
+      const raf = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+      return () => cancelAnimationFrame(raf);
+    }
+    return undefined;
+  }, [resolvedDeskLayout, activeView]);
 
   // Auto-switch right pane away from Markets -> Live when entering Split-Desk
   useEffect(() => {
@@ -348,14 +356,16 @@ export const BullionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const nextSub =
           nextMode === 'split' && activeView === 'markets' && prev.subViews.markets === 'live'
             ? { ...prev.subViews, markets: 'global' as const }
-            : prev.subViews;
+            : nextMode === 'ultrawide' && prev.subViews.markets === 'global'
+              ? { ...prev.subViews, markets: 'live' as const }
+              : prev.subViews;
         return { ...prev, deskLayout: nextMode, subViews: nextSub };
       });
       const label =
         nextMode === 'split'
           ? 'Split-Desk Active'
           : nextMode === 'ultrawide'
-            ? '3-Column Ultrawide Desk'
+            ? '3-Column Desk Active'
             : 'Single Column View';
       showToast(`🖥 ${label}`);
     },

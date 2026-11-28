@@ -107,6 +107,7 @@ export const TopBar: React.FC = () => {
         <div className="desk-mode-bar" id="desk-mode-bar" role="group" aria-label="Wide-screen desk layout">
           <button
             type="button"
+            id="desk-mode-single"
             className={`desk-pill-btn${resolvedDeskLayout === 'single' ? ' active' : ''}`}
             aria-pressed={resolvedDeskLayout === 'single'}
             title={t('Standard single view')}
@@ -116,18 +117,20 @@ export const TopBar: React.FC = () => {
           </button>
           <button
             type="button"
+            id="desk-mode-split"
             className={`desk-pill-btn${resolvedDeskLayout === 'split' ? ' active' : ''}`}
             aria-pressed={resolvedDeskLayout === 'split'}
-            title={t('Split-Desk (1440px+): pin live chart on the left')}
+            title={t('Split-Desk: pin live chart on the left')}
             onClick={() => setDeskLayout('split')}
           >
             {t('Split')}
           </button>
           <button
             type="button"
+            id="desk-mode-3col"
             className={`desk-pill-btn${resolvedDeskLayout === 'ultrawide' ? ' active' : ''}`}
             aria-pressed={resolvedDeskLayout === 'ultrawide'}
-            title={t('Ultrawide 3-Column Desk: Markets, Outlook & Trade side-by-side')}
+            title={t('3-Column Desk: Markets, Outlook & Trade side-by-side')}
             onClick={() => setDeskLayout('ultrawide')}
           >
             {t('3-Col')}
