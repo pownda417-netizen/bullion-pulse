@@ -3,8 +3,10 @@
  * Zero external dependencies (Node.js 20+ built-in fetch), 100% free & anonymous.
  *
  * 1. FRED 10Y Real Yields (DFII10) & 10Y Breakeven Inflation (T10YIE)
- * 2. CFTC Disaggregated Commitments of Traders (COT) Managed Money Crowding (72hh-3qpy)
- * 3. Mining Equities Relative Strength Confirmation (GDX/Gold & SIL/Silver)
+ * 2. FRED 10Y-2Y Yield Curve (T10Y2Y) & 2Y Treasury Yield (DGS2) Fed-Pivot Tracker
+ * 3. S&P 500 / Gold Capital-Rotation Ratio (^GSPC / GC=F) vs. 40m & 80m Moving Averages
+ * 4. CFTC Disaggregated Commitments of Traders (COT) Managed Money Crowding (72hh-3qpy)
+ * 5. Mining Equities Relative Strength Confirmation (GDX/Gold & SIL/Silver)
  */
 
 import {
@@ -78,20 +80,253 @@ export function computeRealYieldSignal(dfii10Rows = [], t10yieRows = []) {
   };
 }
 
+async function fetchFredSeries(id, maxRows = 60) {
+  const res = await safeFetch(
+    `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}`,
+    { headers: { 'User-Agent': USER_AGENT } },
+    { timeoutMs: 12000, maxRedirects: 1, allowedHosts: ['fred.stlouisfed.org'] }
+  );
+  if (!res.ok) throw new Error(`FRED ${id} HTTP ${res.status}`);
+  const csv = await readResponseTextWithLimit(res, 2 * 1024 * 1024);
+  return parseFredCsv(csv, maxRows);
+}
+
 export async function fetchFredRealYields() {
-  const fetchSeries = async (id) => {
+  const [dfii10, t10yie] = await Promise.all([fetchFredSeries('DFII10', 60), fetchFredSeries('T10YIE', 60)]);
+  return computeRealYieldSignal(dfii10, t10yie);
+}
+
+/* ---------- 1b. FRED 10Y-2Y Yield Curve (T10Y2Y) & 2Y Treasury Yield (DGS2) ---------- */
+
+export function computeYieldCurveSignal(t10y2yRows = [], dgs2Rows = []) {
+  if (!t10y2yRows.length && !dgs2Rows.length) return null;
+
+  const latestSpread = t10y2yRows[t10y2yRows.length - 1] || null;
+  const prev5Spread = t10y2yRows[Math.max(0, t10y2yRows.length - 6)] || latestSpread;
+  const prev20Spread = t10y2yRows[Math.max(0, t10y2yRows.length - 21)] || latestSpread;
+
+  const latest2y = dgs2Rows[dgs2Rows.length - 1] || null;
+  const prev52y = dgs2Rows[Math.max(0, dgs2Rows.length - 6)] || latest2y;
+  const prev202y = dgs2Rows[Math.max(0, dgs2Rows.length - 21)] || latest2y;
+
+  const spread10y2yPct = latestSpread ? +latestSpread.value.toFixed(2) : null;
+  const spreadDelta5dBps =
+    latestSpread && prev5Spread ? Math.round((latestSpread.value - prev5Spread.value) * 100) : 0;
+  const spreadDelta20dBps =
+    latestSpread && prev20Spread ? Math.round((latestSpread.value - prev20Spread.value) * 100) : 0;
+
+  const yield2yPct = latest2y ? +latest2y.value.toFixed(2) : null;
+  const yield2yDelta5dBps =
+    latest2y && prev52y ? Math.round((latest2y.value - prev52y.value) * 100) : 0;
+  const yield2yDelta20dBps =
+    latest2y && prev202y ? Math.round((latest2y.value - prev202y.value) * 100) : 0;
+
+  const isInverted = spread10y2yPct != null && spread10y2yPct < 0;
+
+  // Bull steepening (2Y falling faster than 10Y ahead of Fed cuts) is historically Gold's strongest macro launchpad;
+  // curve flattening + rising 2Y signals hawkish Fed pressure / headwind.
+  const steepComp = clamp((spreadDelta20dBps / 24) * 0.65 + (spreadDelta5dBps / 14) * 0.35, -1, 1);
+  const y2Comp = clamp((-yield2yDelta20dBps / 35) * 0.65 + (-yield2yDelta5dBps / 18) * 0.35, -1, 1);
+  const bullSteepenBonus = yield2yDelta20dBps <= -12 && spreadDelta20dBps >= 8 ? 0.18 : 0;
+
+  const goldSignal = clamp(steepComp * 0.48 + y2Comp * 0.52 + bullSteepenBonus, -1, 1);
+  const silverSignal = clamp(steepComp * 0.44 + y2Comp * 0.56 + bullSteepenBonus * 0.85, -1, 1);
+
+  let regime = 'Balanced Curve';
+  if (yield2yDelta20dBps <= -12 && spreadDelta20dBps >= 8) {
+    regime = 'Bull Steepening (Fed Pivot)';
+  } else if (isInverted) {
+    regime = 'Inverted Curve (Slowing Watch)';
+  } else if (spreadDelta20dBps >= 8) {
+    regime = 'Steepening Curve (Supportive)';
+  } else if (spreadDelta20dBps <= -8 || yield2yDelta20dBps >= 14) {
+    regime = 'Flattening / Hawkish 2Y';
+  }
+
+  return {
+    asOf: latestSpread?.date || latest2y?.date || null,
+    spread10y2yPct,
+    spreadDelta5dBps,
+    spreadDelta20dBps,
+    yield2yPct,
+    yield2yDelta5dBps,
+    yield2yDelta20dBps,
+    isInverted,
+    goldSignal: +goldSignal.toFixed(3),
+    silverSignal: +silverSignal.toFixed(3),
+    regime,
+  };
+}
+
+export async function fetchFredYieldCurve() {
+  const [t10y2y, dgs2] = await Promise.all([fetchFredSeries('T10Y2Y', 90), fetchFredSeries('DGS2', 90)]);
+  return computeYieldCurveSignal(t10y2y, dgs2);
+}
+
+/* ---------- 1c. S&P 500 / Gold Capital-Rotation Ratio (40m & 80m MAs) ---------- */
+
+function smaTail(values = [], period = 40) {
+  if (!Array.isArray(values) || values.length < Math.min(12, period)) return null;
+  const win = values.slice(-period);
+  return win.reduce((s, v) => s + v, 0) / win.length;
+}
+
+export function computeSpxGoldRatioSignal({
+  spxMonthly = [],
+  goldMonthly = [],
+  spxDaily = [],
+  goldDaily = [],
+} = {}) {
+  // Align monthly points by YYYY-MM key (supports { ym, close } objects or plain numeric arrays)
+  const paired = [];
+  if (
+    spxMonthly.length &&
+    goldMonthly.length &&
+    typeof spxMonthly[0] === 'object' &&
+    typeof goldMonthly[0] === 'object'
+  ) {
+    const goldByYm = new Map();
+    for (const g of goldMonthly) {
+      if (g?.ym && Number.isFinite(g.close) && g.close > 0) goldByYm.set(g.ym, g.close);
+    }
+    for (const s of spxMonthly) {
+      if (!s?.ym || !Number.isFinite(s.close) || s.close <= 0) continue;
+      const gClose = goldByYm.get(s.ym);
+      if (gClose > 0) {
+        paired.push({ ym: s.ym, spx: s.close, gold: gClose, ratio: s.close / gClose });
+      }
+    }
+  } else if (spxMonthly.length && goldMonthly.length) {
+    const n = Math.min(spxMonthly.length, goldMonthly.length);
+    const sOff = spxMonthly.length - n;
+    const gOff = goldMonthly.length - n;
+    for (let i = 0; i < n; i++) {
+      const s = Number(spxMonthly[sOff + i]);
+      const g = Number(goldMonthly[gOff + i]);
+      if (Number.isFinite(s) && s > 0 && Number.isFinite(g) && g > 0) {
+        paired.push({ ym: `M${i + 1}`, spx: s, gold: g, ratio: s / g });
+      }
+    }
+  }
+
+  // Latest live daily ratio if available, otherwise latest monthly
+  const spxNow = spxDaily.length ? spxDaily[spxDaily.length - 1] : paired[paired.length - 1]?.spx ?? null;
+  const goldNow = goldDaily.length ? goldDaily[goldDaily.length - 1] : paired[paired.length - 1]?.gold ?? null;
+  if (!(spxNow > 0 && goldNow > 0)) return null;
+
+  const ratio = spxNow / goldNow;
+
+  // Weekly (5 trading days) rotation change
+  let chg5dPct = 0;
+  const dn = Math.min(spxDaily.length, goldDaily.length);
+  if (dn >= 6) {
+    const sPrev = spxDaily[spxDaily.length - 6];
+    const gPrev = goldDaily[goldDaily.length - 6];
+    if (sPrev > 0 && gPrev > 0) {
+      const rPrev = sPrev / gPrev;
+      chg5dPct = +(((ratio - rPrev) / rPrev) * 100).toFixed(2);
+    }
+  } else if (paired.length >= 2) {
+    const rPrev = paired[paired.length - 2].ratio;
+    chg5dPct = +(((ratio - rPrev) / rPrev) * 100).toFixed(2);
+  }
+
+  const ratios = paired.map((p) => p.ratio);
+  const goldClosesM = paired.map((p) => p.gold);
+  // Append live spot ratio into tail if monthly array doesn't already reflect current close
+  const ma40m = smaTail(ratios, 40);
+  const ma80m = smaTail(ratios, 80);
+  const goldMa40m = smaTail(goldClosesM, 40);
+
+  const vsMa40mPct = ma40m ? +(((ratio - ma40m) / ma40m) * 100).toFixed(2) : null;
+  const vsMa80mPct = ma80m ? +(((ratio - ma80m) / ma80m) * 100).toFixed(2) : null;
+  const goldVsMa40mPct = goldMa40m ? +(((goldNow - goldMa40m) / goldMa40m) * 100).toFixed(2) : null;
+
+  // Real-terms capital rotation signal:
+  // Falling SPX/Gold below 40m & 80m MAs = capital rotating out of stocks into Gold (bullish Gold).
+  // Rising SPX/Gold above both MAs = stocks outperforming Gold in real terms (headwind).
+  let maTilt = 0;
+  if (vsMa40mPct != null && vsMa80mPct != null) {
+    maTilt = clamp((-vsMa40mPct / 18) * 0.55 + (-vsMa80mPct / 24) * 0.45, -0.75, 0.75);
+  } else if (vsMa40mPct != null) {
+    maTilt = clamp(-vsMa40mPct / 18, -0.75, 0.75);
+  }
+  const momTilt = clamp(-chg5dPct / 6.5, -0.45, 0.45);
+  const goldSignal = clamp(maTilt * 0.68 + momTilt * 0.32, -0.85, 0.85);
+  const silverSignal = clamp(maTilt * 0.55 + momTilt * 0.28, -0.75, 0.75);
+
+  let regime = 'Neutral Rotation';
+  if (ma40m != null && ma80m != null) {
+    if (ratio < ma40m && ratio < ma80m) {
+      regime = 'Capital Rotating to Gold';
+    } else if (ratio > ma40m && ratio > ma80m) {
+      regime = 'Equities Leading vs. Gold';
+    } else {
+      regime = 'Testing 40m/80m Pivot Zone';
+    }
+  } else if (ma40m != null) {
+    regime = ratio < ma40m ? 'Below 40m MA (Gold Leading)' : 'Above 40m MA (Stocks Leading)';
+  }
+
+  // Compact 48-month history for UI sparkline (ratio + running 40m MA)
+  const history48m = [];
+  const startIdx = Math.max(0, paired.length - 48);
+  for (let i = startIdx; i < paired.length; i++) {
+    const winStart = Math.max(0, i - 39);
+    let sum = 0;
+    for (let k = winStart; k <= i; k++) sum += paired[k].ratio;
+    const runMa40 = sum / (i - winStart + 1);
+    history48m.push({
+      ym: paired[i].ym,
+      ratio: +paired[i].ratio.toFixed(3),
+      ma40m: +runMa40.toFixed(3),
+    });
+  }
+
+  return {
+    asOf: paired[paired.length - 1]?.ym || null,
+    ratio: +ratio.toFixed(3),
+    chg5dPct,
+    ma40m: ma40m != null ? +ma40m.toFixed(3) : null,
+    ma80m: ma80m != null ? +ma80m.toFixed(3) : null,
+    vsMa40mPct,
+    vsMa80mPct,
+    goldMa40m: goldMa40m != null ? +goldMa40m.toFixed(2) : null,
+    goldVsMa40mPct,
+    goldSignal: +goldSignal.toFixed(3),
+    silverSignal: +silverSignal.toFixed(3),
+    regime,
+    history48m,
+  };
+}
+
+export async function fetchSpxGoldMonthly() {
+  const fetchMonthly = async (symbol) => {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=10y&interval=1mo`;
     const res = await safeFetch(
-      `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}`,
+      url,
       { headers: { 'User-Agent': USER_AGENT } },
-      { timeoutMs: 12000, maxRedirects: 1, allowedHosts: ['fred.stlouisfed.org'] }
+      { timeoutMs: 12000, maxRedirects: 0, allowedHosts: ['query1.finance.yahoo.com'] }
     );
-    if (!res.ok) throw new Error(`FRED ${id} HTTP ${res.status}`);
-    const csv = await readResponseTextWithLimit(res, 2 * 1024 * 1024);
-    return parseFredCsv(csv, 60);
+    if (!res.ok) throw new Error(`Yahoo monthly ${symbol} HTTP ${res.status}`);
+    const data = await readResponseJsonWithLimit(res, 1024 * 1024);
+    const result = data?.chart?.result?.[0];
+    const ts = result?.timestamp || [];
+    const closes = result?.indicators?.quote?.[0]?.close || [];
+    const out = [];
+    for (let i = 0; i < Math.min(ts.length, closes.length); i++) {
+      const c = closes[i];
+      if (typeof c === 'number' && Number.isFinite(c) && c > 0 && Number.isFinite(ts[i])) {
+        const d = new Date(ts[i] * 1000);
+        const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        out.push({ ym, close: c });
+      }
+    }
+    return out;
   };
 
-  const [dfii10, t10yie] = await Promise.all([fetchSeries('DFII10'), fetchSeries('T10YIE')]);
-  return computeRealYieldSignal(dfii10, t10yie);
+  const [spxMonthly, goldMonthly] = await Promise.all([fetchMonthly('^GSPC'), fetchMonthly('GC=F')]);
+  return { spxMonthly, goldMonthly };
 }
 
 /* ---------- 2. CFTC Disaggregated COT Positioning (Crowding) ---------- */

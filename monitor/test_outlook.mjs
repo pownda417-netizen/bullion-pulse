@@ -47,6 +47,8 @@ import {
   computeCotSignal,
   computeMinersConfirmation,
   computeRealYieldSignal,
+  computeSpxGoldRatioSignal,
+  computeYieldCurveSignal,
   parseCftcCotRows,
   parseFredCsv,
 } from './pro_signals.mjs';
@@ -1654,4 +1656,34 @@ assert.ok(
   `Noisy random walk must have lower harmonic R² (${specNoisy.rSquared}) than clean sine (${specClean.rSquared})`
 );
 
-console.log('All 34 Bullion Pulse suites (v62 Frequency-Domain DFT Spectral Forecasting + 5-Model Ensemble, v61 GARCH/GVZ & Event-Aware Jump Diffusion, v60 ASM Security Hardening + ReDoS/URL/RSS/Copper fixes, v58 100-Article Global News Engine + Precision Polarity/Negation Guards, v57 Planetary 6-Continent AI/Space/EV Metal Race across 36 tickers & 22 feeds, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt, v48 Precision Chart Forecast Line, Hurst Regime, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');
+// 35. v63 Macro Fundamentals Guardrail (FRED 10Y-2Y Yield Curve & 2Y Yield + S&P 500 / Gold 40m & 80m MAs)
+const mkFred = (vals) => vals.map((v, i) => ({ date: `2026-10-${String((i % 28) + 1).padStart(2, '0')}`, value: v }));
+const ycBullSteepen = computeYieldCurveSignal(
+  mkFred(Array.from({ length: 25 }, (_, i) => -0.1 + i * 0.015)), // steepening +36 bps
+  mkFred(Array.from({ length: 25 }, (_, i) => 4.85 - i * 0.02)) // 2Y falling -48 bps (Fed pivot!)
+);
+assert.equal(ycBullSteepen.regime, 'Bull Steepening (Fed Pivot)');
+assert.ok(ycBullSteepen.goldSignal > 0.4, `Bull steepening must emit strong positive goldSignal, got ${ycBullSteepen.goldSignal}`);
+
+const ycFlatten = computeYieldCurveSignal(
+  mkFred(Array.from({ length: 25 }, (_, i) => 0.45 - i * 0.012)), // flattening
+  mkFred(Array.from({ length: 25 }, (_, i) => 4.3 + i * 0.015)) // hawkish rising 2Y
+);
+assert.equal(ycFlatten.regime, 'Flattening / Hawkish 2Y');
+assert.ok(ycFlatten.goldSignal < -0.3, `Flattening + hawkish 2Y must emit negative goldSignal, got ${ycFlatten.goldSignal}`);
+
+const spxM = Array.from({ length: 85 }, (_, i) => ({
+  ym: `${2020 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`,
+  close: 3500 + i * 25,
+}));
+const goldMBull = Array.from({ length: 85 }, (_, i) => ({
+  ym: `${2020 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`,
+  close: 1600 + i * 35, // Gold outpacing SPX -> ratio falling below 40m & 80m MAs
+}));
+const sgRot = computeSpxGoldRatioSignal({ spxMonthly: spxM, goldMonthly: goldMBull });
+assert.equal(sgRot.regime, 'Capital Rotating to Gold');
+assert.ok(sgRot.ratio < sgRot.ma40m && sgRot.ratio < sgRot.ma80m, 'Ratio must sit below both 40m and 80m MAs');
+assert.ok(sgRot.goldSignal > 0.25, `Capital rotation to Gold must be bullish, got ${sgRot.goldSignal}`);
+assert.ok(sgRot.goldMa40m > 2500 && sgRot.history48m.length === 48, 'Must emit Gold 40m MA and 48m sparkline');
+
+console.log('All 35 Bullion Pulse suites (v63 10Y-2Y Yield Curve & S&P 500/Gold 40m/80m Rotation Guardrail, v62 Frequency-Domain DFT Spectral Forecasting + 5-Model Ensemble, v61 GARCH/GVZ & Event-Aware Jump Diffusion, v60 ASM Security Hardening + ReDoS/URL/RSS/Copper fixes, v58 100-Article Global News Engine + Precision Polarity/Negation Guards, v57 Planetary 6-Continent AI/Space/EV Metal Race across 36 tickers & 22 feeds, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt, v48 Precision Chart Forecast Line, Hurst Regime, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');

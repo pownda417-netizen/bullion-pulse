@@ -1,10 +1,10 @@
 import React from 'react';
 import { useBullion } from '../../context/BullionContext';
 import { useI18n } from '../../i18n/I18nContext';
-import { formatSignedPct } from '../../utils/format';
+import { formatMoney, formatSignedPct } from '../../utils/format';
 
 export const VaultsMinersTab: React.FC = () => {
-  const { comex, outlook, quant } = useBullion();
+  const { comex, outlook, quant, settings, fxRates } = useBullion();
   const { t } = useI18n();
 
   const gComex = comex?.gold || {};
@@ -13,6 +13,8 @@ export const VaultsMinersTab: React.FC = () => {
   const etf = inst.etfFlows || {};
   const iv = inst.impliedVol || {};
   const miners = outlook?.proSignals?.miners || {};
+  const yc = outlook?.proSignals?.yieldCurve || null;
+  const spxGold = outlook?.proSignals?.spxGoldRatio || null;
   const cotGold = outlook?.proSignals?.cot?.gold || {};
   const cotSilver = outlook?.proSignals?.cot?.silver || {};
   const minerLeaders: Array<Record<string, unknown>> = Array.isArray(miners.sectorLeaders)
@@ -185,6 +187,123 @@ export const VaultsMinersTab: React.FC = () => {
             </div>
           </div>
         )}
+      </section>
+
+      {/* 2b. Macro Fundamentals Guardrail: 10Y-2Y Yield Curve & S&P 500 / Gold Capital Rotation (v63) */}
+      <section className="panel" id="panel-macro-guardrail" aria-label="Macro Fundamentals Guardrail">
+        <div className="panel-header" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <h2 className="panel-title">{t('Macro Fundamentals Guardrail (Yield Curve & S&P 500 / Gold)')}</h2>
+            <p className="panel-subtitle">
+              {t('Tracks Fed-pivot curve steepening (FRED T10Y2Y/DGS2) and real-terms equity-to-gold capital rotation (40m & 80m MAs)')}
+            </p>
+          </div>
+          <span
+            className={`badge-pill ${
+              Number(yc?.goldSignal ?? 0) + Number(spxGold?.goldSignal ?? 0) > 0.2
+                ? 'bullish'
+                : Number(yc?.goldSignal ?? 0) + Number(spxGold?.goldSignal ?? 0) < -0.2
+                  ? 'bearish'
+                  : 'neutral'
+            }`}
+          >
+            {Number(yc?.goldSignal ?? 0) + Number(spxGold?.goldSignal ?? 0) > 0.2
+              ? 'Macro Tailwind'
+              : Number(yc?.goldSignal ?? 0) + Number(spxGold?.goldSignal ?? 0) < -0.2
+                ? 'Macro Headwind'
+                : 'Transition / Mixed'}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10 }}>
+          {/* Left: 10Y-2Y Yield Curve & 2Y Fed Proxy */}
+          <div className="stat-box">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span className="stat-label" style={{ margin: 0 }}>10Y–2Y Yield Curve &amp; 2Y Yield</span>
+              <span
+                className={`badge-pill ${
+                  Number(yc?.goldSignal ?? 0) > 0.1
+                    ? 'bullish'
+                    : Number(yc?.goldSignal ?? 0) < -0.1
+                      ? 'bearish'
+                      : 'neutral'
+                }`}
+                style={{ fontSize: 10 }}
+              >
+                {String(yc?.regime || 'Syncing FRED')}
+              </span>
+            </div>
+            <div className="stat-value mono" style={{ marginTop: 6 }}>
+              {yc?.spread10y2yPct != null
+                ? `${Number(yc.spread10y2yPct) >= 0 ? '+' : ''}${Number(yc.spread10y2yPct).toFixed(2)}% spread · 2Y ${Number(yc.yield2yPct ?? 0).toFixed(2)}%`
+                : 'Awaiting FRED T10Y2Y / DGS2'}
+            </div>
+            <div className="panel-subtitle mono" style={{ marginTop: 4 }}>
+              {yc?.spread10y2yPct != null
+                ? `Curve 5d ${Number(yc.spreadDelta5dBps) >= 0 ? '+' : ''}${yc.spreadDelta5dBps}bp · 20d ${Number(yc.spreadDelta20dBps) >= 0 ? '+' : ''}${yc.spreadDelta20dBps}bp · 2Y 20d ${Number(yc.yield2yDelta20dBps) >= 0 ? '+' : ''}${yc.yield2yDelta20dBps}bp`
+                : 'Bull steepening (falling 2Y + rising 10Y−2Y) historically ignites secular Gold legs.'}
+            </div>
+          </div>
+
+          {/* Right: S&P 500 / Gold Ratio vs 40m & 80m MAs + 48-month SVG sparkline */}
+          <div className="stat-box">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span className="stat-label" style={{ margin: 0 }}>S&amp;P 500 / Gold Capital Rotation</span>
+              <span
+                className={`badge-pill ${
+                  Number(spxGold?.goldSignal ?? 0) > 0.1
+                    ? 'bullish'
+                    : Number(spxGold?.goldSignal ?? 0) < -0.1
+                      ? 'bearish'
+                      : 'neutral'
+                }`}
+                style={{ fontSize: 10 }}
+              >
+                {String(spxGold?.regime || 'Syncing Ratio')}
+              </span>
+            </div>
+            <div className="stat-value mono" style={{ marginTop: 6 }}>
+              {spxGold?.ratio != null
+                ? `${Number(spxGold.ratio).toFixed(2)}× (${formatSignedPct(Number(spxGold.chg5dPct ?? 0), 1)} 5d)`
+                : 'Awaiting ^GSPC / GC=F'}
+            </div>
+            <div className="panel-subtitle mono" style={{ marginTop: 4 }}>
+              {spxGold?.ma40m != null
+                ? `40m MA ${Number(spxGold.ma40m).toFixed(2)} (${formatSignedPct(Number(spxGold.vsMa40mPct ?? 0), 1)})${spxGold.ma80m != null ? ` · 80m MA ${Number(spxGold.ma80m).toFixed(2)}` : ''}`
+                : 'Below 40m & 80m MAs signals capital rotating out of stocks into bullion.'}
+            </div>
+            {spxGold?.goldMa40m != null && (
+              <div className="panel-subtitle mono" style={{ fontSize: 10.5, marginTop: 2 }}>
+                {`Gold 40-Mo MA Support: ${formatMoney(Number(spxGold.goldMa40m), 0, settings.currency, fxRates)} (${formatSignedPct(Number(spxGold.goldVsMa40mPct ?? 0), 1)} above)`}
+              </div>
+            )}
+            {Array.isArray(spxGold?.history48m) && spxGold.history48m.length >= 6 && (() => {
+              const pts = spxGold.history48m as Array<{ ym: string; ratio: number; ma40m: number }>;
+              const vals = pts.flatMap((p) => [p.ratio, p.ma40m]);
+              const lo = Math.min(...vals);
+              const hi = Math.max(...vals);
+              const span = Math.max(0.05, hi - lo);
+              const W = 240;
+              const H = 38;
+              const xAt = (i: number) => ((i / Math.max(1, pts.length - 1)) * (W - 4) + 2).toFixed(1);
+              const yAt = (v: number) => (H - 3 - ((v - lo) / span) * (H - 6)).toFixed(1);
+              const ratioPath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i)},${yAt(p.ratio)}`).join(' ');
+              const maPath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i)},${yAt(p.ma40m)}`).join(' ');
+              return (
+                <svg
+                  viewBox={`0 0 ${W} ${H}`}
+                  width="100%"
+                  height="38"
+                  style={{ display: 'block', marginTop: 6, overflow: 'visible' }}
+                  aria-label="48-month S&P 500 to Gold ratio versus 40-month moving average"
+                >
+                  <path d={maPath} fill="none" stroke="rgba(148,163,184,0.55)" strokeWidth="1.2" strokeDasharray="3 2" />
+                  <path d={ratioPath} fill="none" stroke="#d4a843" strokeWidth="1.8" strokeLinejoin="round" />
+                </svg>
+              );
+            })()}
+          </div>
+        </div>
       </section>
 
       {/* 3. Macro & OpEx Event Calendar */}

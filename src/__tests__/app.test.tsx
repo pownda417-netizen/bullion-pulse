@@ -231,6 +231,7 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(screen.getByText(/5-Model Specialist Votes/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Vaults & Miners' }));
     expect(screen.getByText(/ETF Flows \(GLD\/SLV\/PHYS\)/i)).toBeInTheDocument();
+    expect(document.getElementById('panel-macro-guardrail')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'What Moves It' }));
     expect(screen.getByText(/1\. Session Flow Divergence/i)).toBeInTheDocument();
     expect(screen.getByText(/6\. COMEX OpEx & Delivery Magnet/i)).toBeInTheDocument();

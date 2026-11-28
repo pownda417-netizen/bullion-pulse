@@ -81,6 +81,64 @@ export const DeepChartsTab: React.FC = () => {
             <div className="stat-value mono">{macro.vix != null ? Number(macro.vix).toFixed(1) : '—'}</div>
           </div>
           <div className="stat-box">
+            <div className="stat-label">10Y–2Y Curve</div>
+            {(() => {
+              const yc = outlook?.proSignals?.yieldCurve;
+              const sp = yc?.spread10y2yPct;
+              const y2 = yc?.yield2yPct;
+              return (
+                <>
+                  <div
+                    className="stat-value mono"
+                    style={{
+                      color:
+                        Number(yc?.goldSignal ?? 0) > 0.1
+                          ? 'var(--up)'
+                          : Number(yc?.goldSignal ?? 0) < -0.1
+                            ? 'var(--down)'
+                            : undefined,
+                    }}
+                  >
+                    {sp != null ? `${Number(sp) >= 0 ? '+' : ''}${Number(sp).toFixed(2)}%` : '—'}
+                  </div>
+                  {y2 != null && (
+                    <div className="panel-subtitle mono" style={{ fontSize: 10.5, marginTop: 2 }}>
+                      {`2Y ${Number(y2).toFixed(2)}% · ${Number(yc?.spreadDelta20dBps ?? 0) >= 0 ? '+' : ''}${Number(yc?.spreadDelta20dBps ?? 0)}bp 20d`}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+          <div className="stat-box">
+            <div className="stat-label">S&amp;P 500 / Gold</div>
+            {(() => {
+              const sg = outlook?.proSignals?.spxGoldRatio;
+              return (
+                <>
+                  <div
+                    className="stat-value mono"
+                    style={{
+                      color:
+                        Number(sg?.goldSignal ?? 0) > 0.1
+                          ? 'var(--up)'
+                          : Number(sg?.goldSignal ?? 0) < -0.1
+                            ? 'var(--down)'
+                            : undefined,
+                    }}
+                  >
+                    {sg?.ratio != null ? `${Number(sg.ratio).toFixed(2)}×` : '—'}
+                  </div>
+                  {sg?.ma40m != null && (
+                    <div className="panel-subtitle mono" style={{ fontSize: 10.5, marginTop: 2 }}>
+                      {`40m ${Number(sg.ma40m).toFixed(2)}${sg.ma80m != null ? ` · 80m ${Number(sg.ma80m).toFixed(2)}` : ''}`}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+          <div className="stat-box">
             <div className="stat-label">Quorum Spread</div>
             <div className="stat-value mono">
               {feedTrust.lastSpreadPct != null ? `${feedTrust.lastSpreadPct.toFixed(2)}%` : 'Single'}
@@ -152,6 +210,32 @@ export const DeepChartsTab: React.FC = () => {
                   : 'Random-walk balanced flow'}
             </div>
           </div>
+          {outlook?.proSignals?.spxGoldRatio?.ratio != null && (
+            <div className="stat-box">
+              <div className="stat-label">Capital Rotation (SPX / Gold)</div>
+              <div className="stat-value">
+                {String(outlook.proSignals.spxGoldRatio.regime || 'Pivot Zone')}
+              </div>
+              <div className="panel-subtitle mono" style={{ marginTop: 4 }}>
+                {`Ratio ${Number(outlook.proSignals.spxGoldRatio.ratio).toFixed(2)} (${formatSignedPct(Number(outlook.proSignals.spxGoldRatio.chg5dPct ?? 0), 1)} 5d)${
+                  outlook.proSignals.spxGoldRatio.goldMa40m != null
+                    ? ` · Au 40m MA ${formatMoney(Number(outlook.proSignals.spxGoldRatio.goldMa40m), 0, settings.currency, fxRates)}`
+                    : ''
+                }`}
+              </div>
+            </div>
+          )}
+          {outlook?.proSignals?.yieldCurve?.spread10y2yPct != null && (
+            <div className="stat-box">
+              <div className="stat-label">Yield Curve &amp; Fed Pivot</div>
+              <div className="stat-value">
+                {String(outlook.proSignals.yieldCurve.regime || 'Balanced Curve')}
+              </div>
+              <div className="panel-subtitle mono" style={{ marginTop: 4 }}>
+                {`10Y−2Y ${Number(outlook.proSignals.yieldCurve.spread10y2yPct) >= 0 ? '+' : ''}${Number(outlook.proSignals.yieldCurve.spread10y2yPct).toFixed(2)}% · 2Y ${Number(outlook.proSignals.yieldCurve.yield2yPct ?? 0).toFixed(2)}% (${Number(outlook.proSignals.yieldCurve.yield2yDelta20dBps ?? 0) >= 0 ? '+' : ''}${Number(outlook.proSignals.yieldCurve.yield2yDelta20dBps ?? 0)} bps 20d)`}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

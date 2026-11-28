@@ -2301,6 +2301,8 @@ export function buildOutlook({
   const eventRisk = inst.eventRisk || null;
 
   const ry = proSignals?.realYields || null;
+  const yc = proSignals?.yieldCurve || null;
+  const spxGold = proSignals?.spxGoldRatio || null;
   const cotGoldSig = proSignals?.cot?.gold?.signal ?? null;
   const cotSilverSig = proSignals?.cot?.silver?.signal ?? null;
   const minerGoldSig = proSignals?.miners?.goldSignal ?? null;
@@ -2319,13 +2321,17 @@ export function buildOutlook({
     let s = b.count > 0 ? clamp(b.silverSum / Math.sqrt(b.count + 0.5), -1, 1) : 0;
 
     if (id === 'rates_usd') {
-      const macroG = ry ? clamp(ry.goldSignal * 0.62 + quant.ratesUsdMacro * 0.38, -1, 1) : quant.ratesUsdMacro;
-      const macroS = ry ? clamp(ry.silverSignal * 0.60 + quant.ratesUsdMacro * 0.40, -1, 1) : quant.ratesUsdMacro;
+      const baseMacroG = ry ? clamp(ry.goldSignal * 0.62 + quant.ratesUsdMacro * 0.38, -1, 1) : quant.ratesUsdMacro;
+      const baseMacroS = ry ? clamp(ry.silverSignal * 0.60 + quant.ratesUsdMacro * 0.40, -1, 1) : quant.ratesUsdMacro;
+      const macroG = yc ? clamp(baseMacroG * 0.80 + yc.goldSignal * 0.20, -1, 1) : baseMacroG;
+      const macroS = yc ? clamp(baseMacroS * 0.82 + yc.silverSignal * 0.18, -1, 1) : baseMacroS;
       g = clamp(b.count > 0 ? g * 0.45 + macroG * 0.55 : macroG, -1, 1);
       s = clamp(b.count > 0 ? s * 0.45 + macroS * 0.55 : macroS, -1, 1);
     } else if (id === 'equities') {
-      const eqG = crossMkt ? clamp(quant.equityStressGold * 0.65 + crossMkt.goldSignal * 0.35, -1, 1) : quant.equityStressGold;
-      const eqS = crossMkt ? clamp(quant.equityStressSilver * 0.7 + crossMkt.goldSignal * 0.3, -1, 1) : quant.equityStressSilver;
+      const baseEqG = crossMkt ? clamp(quant.equityStressGold * 0.65 + crossMkt.goldSignal * 0.35, -1, 1) : quant.equityStressGold;
+      const baseEqS = crossMkt ? clamp(quant.equityStressSilver * 0.7 + crossMkt.goldSignal * 0.3, -1, 1) : quant.equityStressSilver;
+      const eqG = spxGold ? clamp(baseEqG * 0.78 + spxGold.goldSignal * 0.22, -1, 1) : baseEqG;
+      const eqS = spxGold ? clamp(baseEqS * 0.82 + spxGold.silverSignal * 0.18, -1, 1) : baseEqS;
       g = clamp(b.count > 0 ? g * 0.55 + eqG * 0.45 : eqG, -1, 1);
       s = clamp(b.count > 0 ? s * 0.55 + eqS * 0.45 : eqS, -1, 1);
     } else if (id === 'mining_supply') {
@@ -2995,6 +3001,18 @@ function buildNarrative({ goldScore, silverScore, topDrivers, ratio, headlineCou
   }
   if (proSignals?.realYields?.realYield10yPct != null) {
     extras.push(`10Y TIPS real yield sits at ${proSignals.realYields.realYield10yPct}% (${proSignals.realYields.realDelta5dBps >= 0 ? '+' : ''}${proSignals.realYields.realDelta5dBps} bps 5d).`);
+  }
+  if (proSignals?.yieldCurve?.spread10y2yPct != null) {
+    const yc = proSignals.yieldCurve;
+    extras.push(
+      `10Y–2Y yield curve sits at ${yc.spread10y2yPct >= 0 ? '+' : ''}${yc.spread10y2yPct.toFixed(2)}% (2Y yield ${yc.yield2yPct != null ? `${yc.yield2yPct.toFixed(2)}%` : '—'}, ${yc.regime}).`
+    );
+  }
+  if (proSignals?.spxGoldRatio?.ratio != null) {
+    const sg = proSignals.spxGoldRatio;
+    extras.push(
+      `S&P 500 / Gold capital-rotation ratio stands at ${sg.ratio.toFixed(2)} (${sg.chg5dPct >= 0 ? '+' : ''}${sg.chg5dPct.toFixed(1)}% 5d${sg.ma40m != null ? ` vs 40m MA ${sg.ma40m.toFixed(2)}` : ''}${sg.ma80m != null ? ` / 80m MA ${sg.ma80m.toFixed(2)}` : ''}, ${sg.regime}).`
+    );
   }
   if (proSignals?.miners?.goldBreadthPct != null && proSignals?.miners?.silverBreadthPct != null) {
     extras.push(

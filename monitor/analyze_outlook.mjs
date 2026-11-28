@@ -27,8 +27,11 @@ import { fetchMetalMultiTimeframeCandles, splitCandlePayloads } from './candles.
 import { fetchComexPaperAndStocks } from './comex.mjs';
 import {
   computeMinersConfirmation,
+  computeSpxGoldRatioSignal,
   fetchCftcCot,
   fetchFredRealYields,
+  fetchFredYieldCurve,
+  fetchSpxGoldMonthly,
 } from './pro_signals.mjs';
 import { runWalkForwardBacktest, updateAccuracyLog } from './accuracy.mjs';
 import {
@@ -722,8 +725,10 @@ async function main() {
     // First run
   }
   const pct5d = (arr) => (arr && arr.length >= 6 ? ((arr.at(-1) - arr.at(-6)) / arr.at(-6)) * 100 : 0);
-  const [ryRes, cotRes, comexRes] = await Promise.allSettled([
+  const [ryRes, ycRes, spxGoldRes, cotRes, comexRes] = await Promise.allSettled([
     fetchFredRealYields(),
+    fetchFredYieldCurve(),
+    fetchSpxGoldMonthly(),
     fetchCftcCot(),
     fetchComexPaperAndStocks({
       prevComex,
@@ -732,6 +737,17 @@ async function main() {
     }),
   ]);
   const realYields = ryRes.status === 'fulfilled' ? ryRes.value : prevOutlook?.proSignals?.realYields || null;
+  const yieldCurve = ycRes.status === 'fulfilled' ? ycRes.value : prevOutlook?.proSignals?.yieldCurve || null;
+  const spxGoldMonthly = spxGoldRes.status === 'fulfilled' ? spxGoldRes.value : null;
+  const spxGoldRatio =
+    computeSpxGoldRatioSignal({
+      spxMonthly: spxGoldMonthly?.spxMonthly || [],
+      goldMonthly: spxGoldMonthly?.goldMonthly || [],
+      spxDaily: series.spx || [],
+      goldDaily: series.gold || [],
+    }) ||
+    prevOutlook?.proSignals?.spxGoldRatio ||
+    null;
   const cot = cotRes.status === 'fulfilled' ? cotRes.value : prevOutlook?.proSignals?.cot || null;
   const comex = comexRes.status === 'fulfilled' ? comexRes.value : prevComex;
   if (comex) {
@@ -742,7 +758,7 @@ async function main() {
     );
   }
   const miners = computeMinersConfirmation(series) || prevOutlook?.proSignals?.miners || null;
-  const proSignals = { realYields, cot, miners };
+  const proSignals = { realYields, yieldCurve, spxGoldRatio, cot, miners };
 
   // Compute the 5 Institutional Microstructure & Catalyst Signals
   const prevInst = prevOutlook?.institutionalSignals || {};
