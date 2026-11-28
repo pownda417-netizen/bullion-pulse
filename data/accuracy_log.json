@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-28T07:13:41.121Z",
+  "updatedAt": "2026-11-28T08:26:10.630Z",
   "scorecard": {
     "live7d": {
       "count": 4,
@@ -24,7 +24,7 @@
       "pending7dCount": 4,
       "pending30dCount": 8,
       "next7dInDays": 7,
-      "next30dInDays": 23
+      "next30dInDays": 22
     },
     "recentGrades": [
       {
