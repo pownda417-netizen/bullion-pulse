@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-27T23:28:50.703Z",
+  "updatedAt": "2026-11-28T00:25:18.576Z",
   "scorecard": {
     "live7d": {
       "count": 2,
@@ -21,8 +21,8 @@
     },
     "coneMultiplier": 1,
     "pendingStatus": {
-      "pending7dCount": 4,
-      "pending30dCount": 6,
+      "pending7dCount": 6,
+      "pending30dCount": 8,
       "next7dInDays": 1,
       "next30dInDays": 23
     },
@@ -389,6 +389,242 @@
             "label": "Lead-Lag Alpha",
             "dir": "up",
             "score": 22
+          },
+          {
+            "id": "hurst",
+            "label": "Hurst & RSI",
+            "dir": "down",
+            "score": -66
+          },
+          {
+            "id": "seasonal",
+            "label": "Seasonal & Twins",
+            "dir": "up",
+            "score": 29
+          }
+        ]
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-28-gold",
+      "createdAt": "2026-11-28T00:25:18.576Z",
+      "metal": "gold",
+      "spotAtForecast": 3650,
+      "score": 37,
+      "signal": "Bullish",
+      "horizon7d": {
+        "bear": 3458.14,
+        "base": 3694.34,
+        "bull": 3930.55,
+        "bearPct": -5.26,
+        "expectedPct": 1.21,
+        "bullPct": 7.69
+      },
+      "horizon30d": {
+        "bear": 3267.43,
+        "base": 3692.15,
+        "bull": 4061.22,
+        "bearPct": -10.48,
+        "expectedPct": 1.15,
+        "bullPct": 11.27,
+        "unit30d": 0.166,
+        "score30d": 17,
+        "probHigherPct": 55,
+        "agreementPct": 75,
+        "agreeCount": 3,
+        "hurst": 0.44,
+        "hurstLabel": "Mean-Reverting",
+        "leadLag": {
+          "score": 0.12,
+          "label": "Lead Signals Balanced",
+          "components": {
+            "minersLead": 0.41,
+            "shanghaiLead": 0.013,
+            "backwardationLead": 0,
+            "physicalPremLead": 0.01,
+            "aiDatacenterLead": 0.043,
+            "ratioLead": -0.25
+          }
+        },
+        "seasonality": {
+          "blendedPct": 2.03,
+          "unitTilt": 0.127,
+          "windowLabel": "Nov–Dec",
+          "label": "Seasonal Tailwind"
+        },
+        "historicalTwins": {
+          "count": 4,
+          "matchPct": 86,
+          "avgReturnPct": 2.84,
+          "upPct": 75,
+          "unitTilt": 0.237
+        },
+        "milestones": [
+          {
+            "day": 7,
+            "label": "Day 7",
+            "pct": 1.14,
+            "price": 3691.61,
+            "note": "Near-term flow"
+          },
+          {
+            "day": 14,
+            "label": "Day 14",
+            "pct": 1.1,
+            "price": 3690.15,
+            "note": "Mid-month balance"
+          },
+          {
+            "day": 21,
+            "label": "Day 21",
+            "pct": 1.09,
+            "price": 3689.78,
+            "note": "Structural macro build"
+          },
+          {
+            "day": 30,
+            "label": "Day 30",
+            "pct": 1.15,
+            "price": 3691.98,
+            "note": "Seasonal Tailwind"
+          }
+        ],
+        "topDrivers30d": [
+          "Inflation",
+          "Geopolitics"
+        ],
+        "modelVotes": [
+          {
+            "id": "macro",
+            "label": "Macro & Vaults",
+            "dir": "up",
+            "score": 49
+          },
+          {
+            "id": "leadlag",
+            "label": "Lead-Lag Alpha",
+            "dir": "up",
+            "score": 12
+          },
+          {
+            "id": "hurst",
+            "label": "Hurst & RSI",
+            "dir": "down",
+            "score": -66
+          },
+          {
+            "id": "seasonal",
+            "label": "Seasonal & Twins",
+            "dir": "up",
+            "score": 47
+          }
+        ]
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-28-silver",
+      "createdAt": "2026-11-28T00:25:18.576Z",
+      "metal": "silver",
+      "spotAtForecast": 43.23,
+      "score": 47,
+      "signal": "Strong Bullish",
+      "horizon7d": {
+        "bear": 39.6,
+        "base": 44.37,
+        "bull": 49.14,
+        "bearPct": -8.4,
+        "expectedPct": 2.64,
+        "bullPct": 13.67
+      },
+      "horizon30d": {
+        "bear": 35.31,
+        "base": 44.18,
+        "bull": 52.52,
+        "bearPct": -18.32,
+        "expectedPct": 2.19,
+        "bullPct": 21.49,
+        "unit30d": 0.185,
+        "score30d": 19,
+        "probHigherPct": 56,
+        "agreementPct": 75,
+        "agreeCount": 3,
+        "hurst": 0.44,
+        "hurstLabel": "Mean-Reverting",
+        "leadLag": {
+          "score": 0.242,
+          "label": "Lead Signals Bullish ↑",
+          "components": {
+            "minersLead": 0.662,
+            "shanghaiLead": -0.174,
+            "backwardationLead": 0,
+            "physicalPremLead": 0.241,
+            "aiDatacenterLead": 0.119,
+            "ratioLead": 0.361
+          }
+        },
+        "seasonality": {
+          "blendedPct": 2.51,
+          "unitTilt": 0.14,
+          "windowLabel": "Nov–Dec",
+          "label": "Seasonal Tailwind"
+        },
+        "historicalTwins": {
+          "count": 4,
+          "matchPct": 97,
+          "avgReturnPct": -1.42,
+          "upPct": 50,
+          "unitTilt": -0.118
+        },
+        "milestones": [
+          {
+            "day": 7,
+            "label": "Day 7",
+            "pct": 2.37,
+            "price": 44.25,
+            "note": "Near-term flow"
+          },
+          {
+            "day": 14,
+            "label": "Day 14",
+            "pct": 2.19,
+            "price": 44.18,
+            "note": "Lead-lag pass-through"
+          },
+          {
+            "day": 21,
+            "label": "Day 21",
+            "pct": 2.11,
+            "price": 44.14,
+            "note": "Structural macro build"
+          },
+          {
+            "day": 30,
+            "label": "Day 30",
+            "pct": 2.19,
+            "price": 44.18,
+            "note": "Seasonal Tailwind"
+          }
+        ],
+        "topDrivers30d": [
+          "Inflation",
+          "Mining / Supply"
+        ],
+        "modelVotes": [
+          {
+            "id": "macro",
+            "label": "Macro & Vaults",
+            "dir": "up",
+            "score": 50
+          },
+          {
+            "id": "leadlag",
+            "label": "Lead-Lag Alpha",
+            "dir": "up",
+            "score": 24
           },
           {
             "id": "hurst",
