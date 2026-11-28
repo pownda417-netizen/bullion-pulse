@@ -18,6 +18,7 @@ import {
 } from '../engines/chartEngine';
 import { runMonteCarloSync } from '../engines/monteCarlo';
 import { buildEventRiskSchedule, computeEwmaGarchVol } from '../../monitor/jump_diffusion.mjs';
+import { computeSpectralForecast } from '../../monitor/spectral_forecast.mjs';
 import { DEFAULT_FX_RATES } from '../utils/format';
 import { defaultSpaceWeather } from '../utils/security';
 import { BullionProvider } from '../context/BullionContext';
@@ -224,9 +225,10 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(screen.queryByRole('button', { name: 'My Buys' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'News Pins' })).toBeNull();
 
-    // Navigate to Outlook -> Forecast (v61 Cross-Horizon Alignment), Vaults & Miners (ETF Flows), and What Moves It
+    // Navigate to Outlook -> Forecast (v61 Cross-Horizon Alignment + v62 Spectral Cycles), Vaults & Miners (ETF Flows), and What Moves It
     fireEvent.click(document.getElementById('top-nav-outlook')!);
     expect(document.getElementById('horizon-alignment-strip')).toBeInTheDocument();
+    expect(screen.getByText(/5-Model Specialist Votes/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Vaults & Miners' }));
     expect(screen.getByText(/ETF Flows \(GLD\/SLV\/PHYS\)/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'What Moves It' }));
@@ -451,5 +453,22 @@ describe('Bullion Pulse React v60 — Full 5-View UI Integration', () => {
     expect(q.interactiveForecast.horizonAlignment.swing7dPct).toBeCloseTo(1.2, 1);
     expect(q.interactiveForecast.horizonAlignment.macro30dPct).toBeCloseTo(1.97, 1);
     expect(q.interactiveForecast.volRegime.gvzAnnPct).toBeCloseTo(27.4, 1);
+  });
+
+  it('v62 Frequency-Domain DFT Spectral Engine extracts dominant cycles, phase-locks projection & dampens noise', () => {
+    // 180-day synthetic series with bull trend + clear 21-day COMEX cycle
+    const cyclic = Array.from({ length: 180 }, (_, t) =>
+      3100 * Math.exp(0.0012 * t + 0.03 * Math.cos((2 * Math.PI * t) / 21))
+    );
+    const res = computeSpectralForecast(cyclic, { horizonDays: 21, minPeriod: 4, maxPeriod: 80 });
+    expect(res.available).toBe(true);
+    expect(res.dominantCycles[0].period).toBeGreaterThanOrEqual(19.5);
+    expect(res.dominantCycles[0].period).toBeLessThanOrEqual(22.5);
+    expect(res.dominantCycles[0].marketLabel).toBe('COMEX Monthly');
+    expect(res.clarityScore).toBeGreaterThan(0.65);
+    expect(res.rSquared).toBeGreaterThan(0.75);
+    expect(res.projectionWave).toHaveLength(22);
+    expect(res.historicalWave.length).toBe(45);
+    expect(res.spectrum.length).toBeGreaterThanOrEqual(20);
   });
 });

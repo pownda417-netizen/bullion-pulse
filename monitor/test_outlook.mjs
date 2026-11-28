@@ -20,6 +20,7 @@ import {
   computeHurstExponent,
   computePrecisionForecastLine,
 } from './precision_forecast.mjs';
+import { computeSpectralForecast } from './spectral_forecast.mjs';
 import { computePhysicalPremiumSignals } from './physical_premiums.mjs';
 import {
   computeSessionFlowDivergence,
@@ -1107,7 +1108,9 @@ const out30 = buildOutlook({
 });
 assert.equal(out30.gold.horizon30d.milestones.length, 4, '30-Day forecast must emit Day 7, 14, 21, 30 checkpoints');
 assert.equal(out30.gold.horizon30d.milestones[3].day, 30);
-assert.equal(out30.gold.horizon30d.modelVotes.length, 4, '30-Day model must emit 4 specialist votes');
+assert.equal(out30.gold.horizon30d.modelVotes.length, 5, '30-Day model must emit 5 specialist votes (incl. Spectral Cycles)');
+assert.ok(out30.gold.horizon30d.modelVotes.some((m) => m.id === 'spectral'), '30-Day model votes must include spectral specialist');
+assert.ok(out30.gold.spectral?.available, 'buildOutlook must attach gold spectral analysis');
 assert.ok(out30.gold.horizon30d.probHigherPct >= 12 && out30.gold.horizon30d.probHigherPct <= 88);
 assert.ok(out30.gold.horizon30d.seasonality?.windowLabel, '30-Day model must attach 20-Yr seasonality');
 
@@ -1612,4 +1615,43 @@ assert.ok(cuRise.silver.signal > cuDrop.silver.signal && cuRise.raceIndex > cuDr
 const badNoaa = parseNoaaSpaceWeather({ '0': { DateStamp: '<img src=x>', TimeStamp: 'bad', G: { Scale: '0' }, R: { Scale: '0' }, S: { Scale: '0' } } });
 assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(badNoaa.updatedAt), 'Malformed NOAA DateStamp must fall back to clean ISO timestamp');
 
-console.log('All 33 Bullion Pulse suites (v60 ASM Security Hardening + ReDoS/URL/RSS/Copper fixes, v58 100-Article Global News Engine + Precision Polarity/Negation Guards, v57 Planetary 6-Continent AI/Space/EV Metal Race across 36 tickers & 22 feeds, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt, v48 Precision Chart Forecast Line, Hurst Regime, 4-Model Ensemble, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');
+// 34. v62 Frequency-Domain & Spectral Forecasting (DFT PSD, Phase-Locked Harmonic OLS, SNR/Entropy Gate)
+// Synthetic bull uptrend + clean 20-day COMEX sinusoidal wave (trough at t=140 -> ascending right after!)
+const synthCyclic = Array.from({ length: 140 }, (_, t) =>
+  2800 * Math.exp(0.0018 * t + 0.032 * Math.cos((2 * Math.PI * t) / 20))
+);
+const specClean = computeSpectralForecast(synthCyclic, { horizonDays: 21, minPeriod: 4, maxPeriod: 80 });
+assert.equal(specClean.available, true, 'Spectral engine must succeed on 140-bar daily series');
+assert.ok(
+  specClean.dominantCycles.length >= 1 && Math.abs(specClean.dominantCycles[0].period - 20) <= 1.2,
+  `Dominant cycle must recover injected 20d period closely, got ${specClean.dominantCycles[0]?.period}`
+);
+assert.ok(specClean.clarityScore >= 0.65, `Pure cyclic wave must have high clarity >= 0.65, got ${specClean.clarityScore}`);
+assert.ok(specClean.rSquared >= 0.75, `Phase-locked harmonic OLS must achieve R² >= 0.75 on clean wave, got ${specClean.rSquared}`);
+assert.ok(specClean.projectionWave.length === 22, 'Must emit 0..21 projection steps');
+assert.ok(specClean.spectrum.length >= 20, 'Must emit compact PSD spectrum bins for charting');
+assert.ok(specClean.oosSamples >= 5, 'Causal walk-forward OOS validation must run on >= 42 bars');
+
+// Pseudo-random white-noise series must have much higher spectral entropy & lower clarity than clean cycle
+let seedN = 1234567;
+const nextRand = () => {
+  seedN = (Math.imul(seedN, 1664525) + 1013904223) >>> 0;
+  return seedN / 4294967296 - 0.5;
+};
+const noisyWalk = [];
+let np = 3500;
+for (let i = 0; i < 140; i++) {
+  np *= 1 + nextRand() * 0.03;
+  noisyWalk.push(np);
+}
+const specNoisy = computeSpectralForecast(noisyWalk, { horizonDays: 21, minPeriod: 4, maxPeriod: 80 });
+assert.ok(
+  specNoisy.spectralEntropy > specClean.spectralEntropy,
+  `Noisy random walk must have higher spectral entropy (${specNoisy.spectralEntropy}) than clean sine (${specClean.spectralEntropy})`
+);
+assert.ok(
+  specNoisy.rSquared < specClean.rSquared,
+  `Noisy random walk must have lower harmonic R² (${specNoisy.rSquared}) than clean sine (${specClean.rSquared})`
+);
+
+console.log('All 34 Bullion Pulse suites (v62 Frequency-Domain DFT Spectral Forecasting + 5-Model Ensemble, v61 GARCH/GVZ & Event-Aware Jump Diffusion, v60 ASM Security Hardening + ReDoS/URL/RSS/Copper fixes, v58 100-Article Global News Engine + Precision Polarity/Negation Guards, v57 Planetary 6-Continent AI/Space/EV Metal Race across 36 tickers & 22 feeds, v51 6 Exclusive Hidden-Alpha Engines + OpEx Magnet, v50 Physical Premiums vs. Spot & Melt, v48 Precision Chart Forecast Line, Hurst Regime, 30-Day Roadmap & Twins, Live World & NOAA Space Weather Catalyst Pulse, 1D/7D/30D Conformal Walk-Forward Accuracy + all core suites) passed!');

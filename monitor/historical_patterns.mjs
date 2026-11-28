@@ -13,6 +13,7 @@ import {
   runJumpDiffusion,
 } from './jump_diffusion.mjs';
 import { computeHurstExponent } from './precision_forecast.mjs';
+import { computeSpectralForecast } from './spectral_forecast.mjs';
 import { computePhysicalPremiumSignals } from './physical_premiums.mjs';
 import { computeHiddenAlphaSuite } from './hidden_alpha.mjs';
 import { computeAiDatacenterSignal } from './ai_datacenter.mjs';
@@ -1408,8 +1409,9 @@ export function computeEmpiricalHistoricalTwins({
     const rsi = losses === 0 ? (gains === 0 ? 50 : 88) : 100 - 100 / (1 + gains / losses);
     const vol14 = Math.sqrt(sqVol / 14) * 100;
     let dxy20 = 0;
-    if (dxy.length === n && dxy[idx] > 0 && dxy[idx - 20] > 0) {
-      dxy20 = ((dxy[idx] - dxy[idx - 20]) / dxy[idx - 20]) * 100;
+    const dxyIdx = idx + (dxy.length - n);
+    if (dxy.length >= 25 && dxyIdx >= 20 && dxyIdx < dxy.length && dxy[dxyIdx] > 0 && dxy[dxyIdx - 20] > 0) {
+      dxy20 = ((dxy[dxyIdx] - dxy[dxyIdx - 20]) / dxy[dxyIdx - 20]) * 100;
     }
     const vec = [
       clamp(ret5 / 3.0, -2.5, 2.5),
@@ -1418,12 +1420,14 @@ export function computeEmpiricalHistoricalTwins({
       clamp((vol14 - 1.2) / 0.8, -2.5, 2.5),
       clamp(-dxy20 / 3.0, -2.5, 2.5),
     ];
-    // Multi-factor macro conditioning: add VIX regime & 10Y Treasury Yield momentum when aligned
-    if (vix.length === n && vix[idx] > 0) {
-      vec.push(clamp((vix[idx] - 18) / 7.5, -2.5, 2.5));
+    // Multi-factor macro conditioning: add VIX regime & 10Y Treasury Yield momentum (right-aligned for holiday robustness)
+    const vixIdx = idx + (vix.length - n);
+    if (vix.length >= 25 && vixIdx >= 0 && vixIdx < vix.length && vix[vixIdx] > 0) {
+      vec.push(clamp((vix[vixIdx] - 18) / 7.5, -2.5, 2.5));
     }
-    if (tnx.length === n && tnx[idx] > 0 && tnx[idx - 20] > 0) {
-      const tnx20 = ((tnx[idx] - tnx[idx - 20]) / tnx[idx - 20]) * 100;
+    const tnxIdx = idx + (tnx.length - n);
+    if (tnx.length >= 25 && tnxIdx >= 20 && tnxIdx < tnx.length && tnx[tnxIdx] > 0 && tnx[tnxIdx - 20] > 0) {
+      const tnx20 = ((tnx[tnxIdx] - tnx[tnxIdx - 20]) / tnx[tnxIdx - 20]) * 100;
       vec.push(clamp(-tnx20 / 8.0, -2.5, 2.5));
     }
     return vec;
@@ -1570,18 +1574,33 @@ export function project30DayPrecision({
     1
   );
 
-  // 5. 4-Specialist 30D Ensemble + Disagreement Damping
+  // 4b. Frequency-Domain Spectral Cycle Specialist (DFT PSD + Phase-Locked Harmonic Regression)
+  const spectral = computeSpectralForecast(closes, {
+    horizonDays: 21,
+    minPeriod: 4,
+    maxPeriod: 90,
+    maxHarmonics: 3,
+    sampleLabel: 'days',
+  });
+  // Adaptive weight: scales from 6% in noisy spectra up to 14% when dominant cycles are crystal clear
+  const specWeight = spectral.available
+    ? +clamp(0.06 + spectral.clarityScore * 0.08, 0.06, 0.14).toFixed(3)
+    : 0.06;
+  const remWeight = 1 - specWeight;
+
+  // 5. 5-Specialist 30D Ensemble (incl. Frequency-Domain Spectral Cycles) + Disagreement Damping
   const modelVotes = [
-    { id: 'macro', label: 'Macro & Vaults', unit: structuralMacroUnit, weight: 0.46 },
-    { id: 'leadlag', label: 'Lead-Lag Alpha', unit: leadLag.score, weight: 0.22 },
-    { id: 'hurst', label: 'Hurst & RSI', unit: techReversionUnit, weight: 0.16 },
-    { id: 'seasonal', label: 'Seasonal & Twins', unit: cycleSeasonalUnit, weight: 0.16 },
+    { id: 'macro', label: 'Macro & Vaults', unit: structuralMacroUnit, weight: +(0.46 * remWeight).toFixed(3) },
+    { id: 'leadlag', label: 'Lead-Lag Alpha', unit: leadLag.score, weight: +(0.22 * remWeight).toFixed(3) },
+    { id: 'hurst', label: 'Hurst & RSI', unit: techReversionUnit, weight: +(0.16 * remWeight).toFixed(3) },
+    { id: 'seasonal', label: 'Seasonal & Twins', unit: cycleSeasonalUnit, weight: +(0.16 * remWeight).toFixed(3) },
+    { id: 'spectral', label: 'Spectral Cycles (FFT)', unit: spectral.spectralUnitScore, weight: specWeight },
   ];
   const upVotes = modelVotes.filter((m) => m.unit >= 0.08).length;
   const dnVotes = modelVotes.filter((m) => m.unit <= -0.08).length;
   const agreeCount = Math.max(upVotes, dnVotes, modelVotes.filter((m) => Math.abs(m.unit) < 0.08).length);
   const agreementPct = Math.round((agreeCount / modelVotes.length) * 100);
-  const agreeDamp = agreementPct >= 100 ? 1.0 : agreementPct >= 75 ? 0.91 : 0.76;
+  const agreeDamp = agreementPct >= 80 ? 1.0 : agreementPct >= 60 ? 0.91 : 0.76;
 
   // Gaps decay to 35% strength over 30 days; backwardation & learned 30D bias add crisp structural calibration
   const gapDecay30d = (marketGaps?.[metal]?.predictionBoost || 0) * 0.35;
@@ -1674,11 +1693,13 @@ export function project30DayPrecision({
     leadLag,
     seasonality,
     historicalTwins: twins,
+    spectral,
     milestones,
     topDrivers30d,
     modelVotes: modelVotes.map((m) => ({
       id: m.id,
       label: m.label,
+      weight: m.weight,
       dir: m.unit >= 0.08 ? 'up' : m.unit <= -0.08 ? 'down' : 'flat',
       score: Math.round(m.unit * 100),
     })),
@@ -2873,7 +2894,7 @@ export function buildOutlook({
   return {
     generatedAt,
     disclaimer:
-      'Anonymous probabilistic scenario model combining global news (recency-weighted), FRED 10Y TIPS real yields, COMEX paper vs. registered vault contracts, CBOE ^GVZ implied volatility, GLD/SLV/PSLV flows, Copper/USD-JPY cross-markets, COMEX EFP basis, Event-Risk calendar, Shanghai SGE premiums, Hurst regime detection, 4-model ensemble stacking, empirical historical twins, daily 5:10 PM ET self-learning calibration, and Merton Jump-Diffusion simulations. Educational — not financial advice.',
+      'Anonymous probabilistic scenario model combining global news (recency-weighted), FRED 10Y TIPS real yields, COMEX paper vs. registered vault contracts, CBOE ^GVZ implied volatility, GLD/SLV/PHYS/PSLV flows, Copper/USD-JPY cross-markets, COMEX EFP basis, Event-Risk calendar, Shanghai SGE premiums, Hurst regime detection, 5-model ensemble stacking (incl. DFT frequency-domain spectral cycles), empirical historical twins, daily 5:10 PM ET self-learning calibration, and event-aware Merton Jump-Diffusion simulations. Educational — not financial advice.',
     confidence,
     coneMultiplier: +effectiveConeMult.toFixed(2),
     narrative,
@@ -2884,6 +2905,7 @@ export function buildOutlook({
       regime: marketRegime.gold,
       hurst: goldHorizon30d.hurst,
       leadLagAlpha: goldHorizon30d.leadLag.score,
+      spectral: goldHorizon30d.spectral,
       horizon7d: goldHorizon7d,
       horizon30d: goldHorizon30d,
       jumpParams: goldJumpParams,
@@ -2897,6 +2919,7 @@ export function buildOutlook({
       regime: marketRegime.silver,
       hurst: silverHorizon30d.hurst,
       leadLagAlpha: silverHorizon30d.leadLag.score,
+      spectral: silverHorizon30d.spectral,
       horizon7d: silverHorizon7d,
       horizon30d: silverHorizon30d,
       jumpParams: silverJumpParams,

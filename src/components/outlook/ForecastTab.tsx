@@ -2,6 +2,7 @@ import React from 'react';
 import { useBullion } from '../../context/BullionContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { convertUnit, formatMoney, formatSignedPct } from '../../utils/format';
+import { SpectralCyclePanel } from './SpectralCyclePanel';
 
 export const ForecastTab: React.FC = () => {
   const { settings, updateSettings, quotes, fxRates, outlook, quant, spaceWeather } = useBullion();
@@ -34,7 +35,7 @@ export const ForecastTab: React.FC = () => {
               {`${t('Precision Forecast')} · ${t(metal === 'gold' ? 'Gold' : 'Silver')}`}
             </h2>
             <p className="panel-subtitle">
-              {t('4-model quantitative ensemble anchored to live spot — Macro & Vaults, Lead-Lag Alpha, Hurst/RSI & Seasonality/Twins')}
+              {t('5-model quantitative ensemble anchored to live spot — Macro & Vaults, Lead-Lag Alpha, Hurst/RSI, Seasonality/Twins & Spectral Cycles (FFT)')}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -183,7 +184,7 @@ export const ForecastTab: React.FC = () => {
         {/* 30-Day 4-Checkpoint Trajectory Roadmap */}
         <div style={{ marginBottom: 12 }}>
           <div className="stat-label" style={{ marginBottom: 6 }}>
-            {`30-Day Predicted Roadmap · Hurst ${h30.hurst.toFixed(2)} (${h30.hurstLabel}) · ${h30.agreeCount}/4 Models Agree (${h30.agreementPct}%)`}
+            {`30-Day Predicted Roadmap · Hurst ${h30.hurst.toFixed(2)} (${h30.hurstLabel}) · ${h30.agreeCount}/${Math.max(4, h30.modelVotes.length)} Models Agree (${h30.agreementPct}%)`}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
             {h30.milestones.map((ms) => (
@@ -200,18 +201,19 @@ export const ForecastTab: React.FC = () => {
           </div>
         </div>
 
-        {/* 4-Specialist Individual Model Votes */}
+        {/* 5-Specialist Individual Model Votes (incl. Frequency-Domain Spectral Cycles) */}
         {h30.modelVotes.length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div className="stat-label" style={{ marginBottom: 6 }}>{t('4-Model Specialist Votes')}</div>
+            <div className="stat-label" style={{ marginBottom: 6 }}>{t('5-Model Specialist Votes')}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 8 }}>
               {h30.modelVotes.map((mv: Record<string, unknown>) => {
                 const id = String(mv.id || '');
                 const weightLookup: Record<string, number> = {
-                  macro: 0.46,
-                  leadlag: 0.22,
-                  hurst: 0.16,
-                  seasonal: 0.16,
+                  macro: 0.41,
+                  leadlag: 0.2,
+                  hurst: 0.14,
+                  seasonal: 0.14,
+                  spectral: 0.11,
                 };
                 const rawWeight = Number(mv.weight ?? weightLookup[id] ?? 0.25);
                 const sigScore =
@@ -246,6 +248,9 @@ export const ForecastTab: React.FC = () => {
 
         {outlook?.narrative && <p className="panel-note">{String(outlook.narrative)}</p>}
       </section>
+
+      {/* 1b. Frequency-Domain Spectral Cycles & Power Spectrum Studio (v62) */}
+      <SpectralCyclePanel />
 
       {/* 2. World & Space Pulse + Historical Twins & Seasonality */}
       <section className="panel" aria-label="World and Space Weather Pulse">

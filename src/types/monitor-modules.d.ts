@@ -17,6 +17,10 @@ declare module '*/monitor/institutional_signals.mjs' {
   export function buildBaselineInstitutionalSignals(nowDate?: Date): any;
 }
 
+declare module '*/monitor/spectral_forecast.mjs' {
+  export function computeSpectralForecast(closes?: number[], opts?: Record<string, any>): any;
+}
+
 declare module '*/monitor/jump_diffusion.mjs' {
   export function createRng(seed?: number): () => number;
   export function computeEwmaGarchVol(closes?: number[], opts?: Record<string, any>): any;

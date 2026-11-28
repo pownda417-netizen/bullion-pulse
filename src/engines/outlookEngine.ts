@@ -45,6 +45,7 @@ import {
 import { computePhysicalPremiumSignals, PHYSICAL_BENCHMARKS } from '../../monitor/physical_premiums.mjs';
 import { computeHurstExponent, computePrecisionForecastLine } from '../../monitor/precision_forecast.mjs';
 import { computeEwmaGarchVol } from '../../monitor/jump_diffusion.mjs';
+import { computeSpectralForecast } from '../../monitor/spectral_forecast.mjs';
 
 export {
   AI_COMPUTE_META,
@@ -460,6 +461,7 @@ export interface FullQuantModelOutput {
   seasonality: any;
   hurst: any;
   basisSignal: any;
+  spectral: any;
 }
 
 export function computeFullQuantSuite(params: {
@@ -718,6 +720,19 @@ export function computeFullQuantSuite(params: {
 
   const eventRisk = outlook?.institutionalSignals?.eventRisk || getUpcomingEventRisk(new Date());
 
+  // Frequency-Domain Spectral Forecast: prefer backend 1Y Yahoo daily DFT (~252 bars), fallback to local 1M daily closes
+  const backendSpectral = outlook?.[metal]?.spectral || outlook?.[metal]?.horizon30d?.spectral || null;
+  const spectral =
+    backendSpectral?.available
+      ? backendSpectral
+      : computeSpectralForecast(dailyClosesForVol.length >= 16 ? dailyClosesForVol : activeBars.map((b) => b.c), {
+          horizonDays: 21,
+          minPeriod: 4,
+          maxPeriod: 75,
+          maxHarmonics: 3,
+          sampleLabel: dailyClosesForVol.length >= 16 ? 'days' : 'bars',
+        });
+
   // Cross-Horizon Alignment: compare +12H Tactical Chart Forecast vs 7D Swing vs 30D Macro Ensemble
   const bars1dForTactical = timeframes['1d']?.[metal] || candles[metal] || activeBars;
   const tacticalLine =
@@ -892,5 +907,6 @@ export function computeFullQuantSuite(params: {
     seasonality,
     hurst,
     basisSignal,
+    spectral,
   };
 }

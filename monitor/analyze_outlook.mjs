@@ -330,8 +330,8 @@ async function fetchAllHeadlines() {
 
 /* ---------- Historical Market Series Fetcher ---------- */
 
-async function fetchYahooDailySeries(symbol) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=6mo&interval=1d`;
+async function fetchYahooDailySeries(symbol, range = '6mo') {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=1d`;
   const res = await safeFetch(
     url,
     { headers: { 'User-Agent': USER_AGENT } },
@@ -363,10 +363,12 @@ async function fetchYahooDailySeries(symbol) {
   return { opens, highs, lows, closes, volumes };
 }
 
+const LONG_RANGE_KEYS = new Set(['gold', 'silver', 'dxy', 'vix', 'tnx']);
+
 async function fetchMarketSeries() {
   const entries = Object.entries(YAHOO_SYMBOLS);
   const settled = await Promise.allSettled(
-    entries.map(async ([key, sym]) => [key, await fetchYahooDailySeries(sym)])
+    entries.map(async ([key, sym]) => [key, await fetchYahooDailySeries(sym, LONG_RANGE_KEYS.has(key) ? '1y' : '6mo')])
   );
   const series = {};
   for (const r of settled) {

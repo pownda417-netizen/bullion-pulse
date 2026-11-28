@@ -18,6 +18,8 @@
  *      empirical error quantiles (MAE & Conformal 75% radius) with zero Gaussian assumptions.
  */
 
+import { computeSpectralForecast } from './spectral_forecast.mjs';
+
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
@@ -492,14 +494,37 @@ export function computePrecisionForecastLine({
   // Disagreement Damping: when models split 2-vs-2, damp excursion 28% toward spot to avoid false breakouts
   const agreementDamp = agreementPct >= 100 ? 1.0 : agreementPct >= 75 ? 0.90 : 0.72;
 
-  // Weighted Meta-Learner stacked trajectory
+  // Optional local frequency-domain harmonic wave modulation when active bars show a clear cycle
+  const localCloses = bars.map((b) => b.c).filter((c) => typeof c === 'number' && Number.isFinite(c) && c > 0);
+  const localSpectral =
+    localCloses.length >= 24
+      ? computeSpectralForecast(localCloses.slice(-120), {
+          horizonDays: spec.steps,
+          minPeriod: 4,
+          maxPeriod: Math.min(48, Math.floor(Math.min(120, localCloses.length) / 2.2)),
+          maxHarmonics: 2,
+          sampleLabel: 'bars',
+          runWalkForward: false,
+        })
+      : null;
+  const specWaveWeight =
+    localSpectral?.available && localSpectral.clarityScore >= 0.35
+      ? clamp((localSpectral.clarityScore - 0.30) * 0.34, 0, 0.18) * Math.max(0.35, spec.wTech)
+      : 0;
+  const maxStepExcursion = spec.maxCapSigma * liveFeats.barVol * Math.sqrt(spec.horizonBars);
+
+  // Weighted Meta-Learner stacked trajectory + gentle spectral wave curvature
   const points = [];
   for (let k = 0; k <= spec.steps; k++) {
     let rawBlend = 0;
     for (let m = 0; m < SPECIALIST_MODELS.length; m++) {
       rawBlend += allPaths[m][k].price * weights[m];
     }
-    const dampedPrice = k === 0 ? p0 : p0 + (rawBlend - p0) * agreementDamp;
+    let dampedPrice = k === 0 ? p0 : p0 + (rawBlend - p0) * agreementDamp;
+    if (k > 0 && specWaveWeight > 0 && localSpectral?.projectionWave?.[k]) {
+      const wavePct = clamp(localSpectral.projectionWave[k].deltaCyclePct / 100, -maxStepExcursion, maxStepExcursion);
+      dampedPrice = dampedPrice * (1 + wavePct * specWaveWeight);
+    }
     points.push({
       step: k,
       t: allPaths[0][k].t,
@@ -520,6 +545,9 @@ export function computePrecisionForecastLine({
 
   const factorTags = [];
   factorTags.push(`${liveFeats.hurstLabel} (H=${liveFeats.hurst.toFixed(2)})`);
+  if (localSpectral?.available && localSpectral.clarityScore >= 0.45 && localSpectral.dominantCycles?.[0]) {
+    factorTags.push(`Cycle ${localSpectral.dominantCycles[0].period}b (${localSpectral.dominantCycles[0].phaseLabel.split(' ')[0]})`);
+  }
   if (liveFeats.rsi >= 68) factorTags.push('Overheated Brake');
   else if (liveFeats.rsi <= 32) factorTags.push('Oversold Bounce');
   else if (gapPrimary && !gapPrimary.isFilled && (gapPrimary.freshness ?? 1) > 0.05) {
@@ -549,6 +577,15 @@ export function computePrecisionForecastLine({
     regimeMode: ensembleBreakdown[0].name,
     ensembleBreakdown,
     calibration,
+    spectralCycle: localSpectral?.available
+      ? {
+          dominantPeriod: localSpectral.dominantCycles[0]?.period ?? null,
+          phaseLabel: localSpectral.dominantCycles[0]?.phaseLabel ?? null,
+          clarityScore: localSpectral.clarityScore,
+          spectralUnitScore: localSpectral.spectralUnitScore,
+          summary: localSpectral.summary,
+        }
+      : null,
     driversSummary: `${Math.round(spec.wTech * 100)}% Tech / ${Math.round(spec.wMacro * 100)}% Macro · ${factorTags.slice(0, 2).join(' · ')}`,
   };
 }
