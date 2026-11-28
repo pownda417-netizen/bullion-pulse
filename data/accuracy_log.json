@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-27T23:36:46.605Z",
+  "updatedAt": "2026-11-28T01:52:16.286Z",
   "scorecard": {
     "live7d": {
       "count": 2,
@@ -21,8 +21,8 @@
     },
     "coneMultiplier": 1,
     "pendingStatus": {
-      "pending7dCount": 4,
-      "pending30dCount": 6,
+      "pending7dCount": 6,
+      "pending30dCount": 8,
       "next7dInDays": 1,
       "next30dInDays": 23
     },
@@ -401,6 +401,1794 @@
             "label": "Seasonal & Twins",
             "dir": "up",
             "score": 29
+          }
+        ]
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-28-gold",
+      "createdAt": "2026-11-28T01:52:16.286Z",
+      "metal": "gold",
+      "spotAtForecast": 3650,
+      "score": 33,
+      "signal": "Bullish",
+      "horizon7d": {
+        "bear": 3451.23,
+        "base": 3689.51,
+        "bull": 3927.79,
+        "bearPct": -5.45,
+        "expectedPct": 1.08,
+        "bullPct": 7.61
+      },
+      "horizon30d": {
+        "bear": 3230.25,
+        "base": 3654.97,
+        "bull": 4024.04,
+        "bearPct": -11.5,
+        "expectedPct": 0.14,
+        "bullPct": 10.25,
+        "unit30d": 0.019,
+        "score30d": 2,
+        "probHigherPct": 51,
+        "agreementPct": 40,
+        "agreeCount": 2,
+        "hurst": 0.44,
+        "hurstLabel": "Mean-Reverting",
+        "leadLag": {
+          "score": -0.178,
+          "label": "Lead Signals Balanced",
+          "components": {
+            "minersLead": -0.472,
+            "shanghaiLead": 0.013,
+            "backwardationLead": 0,
+            "physicalPremLead": 0.01,
+            "aiDatacenterLead": -0.06,
+            "ratioLead": -0.25
+          }
+        },
+        "seasonality": {
+          "blendedPct": 2.03,
+          "unitTilt": 0.127,
+          "windowLabel": "Nov–Dec",
+          "label": "Seasonal Tailwind"
+        },
+        "historicalTwins": {
+          "count": 4,
+          "matchPct": 90,
+          "avgReturnPct": -1.88,
+          "upPct": 50,
+          "unitTilt": -0.157
+        },
+        "spectral": {
+          "available": true,
+          "samples": 251,
+          "sampleLabel": "days",
+          "spectralUnitScore": -0.035,
+          "expected7dPct": -0.46,
+          "expected30dPct": -0.98,
+          "clarityScore": 0.15,
+          "clarityLabel": "Weak / Drift-Dominated",
+          "confidence": 0.12,
+          "spectralEntropy": 0.92,
+          "peakSnr": 5.23,
+          "rSquared": 0.12,
+          "oosDirHitPct": 20,
+          "oosSamples": 10,
+          "dominantCycles": [
+            {
+              "rank": 1,
+              "period": 12.5,
+              "marketLabel": "Bi-Weekly Macro",
+              "ampPct": 0.55,
+              "powerSharePct": 46,
+              "snr": 5.23,
+              "phaseDeg": 53,
+              "phaseLabel": "Descending",
+              "direction": "falling",
+              "daysToPeak": 10.6,
+              "daysToTrough": 4.4
+            },
+            {
+              "rank": 2,
+              "period": 63.7,
+              "marketLabel": "Quarterly Roll",
+              "ampPct": 3.03,
+              "powerSharePct": 28,
+              "snr": 3.19,
+              "phaseDeg": 39,
+              "phaseLabel": "Descending",
+              "direction": "falling",
+              "daysToPeak": 56.8,
+              "daysToTrough": 25
+            },
+            {
+              "rank": 3,
+              "period": 5.1,
+              "marketLabel": "Weekly Fix / OpEx",
+              "ampPct": 0.11,
+              "powerSharePct": 26,
+              "snr": 2.98,
+              "phaseDeg": 157,
+              "phaseLabel": "Trough / Bottoming",
+              "direction": "falling",
+              "daysToPeak": 2.9,
+              "daysToTrough": 0.3
+            }
+          ],
+          "spectrum": [
+            {
+              "period": 4,
+              "powerNorm": 0.237,
+              "isPeak": false
+            },
+            {
+              "period": 4.2,
+              "powerNorm": 0.117,
+              "isPeak": false
+            },
+            {
+              "period": 4.4,
+              "powerNorm": 0.014,
+              "isPeak": false
+            },
+            {
+              "period": 4.6,
+              "powerNorm": 0.014,
+              "isPeak": false
+            },
+            {
+              "period": 4.9,
+              "powerNorm": 0.272,
+              "isPeak": true
+            },
+            {
+              "period": 5.1,
+              "powerNorm": 0.569,
+              "isPeak": true
+            },
+            {
+              "period": 5.4,
+              "powerNorm": 0.288,
+              "isPeak": true
+            },
+            {
+              "period": 5.7,
+              "powerNorm": 0.381,
+              "isPeak": false
+            },
+            {
+              "period": 5.9,
+              "powerNorm": 0.153,
+              "isPeak": false
+            },
+            {
+              "period": 6.2,
+              "powerNorm": 0.157,
+              "isPeak": false
+            },
+            {
+              "period": 6.6,
+              "powerNorm": 0.019,
+              "isPeak": false
+            },
+            {
+              "period": 6.9,
+              "powerNorm": 0.101,
+              "isPeak": false
+            },
+            {
+              "period": 7.2,
+              "powerNorm": 0.033,
+              "isPeak": false
+            },
+            {
+              "period": 7.6,
+              "powerNorm": 0.078,
+              "isPeak": false
+            },
+            {
+              "period": 8,
+              "powerNorm": 0.253,
+              "isPeak": false
+            },
+            {
+              "period": 8.4,
+              "powerNorm": 0.087,
+              "isPeak": false
+            },
+            {
+              "period": 8.8,
+              "powerNorm": 0.366,
+              "isPeak": false
+            },
+            {
+              "period": 9.3,
+              "powerNorm": 0.301,
+              "isPeak": false
+            },
+            {
+              "period": 9.7,
+              "powerNorm": 0.106,
+              "isPeak": false
+            },
+            {
+              "period": 10.2,
+              "powerNorm": 0.039,
+              "isPeak": false
+            },
+            {
+              "period": 10.7,
+              "powerNorm": 0.465,
+              "isPeak": false
+            },
+            {
+              "period": 11.3,
+              "powerNorm": 0.847,
+              "isPeak": false
+            },
+            {
+              "period": 11.9,
+              "powerNorm": 0.25,
+              "isPeak": true
+            },
+            {
+              "period": 12.5,
+              "powerNorm": 1,
+              "isPeak": true
+            },
+            {
+              "period": 13.1,
+              "powerNorm": 0.67,
+              "isPeak": true
+            },
+            {
+              "period": 13.8,
+              "powerNorm": 0.316,
+              "isPeak": false
+            },
+            {
+              "period": 14.5,
+              "powerNorm": 0.205,
+              "isPeak": false
+            },
+            {
+              "period": 15.2,
+              "powerNorm": 0.032,
+              "isPeak": false
+            },
+            {
+              "period": 16,
+              "powerNorm": 0.05,
+              "isPeak": false
+            },
+            {
+              "period": 16.8,
+              "powerNorm": 0.07,
+              "isPeak": false
+            },
+            {
+              "period": 17.6,
+              "powerNorm": 0.051,
+              "isPeak": false
+            },
+            {
+              "period": 18.5,
+              "powerNorm": 0.143,
+              "isPeak": false
+            },
+            {
+              "period": 19.4,
+              "powerNorm": 0.118,
+              "isPeak": false
+            },
+            {
+              "period": 20.4,
+              "powerNorm": 0.144,
+              "isPeak": false
+            },
+            {
+              "period": 21.5,
+              "powerNorm": 0.267,
+              "isPeak": false
+            },
+            {
+              "period": 22.6,
+              "powerNorm": 0.304,
+              "isPeak": false
+            },
+            {
+              "period": 23.7,
+              "powerNorm": 0.177,
+              "isPeak": false
+            },
+            {
+              "period": 24.9,
+              "powerNorm": 0.109,
+              "isPeak": false
+            },
+            {
+              "period": 26.2,
+              "powerNorm": 0.256,
+              "isPeak": false
+            },
+            {
+              "period": 27.5,
+              "powerNorm": 0.464,
+              "isPeak": false
+            },
+            {
+              "period": 28.9,
+              "powerNorm": 0.508,
+              "isPeak": false
+            },
+            {
+              "period": 30.3,
+              "powerNorm": 0.354,
+              "isPeak": false
+            },
+            {
+              "period": 31.9,
+              "powerNorm": 0.147,
+              "isPeak": false
+            },
+            {
+              "period": 33.5,
+              "powerNorm": 0.033,
+              "isPeak": false
+            },
+            {
+              "period": 35.2,
+              "powerNorm": 0.038,
+              "isPeak": false
+            },
+            {
+              "period": 37,
+              "powerNorm": 0.103,
+              "isPeak": false
+            },
+            {
+              "period": 38.8,
+              "powerNorm": 0.162,
+              "isPeak": false
+            },
+            {
+              "period": 40.8,
+              "powerNorm": 0.174,
+              "isPeak": false
+            },
+            {
+              "period": 42.9,
+              "powerNorm": 0.133,
+              "isPeak": false
+            },
+            {
+              "period": 45.1,
+              "powerNorm": 0.061,
+              "isPeak": false
+            },
+            {
+              "period": 47.3,
+              "powerNorm": 0.006,
+              "isPeak": false
+            },
+            {
+              "period": 49.7,
+              "powerNorm": 0.015,
+              "isPeak": false
+            },
+            {
+              "period": 52.3,
+              "powerNorm": 0.108,
+              "isPeak": false
+            },
+            {
+              "period": 54.9,
+              "powerNorm": 0.264,
+              "isPeak": false
+            },
+            {
+              "period": 57.7,
+              "powerNorm": 0.431,
+              "isPeak": false
+            },
+            {
+              "period": 60.6,
+              "powerNorm": 0.558,
+              "isPeak": true
+            },
+            {
+              "period": 63.7,
+              "powerNorm": 0.61,
+              "isPeak": true
+            },
+            {
+              "period": 66.9,
+              "powerNorm": 0.586,
+              "isPeak": true
+            },
+            {
+              "period": 70.3,
+              "powerNorm": 0.509,
+              "isPeak": false
+            },
+            {
+              "period": 73.9,
+              "powerNorm": 0.411,
+              "isPeak": false
+            },
+            {
+              "period": 77.6,
+              "powerNorm": 0.324,
+              "isPeak": false
+            },
+            {
+              "period": 81.5,
+              "powerNorm": 0.265,
+              "isPeak": false
+            },
+            {
+              "period": 85.7,
+              "powerNorm": 0.241,
+              "isPeak": false
+            },
+            {
+              "period": 90,
+              "powerNorm": 0.247,
+              "isPeak": false
+            }
+          ],
+          "historicalWave": [
+            {
+              "offset": -44,
+              "actualPct": 3.23,
+              "fitPct": -2.94
+            },
+            {
+              "offset": -43,
+              "actualPct": -0.3,
+              "fitPct": -2.8
+            },
+            {
+              "offset": -42,
+              "actualPct": 0.05,
+              "fitPct": -2.74
+            },
+            {
+              "offset": -41,
+              "actualPct": 0.29,
+              "fitPct": -2.68
+            },
+            {
+              "offset": -40,
+              "actualPct": 0.73,
+              "fitPct": -2.55
+            },
+            {
+              "offset": -39,
+              "actualPct": -0.15,
+              "fitPct": -2.41
+            },
+            {
+              "offset": -38,
+              "actualPct": -0.21,
+              "fitPct": -2.44
+            },
+            {
+              "offset": -37,
+              "actualPct": 0.58,
+              "fitPct": -2.7
+            },
+            {
+              "offset": -36,
+              "actualPct": -0.46,
+              "fitPct": -3.03
+            },
+            {
+              "offset": -35,
+              "actualPct": 0.01,
+              "fitPct": -3.19
+            },
+            {
+              "offset": -34,
+              "actualPct": 1.5,
+              "fitPct": -3.13
+            },
+            {
+              "offset": -33,
+              "actualPct": 0.96,
+              "fitPct": -2.97
+            },
+            {
+              "offset": -32,
+              "actualPct": 0.71,
+              "fitPct": -2.8
+            },
+            {
+              "offset": -31,
+              "actualPct": -0.89,
+              "fitPct": -2.54
+            },
+            {
+              "offset": -30,
+              "actualPct": 0.68,
+              "fitPct": -2.08
+            },
+            {
+              "offset": -29,
+              "actualPct": 1.02,
+              "fitPct": -1.47
+            },
+            {
+              "offset": -28,
+              "actualPct": 0.59,
+              "fitPct": -0.91
+            },
+            {
+              "offset": -27,
+              "actualPct": 0.24,
+              "fitPct": -0.6
+            },
+            {
+              "offset": -26,
+              "actualPct": 0.49,
+              "fitPct": -0.49
+            },
+            {
+              "offset": -25,
+              "actualPct": -1.62,
+              "fitPct": -0.4
+            },
+            {
+              "offset": -24,
+              "actualPct": -2.85,
+              "fitPct": -0.25
+            },
+            {
+              "offset": -23,
+              "actualPct": -2.02,
+              "fitPct": -0.11
+            },
+            {
+              "offset": -22,
+              "actualPct": -1.06,
+              "fitPct": -0.08
+            },
+            {
+              "offset": -21,
+              "actualPct": -1.55,
+              "fitPct": -0.04
+            },
+            {
+              "offset": -20,
+              "actualPct": -1.98,
+              "fitPct": 0.21
+            },
+            {
+              "offset": -19,
+              "actualPct": -5.25,
+              "fitPct": 0.72
+            },
+            {
+              "offset": -18,
+              "actualPct": -3.38,
+              "fitPct": 1.34
+            },
+            {
+              "offset": -17,
+              "actualPct": -4.04,
+              "fitPct": 1.86
+            },
+            {
+              "offset": -16,
+              "actualPct": -0.66,
+              "fitPct": 2.22
+            },
+            {
+              "offset": -15,
+              "actualPct": 0.4,
+              "fitPct": 2.53
+            },
+            {
+              "offset": -14,
+              "actualPct": -0.47,
+              "fitPct": 2.84
+            },
+            {
+              "offset": -13,
+              "actualPct": 0.57,
+              "fitPct": 3.04
+            },
+            {
+              "offset": -12,
+              "actualPct": -1.43,
+              "fitPct": 2.98
+            },
+            {
+              "offset": -11,
+              "actualPct": -2.1,
+              "fitPct": 2.72
+            },
+            {
+              "offset": -10,
+              "actualPct": -4.95,
+              "fitPct": 2.49
+            },
+            {
+              "offset": -9,
+              "actualPct": -4.85,
+              "fitPct": 2.45
+            },
+            {
+              "offset": -8,
+              "actualPct": -5.64,
+              "fitPct": 2.57
+            },
+            {
+              "offset": -7,
+              "actualPct": -5.27,
+              "fitPct": 2.69
+            },
+            {
+              "offset": -6,
+              "actualPct": -8.42,
+              "fitPct": 2.76
+            },
+            {
+              "offset": -5,
+              "actualPct": -9.86,
+              "fitPct": 2.89
+            },
+            {
+              "offset": -4,
+              "actualPct": -14.52,
+              "fitPct": 3.13
+            },
+            {
+              "offset": -3,
+              "actualPct": -10.65,
+              "fitPct": 3.36
+            },
+            {
+              "offset": -2,
+              "actualPct": -13.06,
+              "fitPct": 3.37
+            },
+            {
+              "offset": -1,
+              "actualPct": -13.72,
+              "fitPct": 3.07
+            },
+            {
+              "offset": 0,
+              "actualPct": -9.97,
+              "fitPct": 2.61
+            }
+          ],
+          "projectionWave": [
+            {
+              "step": 0,
+              "dayApprox": 0,
+              "cyclePct": 2.61,
+              "deltaCyclePct": 0,
+              "price": 3668.5
+            },
+            {
+              "step": 1,
+              "dayApprox": 1,
+              "cyclePct": 2.49,
+              "deltaCyclePct": -0.12,
+              "price": 3663.34
+            },
+            {
+              "step": 2,
+              "dayApprox": 3,
+              "cyclePct": 2.39,
+              "deltaCyclePct": -0.22,
+              "price": 3659.13
+            },
+            {
+              "step": 3,
+              "dayApprox": 4,
+              "cyclePct": 2.3,
+              "deltaCyclePct": -0.31,
+              "price": 3654.97
+            },
+            {
+              "step": 4,
+              "dayApprox": 6,
+              "cyclePct": 2.21,
+              "deltaCyclePct": -0.4,
+              "price": 3651.04
+            },
+            {
+              "step": 5,
+              "dayApprox": 7,
+              "cyclePct": 2.14,
+              "deltaCyclePct": -0.46,
+              "price": 3648.16
+            },
+            {
+              "step": 6,
+              "dayApprox": 9,
+              "cyclePct": 2.12,
+              "deltaCyclePct": -0.49,
+              "price": 3646.59
+            },
+            {
+              "step": 7,
+              "dayApprox": 10,
+              "cyclePct": 2.1,
+              "deltaCyclePct": -0.51,
+              "price": 3645.63
+            },
+            {
+              "step": 8,
+              "dayApprox": 11,
+              "cyclePct": 2.08,
+              "deltaCyclePct": -0.53,
+              "price": 3644.39
+            },
+            {
+              "step": 9,
+              "dayApprox": 13,
+              "cyclePct": 2.04,
+              "deltaCyclePct": -0.57,
+              "price": 3642.54
+            },
+            {
+              "step": 10,
+              "dayApprox": 14,
+              "cyclePct": 1.99,
+              "deltaCyclePct": -0.62,
+              "price": 3640.26
+            },
+            {
+              "step": 11,
+              "dayApprox": 16,
+              "cyclePct": 1.93,
+              "deltaCyclePct": -0.68,
+              "price": 3637.82
+            },
+            {
+              "step": 12,
+              "dayApprox": 17,
+              "cyclePct": 1.87,
+              "deltaCyclePct": -0.74,
+              "price": 3635.32
+            },
+            {
+              "step": 13,
+              "dayApprox": 19,
+              "cyclePct": 1.81,
+              "deltaCyclePct": -0.8,
+              "price": 3632.74
+            },
+            {
+              "step": 14,
+              "dayApprox": 20,
+              "cyclePct": 1.75,
+              "deltaCyclePct": -0.86,
+              "price": 3630.26
+            },
+            {
+              "step": 15,
+              "dayApprox": 21,
+              "cyclePct": 1.69,
+              "deltaCyclePct": -0.91,
+              "price": 3628.15
+            },
+            {
+              "step": 16,
+              "dayApprox": 23,
+              "cyclePct": 1.66,
+              "deltaCyclePct": -0.95,
+              "price": 3626.58
+            },
+            {
+              "step": 17,
+              "dayApprox": 24,
+              "cyclePct": 1.63,
+              "deltaCyclePct": -0.97,
+              "price": 3625.56
+            },
+            {
+              "step": 18,
+              "dayApprox": 26,
+              "cyclePct": 1.62,
+              "deltaCyclePct": -0.98,
+              "price": 3624.95
+            },
+            {
+              "step": 19,
+              "dayApprox": 27,
+              "cyclePct": 1.62,
+              "deltaCyclePct": -0.99,
+              "price": 3624.64
+            },
+            {
+              "step": 20,
+              "dayApprox": 29,
+              "cyclePct": 1.62,
+              "deltaCyclePct": -0.99,
+              "price": 3624.55
+            },
+            {
+              "step": 21,
+              "dayApprox": 30,
+              "cyclePct": 1.62,
+              "deltaCyclePct": -0.98,
+              "price": 3624.64
+            }
+          ],
+          "nextPeakStep": 1,
+          "nextTroughStep": 18,
+          "summary": "Dominant 12.5d Bi-Weekly Macro cycle is descending (53°, next crest ~10.6d, trough ~4.4d) · SNR 5.2× · Weak / Drift-Dominated."
+        },
+        "milestones": [
+          {
+            "day": 7,
+            "label": "Day 7",
+            "pct": 0.74,
+            "price": 3677.01,
+            "note": "Near-term flow"
+          },
+          {
+            "day": 14,
+            "label": "Day 14",
+            "pct": 0.46,
+            "price": 3666.79,
+            "note": "Mid-month balance"
+          },
+          {
+            "day": 21,
+            "label": "Day 21",
+            "pct": 0.24,
+            "price": 3658.76,
+            "note": "Structural macro build"
+          },
+          {
+            "day": 30,
+            "label": "Day 30",
+            "pct": 0.14,
+            "price": 3655.11,
+            "note": "Seasonal Tailwind"
+          }
+        ],
+        "topDrivers30d": [
+          "Inflation",
+          "Geopolitics"
+        ],
+        "modelVotes": [
+          {
+            "id": "macro",
+            "label": "Macro & Vaults",
+            "weight": 0.427,
+            "dir": "up",
+            "score": 45
+          },
+          {
+            "id": "leadlag",
+            "label": "Lead-Lag Alpha",
+            "weight": 0.204,
+            "dir": "down",
+            "score": -18
+          },
+          {
+            "id": "hurst",
+            "label": "Hurst & RSI",
+            "weight": 0.148,
+            "dir": "down",
+            "score": -66
+          },
+          {
+            "id": "seasonal",
+            "label": "Seasonal & Twins",
+            "weight": 0.148,
+            "dir": "up",
+            "score": 13
+          },
+          {
+            "id": "spectral",
+            "label": "Spectral Cycles (FFT)",
+            "weight": 0.072,
+            "dir": "flat",
+            "score": -4
+          }
+        ]
+      },
+      "graded7d": null,
+      "graded30d": null
+    },
+    {
+      "id": "2026-11-28-silver",
+      "createdAt": "2026-11-28T01:52:16.286Z",
+      "metal": "silver",
+      "spotAtForecast": 43.23,
+      "score": 41,
+      "signal": "Bullish",
+      "horizon7d": {
+        "bear": 39.36,
+        "base": 44.24,
+        "bull": 49.12,
+        "bearPct": -8.96,
+        "expectedPct": 2.33,
+        "bullPct": 13.62
+      },
+      "horizon30d": {
+        "bear": 34.48,
+        "base": 43.35,
+        "bull": 51.69,
+        "bearPct": -20.24,
+        "expectedPct": 0.27,
+        "bullPct": 19.58,
+        "unit30d": 0.023,
+        "score30d": 2,
+        "probHigherPct": 51,
+        "agreementPct": 40,
+        "agreeCount": 2,
+        "hurst": 0.44,
+        "hurstLabel": "Mean-Reverting",
+        "leadLag": {
+          "score": -0.088,
+          "label": "Lead Signals Balanced",
+          "components": {
+            "minersLead": -0.328,
+            "shanghaiLead": -0.174,
+            "backwardationLead": 0,
+            "physicalPremLead": 0.241,
+            "aiDatacenterLead": -0.166,
+            "ratioLead": 0.361
+          }
+        },
+        "seasonality": {
+          "blendedPct": 2.51,
+          "unitTilt": 0.14,
+          "windowLabel": "Nov–Dec",
+          "label": "Seasonal Tailwind"
+        },
+        "historicalTwins": {
+          "count": 4,
+          "matchPct": 95,
+          "avgReturnPct": -6.84,
+          "upPct": 25,
+          "unitTilt": -0.35
+        },
+        "spectral": {
+          "available": true,
+          "samples": 251,
+          "sampleLabel": "days",
+          "spectralUnitScore": -0.001,
+          "expected7dPct": 0.39,
+          "expected30dPct": -0.4,
+          "clarityScore": 0.22,
+          "clarityLabel": "Weak / Drift-Dominated",
+          "confidence": 0.18,
+          "spectralEntropy": 0.89,
+          "peakSnr": 5.44,
+          "rSquared": 0.29,
+          "oosDirHitPct": 30,
+          "oosSamples": 10,
+          "dominantCycles": [
+            {
+              "rank": 1,
+              "period": 12.5,
+              "marketLabel": "Bi-Weekly Macro",
+              "ampPct": 0.97,
+              "powerSharePct": 45,
+              "snr": 5.44,
+              "phaseDeg": 42,
+              "phaseLabel": "Descending",
+              "direction": "falling",
+              "daysToPeak": 11,
+              "daysToTrough": 4.8
+            },
+            {
+              "rank": 2,
+              "period": 70.3,
+              "marketLabel": "Quarterly Roll",
+              "ampPct": 10.12,
+              "powerSharePct": 33,
+              "snr": 4.05,
+              "phaseDeg": 312,
+              "phaseLabel": "Ascending",
+              "direction": "rising",
+              "daysToPeak": 9.3,
+              "daysToTrough": 44.4
+            },
+            {
+              "rank": 3,
+              "period": 8.8,
+              "marketLabel": "Bi-Weekly Macro",
+              "ampPct": 1.64,
+              "powerSharePct": 22,
+              "snr": 2.71,
+              "phaseDeg": 265,
+              "phaseLabel": "Ascending",
+              "direction": "rising",
+              "daysToPeak": 2.3,
+              "daysToTrough": 6.7
+            }
+          ],
+          "spectrum": [
+            {
+              "period": 4,
+              "powerNorm": 0.136,
+              "isPeak": false
+            },
+            {
+              "period": 4.2,
+              "powerNorm": 0.127,
+              "isPeak": false
+            },
+            {
+              "period": 4.4,
+              "powerNorm": 0.025,
+              "isPeak": false
+            },
+            {
+              "period": 4.6,
+              "powerNorm": 0.034,
+              "isPeak": false
+            },
+            {
+              "period": 4.9,
+              "powerNorm": 0.261,
+              "isPeak": false
+            },
+            {
+              "period": 5.1,
+              "powerNorm": 0.153,
+              "isPeak": false
+            },
+            {
+              "period": 5.4,
+              "powerNorm": 0.331,
+              "isPeak": false
+            },
+            {
+              "period": 5.7,
+              "powerNorm": 0.311,
+              "isPeak": false
+            },
+            {
+              "period": 5.9,
+              "powerNorm": 0.033,
+              "isPeak": false
+            },
+            {
+              "period": 6.2,
+              "powerNorm": 0.013,
+              "isPeak": false
+            },
+            {
+              "period": 6.6,
+              "powerNorm": 0.025,
+              "isPeak": false
+            },
+            {
+              "period": 6.9,
+              "powerNorm": 0.023,
+              "isPeak": false
+            },
+            {
+              "period": 7.2,
+              "powerNorm": 0.102,
+              "isPeak": false
+            },
+            {
+              "period": 7.6,
+              "powerNorm": 0.17,
+              "isPeak": false
+            },
+            {
+              "period": 8,
+              "powerNorm": 0.492,
+              "isPeak": false
+            },
+            {
+              "period": 8.4,
+              "powerNorm": 0.198,
+              "isPeak": true
+            },
+            {
+              "period": 8.8,
+              "powerNorm": 0.499,
+              "isPeak": true
+            },
+            {
+              "period": 9.3,
+              "powerNorm": 0.025,
+              "isPeak": true
+            },
+            {
+              "period": 9.7,
+              "powerNorm": 0.136,
+              "isPeak": false
+            },
+            {
+              "period": 10.2,
+              "powerNorm": 0.142,
+              "isPeak": false
+            },
+            {
+              "period": 10.7,
+              "powerNorm": 0.529,
+              "isPeak": false
+            },
+            {
+              "period": 11.3,
+              "powerNorm": 0.786,
+              "isPeak": false
+            },
+            {
+              "period": 11.9,
+              "powerNorm": 0.328,
+              "isPeak": true
+            },
+            {
+              "period": 12.5,
+              "powerNorm": 1,
+              "isPeak": true
+            },
+            {
+              "period": 13.1,
+              "powerNorm": 0.958,
+              "isPeak": true
+            },
+            {
+              "period": 13.8,
+              "powerNorm": 0.531,
+              "isPeak": false
+            },
+            {
+              "period": 14.5,
+              "powerNorm": 0.25,
+              "isPeak": false
+            },
+            {
+              "period": 15.2,
+              "powerNorm": 0.071,
+              "isPeak": false
+            },
+            {
+              "period": 16,
+              "powerNorm": 0.004,
+              "isPeak": false
+            },
+            {
+              "period": 16.8,
+              "powerNorm": 0.011,
+              "isPeak": false
+            },
+            {
+              "period": 17.6,
+              "powerNorm": 0.104,
+              "isPeak": false
+            },
+            {
+              "period": 18.5,
+              "powerNorm": 0.201,
+              "isPeak": false
+            },
+            {
+              "period": 19.4,
+              "powerNorm": 0.161,
+              "isPeak": false
+            },
+            {
+              "period": 20.4,
+              "powerNorm": 0.121,
+              "isPeak": false
+            },
+            {
+              "period": 21.5,
+              "powerNorm": 0.153,
+              "isPeak": false
+            },
+            {
+              "period": 22.6,
+              "powerNorm": 0.263,
+              "isPeak": false
+            },
+            {
+              "period": 23.7,
+              "powerNorm": 0.29,
+              "isPeak": false
+            },
+            {
+              "period": 24.9,
+              "powerNorm": 0.25,
+              "isPeak": false
+            },
+            {
+              "period": 26.2,
+              "powerNorm": 0.291,
+              "isPeak": false
+            },
+            {
+              "period": 27.5,
+              "powerNorm": 0.381,
+              "isPeak": false
+            },
+            {
+              "period": 28.9,
+              "powerNorm": 0.372,
+              "isPeak": false
+            },
+            {
+              "period": 30.3,
+              "powerNorm": 0.226,
+              "isPeak": false
+            },
+            {
+              "period": 31.9,
+              "powerNorm": 0.072,
+              "isPeak": false
+            },
+            {
+              "period": 33.5,
+              "powerNorm": 0.019,
+              "isPeak": false
+            },
+            {
+              "period": 35.2,
+              "powerNorm": 0.04,
+              "isPeak": false
+            },
+            {
+              "period": 37,
+              "powerNorm": 0.054,
+              "isPeak": false
+            },
+            {
+              "period": 38.8,
+              "powerNorm": 0.038,
+              "isPeak": false
+            },
+            {
+              "period": 40.8,
+              "powerNorm": 0.015,
+              "isPeak": false
+            },
+            {
+              "period": 42.9,
+              "powerNorm": 0.004,
+              "isPeak": false
+            },
+            {
+              "period": 45.1,
+              "powerNorm": 0.008,
+              "isPeak": false
+            },
+            {
+              "period": 47.3,
+              "powerNorm": 0.025,
+              "isPeak": false
+            },
+            {
+              "period": 49.7,
+              "powerNorm": 0.058,
+              "isPeak": false
+            },
+            {
+              "period": 52.3,
+              "powerNorm": 0.118,
+              "isPeak": false
+            },
+            {
+              "period": 54.9,
+              "powerNorm": 0.214,
+              "isPeak": false
+            },
+            {
+              "period": 57.7,
+              "powerNorm": 0.343,
+              "isPeak": false
+            },
+            {
+              "period": 60.6,
+              "powerNorm": 0.486,
+              "isPeak": false
+            },
+            {
+              "period": 63.7,
+              "powerNorm": 0.616,
+              "isPeak": false
+            },
+            {
+              "period": 66.9,
+              "powerNorm": 0.707,
+              "isPeak": true
+            },
+            {
+              "period": 70.3,
+              "powerNorm": 0.744,
+              "isPeak": true
+            },
+            {
+              "period": 73.9,
+              "powerNorm": 0.73,
+              "isPeak": true
+            },
+            {
+              "period": 77.6,
+              "powerNorm": 0.676,
+              "isPeak": false
+            },
+            {
+              "period": 81.5,
+              "powerNorm": 0.6,
+              "isPeak": false
+            },
+            {
+              "period": 85.7,
+              "powerNorm": 0.516,
+              "isPeak": false
+            },
+            {
+              "period": 90,
+              "powerNorm": 0.439,
+              "isPeak": false
+            }
+          ],
+          "historicalWave": [
+            {
+              "offset": -44,
+              "actualPct": 8.71,
+              "fitPct": 0.4
+            },
+            {
+              "offset": -43,
+              "actualPct": 4.06,
+              "fitPct": 0.93
+            },
+            {
+              "offset": -42,
+              "actualPct": 3.32,
+              "fitPct": 1.07
+            },
+            {
+              "offset": -41,
+              "actualPct": 2.55,
+              "fitPct": 0.43
+            },
+            {
+              "offset": -40,
+              "actualPct": 3.76,
+              "fitPct": -0.98
+            },
+            {
+              "offset": -39,
+              "actualPct": 2.69,
+              "fitPct": -2.82
+            },
+            {
+              "offset": -38,
+              "actualPct": 4.34,
+              "fitPct": -4.56
+            },
+            {
+              "offset": -37,
+              "actualPct": 5,
+              "fitPct": -5.76
+            },
+            {
+              "offset": -36,
+              "actualPct": 3.08,
+              "fitPct": -6.29
+            },
+            {
+              "offset": -35,
+              "actualPct": 1.85,
+              "fitPct": -6.35
+            },
+            {
+              "offset": -34,
+              "actualPct": 4.7,
+              "fitPct": -6.35
+            },
+            {
+              "offset": -33,
+              "actualPct": 4,
+              "fitPct": -6.68
+            },
+            {
+              "offset": -32,
+              "actualPct": 2.53,
+              "fitPct": -7.52
+            },
+            {
+              "offset": -31,
+              "actualPct": -3.6,
+              "fitPct": -8.67
+            },
+            {
+              "offset": -30,
+              "actualPct": -1.14,
+              "fitPct": -9.74
+            },
+            {
+              "offset": -29,
+              "actualPct": -0.69,
+              "fitPct": -10.27
+            },
+            {
+              "offset": -28,
+              "actualPct": -0.55,
+              "fitPct": -10.03
+            },
+            {
+              "offset": -27,
+              "actualPct": 0.9,
+              "fitPct": -9.13
+            },
+            {
+              "offset": -26,
+              "actualPct": 0.57,
+              "fitPct": -8.02
+            },
+            {
+              "offset": -25,
+              "actualPct": -3.99,
+              "fitPct": -7.26
+            },
+            {
+              "offset": -24,
+              "actualPct": -5.76,
+              "fitPct": -7.24
+            },
+            {
+              "offset": -23,
+              "actualPct": -4.86,
+              "fitPct": -8.03
+            },
+            {
+              "offset": -22,
+              "actualPct": -4.34,
+              "fitPct": -9.25
+            },
+            {
+              "offset": -21,
+              "actualPct": -5.72,
+              "fitPct": -10.31
+            },
+            {
+              "offset": -20,
+              "actualPct": -7.95,
+              "fitPct": -10.58
+            },
+            {
+              "offset": -19,
+              "actualPct": -13.89,
+              "fitPct": -9.76
+            },
+            {
+              "offset": -18,
+              "actualPct": -10.46,
+              "fitPct": -7.97
+            },
+            {
+              "offset": -17,
+              "actualPct": -12.55,
+              "fitPct": -5.74
+            },
+            {
+              "offset": -16,
+              "actualPct": -7.4,
+              "fitPct": -3.75
+            },
+            {
+              "offset": -15,
+              "actualPct": -7.01,
+              "fitPct": -2.52
+            },
+            {
+              "offset": -14,
+              "actualPct": -7.66,
+              "fitPct": -2.24
+            },
+            {
+              "offset": -13,
+              "actualPct": -6.03,
+              "fitPct": -2.63
+            },
+            {
+              "offset": -12,
+              "actualPct": -8.68,
+              "fitPct": -3.15
+            },
+            {
+              "offset": -11,
+              "actualPct": -7,
+              "fitPct": -3.22
+            },
+            {
+              "offset": -10,
+              "actualPct": -10.57,
+              "fitPct": -2.49
+            },
+            {
+              "offset": -9,
+              "actualPct": -12.3,
+              "fitPct": -1.02
+            },
+            {
+              "offset": -8,
+              "actualPct": -16.82,
+              "fitPct": 0.83
+            },
+            {
+              "offset": -7,
+              "actualPct": -15.58,
+              "fitPct": 2.54
+            },
+            {
+              "offset": -6,
+              "actualPct": -20.37,
+              "fitPct": 3.71
+            },
+            {
+              "offset": -5,
+              "actualPct": -21.72,
+              "fitPct": 4.28
+            },
+            {
+              "offset": -4,
+              "actualPct": -29.25,
+              "fitPct": 4.49
+            },
+            {
+              "offset": -3,
+              "actualPct": -24.06,
+              "fitPct": 4.76
+            },
+            {
+              "offset": -2,
+              "actualPct": -29.57,
+              "fitPct": 5.44
+            },
+            {
+              "offset": -1,
+              "actualPct": -31.15,
+              "fitPct": 6.65
+            },
+            {
+              "offset": 0,
+              "actualPct": -22.26,
+              "fitPct": 8.15
+            }
+          ],
+          "projectionWave": [
+            {
+              "step": 0,
+              "dayApprox": 0,
+              "cyclePct": 8.15,
+              "deltaCyclePct": 0,
+              "price": 43.7
+            },
+            {
+              "step": 1,
+              "dayApprox": 1,
+              "cyclePct": 8.57,
+              "deltaCyclePct": 0.42,
+              "price": 43.86
+            },
+            {
+              "step": 2,
+              "dayApprox": 3,
+              "cyclePct": 8.75,
+              "deltaCyclePct": 0.6,
+              "price": 43.92
+            },
+            {
+              "step": 3,
+              "dayApprox": 4,
+              "cyclePct": 8.73,
+              "deltaCyclePct": 0.58,
+              "price": 43.9
+            },
+            {
+              "step": 4,
+              "dayApprox": 6,
+              "cyclePct": 8.62,
+              "deltaCyclePct": 0.47,
+              "price": 43.83
+            },
+            {
+              "step": 5,
+              "dayApprox": 7,
+              "cyclePct": 8.54,
+              "deltaCyclePct": 0.39,
+              "price": 43.78
+            },
+            {
+              "step": 6,
+              "dayApprox": 9,
+              "cyclePct": 8.57,
+              "deltaCyclePct": 0.42,
+              "price": 43.78
+            },
+            {
+              "step": 7,
+              "dayApprox": 10,
+              "cyclePct": 8.71,
+              "deltaCyclePct": 0.56,
+              "price": 43.82
+            },
+            {
+              "step": 8,
+              "dayApprox": 11,
+              "cyclePct": 8.91,
+              "deltaCyclePct": 0.76,
+              "price": 43.9
+            },
+            {
+              "step": 9,
+              "dayApprox": 13,
+              "cyclePct": 9.1,
+              "deltaCyclePct": 0.95,
+              "price": 43.97
+            },
+            {
+              "step": 10,
+              "dayApprox": 14,
+              "cyclePct": 9.2,
+              "deltaCyclePct": 1.05,
+              "price": 44
+            },
+            {
+              "step": 11,
+              "dayApprox": 16,
+              "cyclePct": 9.18,
+              "deltaCyclePct": 1.04,
+              "price": 43.99
+            },
+            {
+              "step": 12,
+              "dayApprox": 17,
+              "cyclePct": 9.07,
+              "deltaCyclePct": 0.92,
+              "price": 43.93
+            },
+            {
+              "step": 13,
+              "dayApprox": 19,
+              "cyclePct": 8.9,
+              "deltaCyclePct": 0.75,
+              "price": 43.84
+            },
+            {
+              "step": 14,
+              "dayApprox": 20,
+              "cyclePct": 8.71,
+              "deltaCyclePct": 0.56,
+              "price": 43.75
+            },
+            {
+              "step": 15,
+              "dayApprox": 21,
+              "cyclePct": 8.54,
+              "deltaCyclePct": 0.39,
+              "price": 43.67
+            },
+            {
+              "step": 16,
+              "dayApprox": 23,
+              "cyclePct": 8.4,
+              "deltaCyclePct": 0.25,
+              "price": 43.61
+            },
+            {
+              "step": 17,
+              "dayApprox": 24,
+              "cyclePct": 8.28,
+              "deltaCyclePct": 0.13,
+              "price": 43.55
+            },
+            {
+              "step": 18,
+              "dayApprox": 26,
+              "cyclePct": 8.17,
+              "deltaCyclePct": 0.02,
+              "price": 43.5
+            },
+            {
+              "step": 19,
+              "dayApprox": 27,
+              "cyclePct": 8.05,
+              "deltaCyclePct": -0.1,
+              "price": 43.44
+            },
+            {
+              "step": 20,
+              "dayApprox": 29,
+              "cyclePct": 7.91,
+              "deltaCyclePct": -0.24,
+              "price": 43.38
+            },
+            {
+              "step": 21,
+              "dayApprox": 30,
+              "cyclePct": 7.75,
+              "deltaCyclePct": -0.4,
+              "price": 43.3
+            }
+          ],
+          "nextPeakStep": 10,
+          "nextTroughStep": 21,
+          "summary": "Dominant 12.5d Bi-Weekly Macro cycle is descending (42°, next crest ~11d, trough ~4.8d) · SNR 5.4× · Weak / Drift-Dominated."
+        },
+        "milestones": [
+          {
+            "day": 7,
+            "label": "Day 7",
+            "pct": 1.6,
+            "price": 43.92,
+            "note": "Near-term flow"
+          },
+          {
+            "day": 14,
+            "label": "Day 14",
+            "pct": 0.98,
+            "price": 43.65,
+            "note": "Mid-month balance"
+          },
+          {
+            "day": 21,
+            "label": "Day 21",
+            "pct": 0.5,
+            "price": 43.45,
+            "note": "Structural macro build"
+          },
+          {
+            "day": 30,
+            "label": "Day 30",
+            "pct": 0.27,
+            "price": 43.35,
+            "note": "Seasonal Tailwind"
+          }
+        ],
+        "topDrivers30d": [
+          "Inflation",
+          "Mining / Supply"
+        ],
+        "modelVotes": [
+          {
+            "id": "macro",
+            "label": "Macro & Vaults",
+            "weight": 0.424,
+            "dir": "up",
+            "score": 46
+          },
+          {
+            "id": "leadlag",
+            "label": "Lead-Lag Alpha",
+            "weight": 0.203,
+            "dir": "down",
+            "score": -9
+          },
+          {
+            "id": "hurst",
+            "label": "Hurst & RSI",
+            "weight": 0.148,
+            "dir": "down",
+            "score": -66
+          },
+          {
+            "id": "seasonal",
+            "label": "Seasonal & Twins",
+            "weight": 0.148,
+            "dir": "up",
+            "score": 10
+          },
+          {
+            "id": "spectral",
+            "label": "Spectral Cycles (FFT)",
+            "weight": 0.078,
+            "dir": "flat",
+            "score": 0
           }
         ]
       },
